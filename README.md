@@ -5,6 +5,13 @@
 
 This project is a full-stack web application that allows users to log in and join groups to make confidence picks in NFL games, competing against friends.
 
+## Confidence Picks?
+
+From [nfelo](https://www.nfeloapp.com/games/nfl-confidence-picks/):
+
+> NFL confidence pools (also known as pick’ems) are season long prediction competitions typically held amongst office colleagues or friend groups. Each week, players pick straight up winners for every game and stack rank those picks based on how confident they are in their prediction. These are your "confidence picks."
+When a player’s pick is correct, they’re awarded points based on how highly they ranked the game. Their most confident pick yields 16 points, their second most confident pick yields 15 points, and so on and so forth. The player with the most points across all games wins the pool, with prizes typically given for weekly and entire season.
+
 ## Project Structure
 
 This is a monorepo containing both frontend and backend applications:
