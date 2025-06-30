@@ -6,7 +6,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: [
+        'http://localhost:5173',      // Local development
+        'http://localhost:4173',      // Vite preview
+        'https://dokun1.github.io'    // Your GitHub Pages domain
+    ],
+    credentials: true
+}));
 app.use(express.json());
 
 // Routes

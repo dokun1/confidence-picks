@@ -1,10 +1,10 @@
-name: Build and Deploy
+name: Deploy Frontend to GitHub Pages
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    paths:
+      - 'frontend/**'
 
 env:
   # Set this to change deployment target
