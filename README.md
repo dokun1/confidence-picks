@@ -1,6 +1,7 @@
 # Confidence Picks
 
-> **Disclaimer:** This is an open-source repository that I'm using to learn Svelte.js and other modern web development techniques. Feel free to explore, but expect occasional experiments and learning-in-progress code!
+> [!WARNING]
+> This is an open-source repository that I'm using to learn Svelte.js and other modern web development techniques. Feel free to explore, but expect occasional experiments and learning-in-progress code!
 
 This project is a full-stack web application that allows users to log in and join groups to make confidence picks in NFL games, competing against friends.
 
