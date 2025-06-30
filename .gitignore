@@ -29,3 +29,19 @@ Thumbs.db
 # Package manager locks (keep pnpm-lock.yaml, ignore others)
 package-lock.json
 yarn.lock
+
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Vercel
+backend/.vercel/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+build/

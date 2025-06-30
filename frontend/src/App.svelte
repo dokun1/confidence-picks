@@ -5,7 +5,10 @@
   let loading = true;
   let error = '';
 
-  const API_URL = 'http://localhost:3001';
+    // Use your actual Vercel URL here
+  const API_URL = import.meta.env.PROD 
+    ? 'https://confidence-picks-eyb5l3nex-dokun1s-projects.vercel.app'  // Replace with your actual Vercel URL
+    : 'http://localhost:3001';
 
   async function fetchTimestamp() {
     try {
