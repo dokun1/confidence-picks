@@ -10,7 +10,8 @@ app.use(cors({
     origin: [
         'http://localhost:5173',      // Local development
         'http://localhost:4173',      // Vite preview
-        'https://dokun1.github.io'    // Your GitHub Pages domain
+        'https://dokun1.github.io',   // Your GitHub Pages domain
+        'https://dokun1.github.io/confidence-picks'  // Full GitHub Pages path
     ],
     credentials: true
 }));
