@@ -7,12 +7,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-    origin: [
-        'http://localhost:5173',      // Local development
-        'http://localhost:4173',      // Vite preview
-        'https://dokun1.github.io',   // Your GitHub Pages domain
-        'https://dokun1.github.io/confidence-picks'  // Full GitHub Pages path
-    ],
+    origin: true,  // Temporarily allow all origins for debugging
     credentials: true
 }));
 app.use(express.json());
