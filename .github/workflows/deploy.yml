@@ -30,15 +30,17 @@ jobs:
         
     - name: Install dependencies
       run: pnpm install
+      working-directory: ./frontend
       
     - name: Build application
       run: pnpm build
+      working-directory: ./frontend
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: dist
-        path: dist/
+        path: frontend/dist/
 
   deploy-github-pages:
     needs: build
