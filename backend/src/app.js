@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import apiRoutes from './routes/api.js';
+import { initDatabase } from './database/init.js';
 
 
 const app = express();
@@ -26,11 +27,25 @@ app.get('/', (req, res) => {
   res.json({ message: 'Confidence Picks API is running!' });
 });
 
-// Start server (for local development)
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+// Initialize database and start server
+async function startServer() {
+  try {
+    console.log('Initializing database...');
+    await initDatabase();
+    console.log('Database initialized successfully');
+
+    // Start server for both local and production
+    if (process.env.NODE_ENV !== 'production') {
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+      });
+    }
+  } catch (error) {
+    console.error('Error starting server:', error);
+    process.exit(1);
+  }
 }
+
+startServer();
 
 export default app;
