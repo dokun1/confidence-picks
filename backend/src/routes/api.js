@@ -3,20 +3,24 @@ import pool from '../config/database.js';
 
 const router = express.Router();
 
-// Add this debug route to see what's happening
+// Force deployment - updated routes
 router.get('/debug', (req, res) => {
   res.json({
     message: 'Debug route working',
     hasDbUrl: !!process.env.DATABASE_URL,
     nodeEnv: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    version: '1.1' // Add this to confirm new deployment
   });
 });
 
 // Simple timestamp route for testing
 router.get('/timestamp', (req, res) => {
   const timestamp = new Date().toISOString();
-  res.json({ timestamp });
+  res.json({ 
+    "timestamp": timestamp,
+    "message": "Timestamp route working"
+  });
 });
 
 router.get('/test-db', async (req, res) => {
