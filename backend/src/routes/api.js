@@ -10,6 +10,7 @@ router.get('/timestamp', (req, res) => {
 });
 
 router.get('/test-db', async (req, res) => {
+  console.log('Database test route called'); // Add this line
   try {
     const result = await pool.query('SELECT NOW() AS current_time');
     res.json({ 
