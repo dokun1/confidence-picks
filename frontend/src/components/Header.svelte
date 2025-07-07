@@ -1,15 +1,21 @@
 <script>
+  import { navigateTo } from '../lib/router.js';
+  
   export let title = "Confidence Picks";
+  
+  function handleNavigation(route) {
+    navigateTo(route);
+  }
 </script>
 
 <header>
   <h1>{title}</h1>
   <nav>
     <ul>
-      <li><a href="/">Home</a></li>
+      <li><button on:click={() => handleNavigation('home')}>Home</button></li>
+      <li><button on:click={() => handleNavigation('games')}>Games</button></li>
       <li><a href="/about">About</a></li>
       <li><a href="/login">Login</a></li>
-      <li><a href="/groups">Groups</a></li>
     </ul>
   </nav>
 </header>
@@ -32,12 +38,22 @@
     margin: 0 1rem;
   }
 
+  nav ul li button {
+    background: none;
+    border: none;
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  nav ul li button:hover,
+  nav ul li a:hover {
+    text-decoration: underline;
+  }
+
   nav ul li a {
     color: white;
     text-decoration: none;
-  }
-
-  nav ul li a:hover {
-    text-decoration: underline;
   }
 </style>
