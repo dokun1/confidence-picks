@@ -3,6 +3,16 @@ import pool from '../config/database.js';
 
 const router = express.Router();
 
+// Add this debug route to see what's happening
+router.get('/debug', (req, res) => {
+  res.json({
+    message: 'Debug route working',
+    hasDbUrl: !!process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Simple timestamp route for testing
 router.get('/timestamp', (req, res) => {
   const timestamp = new Date().toISOString();
@@ -10,7 +20,9 @@ router.get('/timestamp', (req, res) => {
 });
 
 router.get('/test-db', async (req, res) => {
-  console.log('Database test route called'); // Add this line
+  console.log('Database test route called');
+  console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+  
   try {
     const result = await pool.query('SELECT NOW() AS current_time');
     res.json({ 
@@ -19,7 +31,11 @@ router.get('/test-db', async (req, res) => {
     });
   } catch (error) {
     console.error('Database query error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      code: error.code,
+      hasDbUrl: !!process.env.DATABASE_URL
+    });
   }
 });
 
