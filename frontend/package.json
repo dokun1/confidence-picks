@@ -6,11 +6,23 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite dev",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tokens:generate": "node scripts/generate-platform-tokens.js",
+    "tokens:watch": "node scripts/watch-tokens.js",
+    "dev:tokens": "concurrently \"pnpm tokens:watch\" \"pnpm dev\""
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^2.4.2",
+    "@tailwindcss/typography": "0.5.16",
+    "autoprefixer": "^10.4.21",
+    "chokidar": "^4.0.3",
+    "concurrently": "^9.2.0",
+    "postcss": "^8.5.6",
     "svelte": "^4.0.5",
+    "tailwindcss": "3.4.10",
     "vite": "^4.4.5"
+  },
+  "dependencies": {
+    "heroicons": "^2.2.0"
   }
 }

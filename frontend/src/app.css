@@ -1,18 +1,45 @@
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
+/* Custom CSS for smooth theme transitions */
+@layer base {
+  :root {
+    /* Light mode semantic mappings */
+    --color-surface-primary: #fefefe;
+    --color-surface-secondary: #fafbfc;
+    --color-surface-tertiary: #f5f6f7;
+    --color-text-primary: #111827;
+    --color-text-secondary: #374151;
+    --color-text-tertiary: #6b7280;
+  }
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  .dark {
+    /* Dark mode semantic mappings */
+    --color-surface-primary: #111827;
+    --color-surface-secondary: #1f2937;
+    --color-surface-tertiary: #374151;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #e5e7eb;
+    --color-text-tertiary: #9ca3af;
+  }
+
+  * {
+    @apply transition-colors duration-normal ease-smooth;
+  }
+
+  body {
+    background-color: var(--color-surface-primary);
+    color: var(--color-text-primary);
+    font-family: 'Source Sans 3', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+
+  #app {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
 }

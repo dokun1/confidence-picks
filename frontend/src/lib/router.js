@@ -10,10 +10,22 @@ export function navigateTo(route) {
 export function initRouter() {
     window.addEventListener('popstate', () => {
         const path = window.location.pathname;
-        if (path === '/' || path === '/confidence-picks') {
+        const hash = window.location.hash;
+        
+        if (hash === '#/design-system') {
+            currentRoute.set('design-system');
+        } else if (path === '/' || path === '/confidence-picks') {
             currentRoute.set('home');
         } else if (path.includes('games')) {
             currentRoute.set('games');
+        } else {
+            currentRoute.set('404');
         }
     });
+
+    // Handle initial route on page load
+    const hash = window.location.hash;
+    if (hash === '#/design-system') {
+        currentRoute.set('design-system');
+    }
 }

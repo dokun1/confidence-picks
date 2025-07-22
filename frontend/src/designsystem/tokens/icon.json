@@ -1,0 +1,68 @@
+{
+  "icon": {
+    "navigation": {
+      "home": "home",
+      "menu": "bars-3",
+      "close": "x-mark",
+      "back": "arrow-left",
+      "forward": "arrow-right",
+      "up": "chevron-up",
+      "down": "chevron-down"
+    },
+    "user": {
+      "profile": "user",
+      "settings": "cog-6-tooth",
+      "logout": "arrow-right-on-rectangle",
+      "login": "arrow-left-on-rectangle"
+    },
+    "game": {
+      "calendar": "calendar-days",
+      "clock": "clock",
+      "trophy": "trophy",
+      "star": "star",
+      "star-filled": "star",
+      "refresh": "arrow-path",
+      "filter": "funnel"
+    },
+    "score": {
+      "up": "arrow-up",
+      "down": "arrow-down",
+      "correct": "check-circle",
+      "incorrect": "x-circle",
+      "pending": "clock"
+    },
+    "action": {
+      "play": "play",
+      "pause": "pause",
+      "stop": "stop",
+      "edit": "pencil",
+      "delete": "trash",
+      "add": "plus",
+      "remove": "minus",
+      "search": "magnifying-glass",
+      "save": "check",
+      "cancel": "x-mark"
+    },
+    "status": {
+      "info": "information-circle",
+      "warning": "exclamation-triangle",
+      "error": "exclamation-circle",
+      "success": "check-circle"
+    },
+    "sports": {
+      "football": "ellipsis-horizontal-circle",
+      "scoreboard": "rectangle-group",
+      "team": "user-group",
+      "week": "calendar-days",
+      "season": "calendar"
+    }
+  },
+  "iconSize": {
+    "xs": "12",
+    "sm": "16", 
+    "md": "20",
+    "lg": "24",
+    "xl": "32",
+    "xxl": "40"
+  }
+}

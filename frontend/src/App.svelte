@@ -3,6 +3,7 @@
   import { currentRoute, initRouter } from './lib/router';
   import Header from './components/Header.svelte';
   import GamesPage from './components/GamesPage.svelte';
+  import DesignSystemDemo from './components/DesignSystemDemo.svelte';
 
   onMount(() => {
     initRouter();
@@ -23,6 +24,9 @@
   {:else if $currentRoute === 'games'}
     <!-- Games Page -->
     <GamesPage />
+  {:else if $currentRoute === 'design-system'}
+    <!-- Design System Demo -->
+    <DesignSystemDemo />
   {:else}
     <!-- 404 Page -->
     <div class="not-found">
