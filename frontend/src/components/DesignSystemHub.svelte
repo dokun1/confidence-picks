@@ -6,6 +6,7 @@
   import ColorPaletteDemo from './ColorPaletteDemo.svelte';
   
   let currentDemo = 'overview';
+  let sidebarOpen = false;
   
   const demoSections = [
     { id: 'overview', label: 'Overview', icon: 'home' },
@@ -17,6 +18,14 @@
   
   function switchDemo(demoId) {
     currentDemo = demoId;
+    // Close sidebar on mobile after selection
+    if (window.innerWidth < 768) {
+      sidebarOpen = false;
+    }
+  }
+  
+  function toggleSidebar() {
+    sidebarOpen = !sidebarOpen;
   }
   
   function getIcon(iconName) {
@@ -32,9 +41,46 @@
 </script>
 
 <div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
-  <div class="flex">
+  <!-- Mobile Sidebar Toggle -->
+  <div class="md:hidden border-b border-secondary-200 dark:border-secondary-700 bg-neutral-0 dark:bg-secondary-900 px-md py-sm">
+    <button
+      class="flex items-center text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100"
+      on:click={toggleSidebar}
+    >
+      <svg class="w-5 h-5 mr-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"></path>
+      </svg>
+      Design System Menu
+    </button>
+  </div>
+  
+  <div class="flex relative">
     <!-- Sidebar Navigation -->
-    <aside class="w-64 bg-neutral-50 dark:bg-secondary-800 border-r border-secondary-200 dark:border-secondary-700 min-h-screen p-md">
+    <aside class="
+      {sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      md:translate-x-0 
+      fixed md:static 
+      top-0 md:top-auto 
+      left-0 
+      w-64 
+      h-full md:h-auto 
+      bg-neutral-50 dark:bg-secondary-800 
+      border-r border-secondary-200 dark:border-secondary-700 
+      min-h-screen 
+      p-md 
+      transition-transform duration-300 ease-in-out
+      z-40
+      pt-20 md:pt-md
+    ">
+      <!-- Close button for mobile -->
+      <button
+        class="md:hidden absolute top-4 right-4 p-2 text-secondary-600 dark:text-secondary-400"
+        on:click={toggleSidebar}
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
       <div class="space-y-xs">
         <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)] mb-md">
           Design System
@@ -55,8 +101,16 @@
       </div>
     </aside>
     
+    <!-- Overlay for mobile -->
+    {#if sidebarOpen}
+      <div 
+        class="md:hidden fixed inset-0 bg-secondary-900 bg-opacity-50 z-30"
+        on:click={toggleSidebar}
+      ></div>
+    {/if}
+    
     <!-- Main Content -->
-    <main class="flex-1">
+    <main class="flex-1 md:ml-0">
       {#if currentDemo === 'overview'}
         <div class="p-lg">
           <div class="max-w-4xl mx-auto space-y-lg">
