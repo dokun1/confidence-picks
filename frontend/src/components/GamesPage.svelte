@@ -1,6 +1,7 @@
 
 <script>
     import { onMount } from "svelte";
+    import Button from '../designsystem/components/Button.svelte';
 
     // API Configuration
     const API_URL = import.meta.env.PROD 
@@ -77,9 +78,15 @@
       </select>
     </div>
     
-    <button class="load-btn" on:click={fetchGames} disabled={loading}>
+    <Button 
+      variant="primary" 
+      size="md" 
+      loading={loading} 
+      disabled={loading}
+      on:click={fetchGames}
+    >
       {loading ? 'Loading...' : 'Load Games'}
-    </button>
+    </Button>
   </div>
 
   <!-- Games List -->
@@ -89,7 +96,9 @@
     {:else if error}
       <div class="error">
         {error}
-        <button on:click={fetchGames}>Try Again</button>
+        <Button variant="secondary" size="sm" on:click={fetchGames}>
+          Try Again
+        </Button>
       </div>
     {:else if games.length === 0}
       <div class="no-games">No games found for this week.</div>
@@ -155,25 +164,6 @@
     border: 1px solid #ced4da;
     border-radius: 4px;
     background: white;
-  }
-
-  .load-btn {
-    padding: 0.5rem 1rem;
-    background: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-  }
-
-  .load-btn:hover:not(:disabled) {
-    background: #0056b3;
-  }
-
-  .load-btn:disabled {
-    background: #6c757d;
-    cursor: not-allowed;
   }
 
   .loading, .error, .no-games {
