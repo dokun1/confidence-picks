@@ -6,5 +6,10 @@ export default defineConfig({
   base: '/confidence-picks/',
   css: {
     postcss: './postcss.config.js'
+  },
+  server: {
+    fs: {
+      strict: false
+    }
   }
 })
