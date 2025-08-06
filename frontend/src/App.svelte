@@ -4,11 +4,16 @@
   import Navigation from './designsystem/components/Navigation.svelte';
   import GamesPage from './components/GamesPage.svelte';
   import DesignSystemHub from './components/DesignSystemHub.svelte';
+  import LoginPage from './components/LoginPage.svelte';
+  import ProfilePage from './components/ProfilePage.svelte';
+  import AuthCallback from './components/AuthCallback.svelte';
+  import AuthService from './lib/authService.js';
 
   let darkMode = false;
-  let userName = null; // For future authentication
+  let userName = null;
+  let isAuthenticated = false;
 
-  onMount(() => {
+  onMount(async () => {
     initRouter();
     
     // Check for saved theme preference
@@ -17,7 +22,31 @@
       darkMode = true;
       document.documentElement.classList.add('dark');
     }
+
+    // Check authentication status
+    await checkAuthStatus();
   });
+
+  async function checkAuthStatus() {
+    if (AuthService.isAuthenticated()) {
+      try {
+        let user = AuthService.getUser();
+        if (!user) {
+          user = await AuthService.getCurrentUser();
+        }
+        
+        if (user) {
+          userName = user.name;
+          isAuthenticated = true;
+        } else {
+          AuthService.clearTokens();
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        AuthService.clearTokens();
+      }
+    }
+  }
 
   function handleNavigate(event) {
     navigateTo(event.detail.href);
@@ -37,6 +66,10 @@
   function handleMobileMenuToggle(event) {
     console.log('Mobile menu:', event.detail.open ? 'opened' : 'closed');
   }
+
+  function handleSignOut() {
+    AuthService.logout();
+  }
 </script>
 
 <!-- Navigation -->
@@ -47,6 +80,7 @@
   on:navigate={handleNavigate}
   on:themeToggle={handleThemeToggle}
   on:mobileMenuToggle={handleMobileMenuToggle}
+  on:signOut={handleSignOut}
 />
 
 <!-- Main Content -->
@@ -115,18 +149,33 @@
             Get Started
           </h2>
           <div class="flex flex-col sm:flex-row gap-sm justify-center">
-            <button
-              class="px-lg py-sm bg-primary-500 text-neutral-0 rounded-base text-base font-medium hover:bg-primary-600 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-              on:click={() => navigateTo('/games')}
-            >
-              View This Week's Games
-            </button>
-            <button
-              class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
-              on:click={() => navigateTo('/design-system')}
-            >
-              Explore Design System
-            </button>
+            {#if isAuthenticated}
+              <button
+                class="px-lg py-sm bg-primary-500 text-neutral-0 rounded-base text-base font-medium hover:bg-primary-600 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                on:click={() => navigateTo('/games')}
+              >
+                View This Week's Games
+              </button>
+              <button
+                class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
+                on:click={() => navigateTo('/picks')}
+              >
+                My Picks
+              </button>
+            {:else}
+              <button
+                class="px-lg py-sm bg-primary-500 text-neutral-0 rounded-base text-base font-medium hover:bg-primary-600 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                on:click={() => navigateTo('/login')}
+              >
+                Sign In to Get Started
+              </button>
+              <button
+                class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
+                on:click={() => navigateTo('/games')}
+              >
+                View Games
+              </button>
+            {/if}
           </div>
         </div>
       </div>
@@ -137,6 +186,15 @@
   {:else if $currentRoute === '/design-system'}
     <!-- Design System Hub -->
     <DesignSystemHub />
+  {:else if $currentRoute === '/login'}
+    <!-- Login Page -->
+    <LoginPage />
+  {:else if $currentRoute === '/profile'}
+    <!-- Profile Page -->
+    <ProfilePage />
+  {:else if $currentRoute.startsWith('/auth/callback')}
+    <!-- Auth Callback -->
+    <AuthCallback />
   {:else if $currentRoute === '/picks'}
     <!-- My Picks Page (Future) -->
     <div class="max-w-4xl mx-auto px-lg py-lg">

@@ -23,7 +23,7 @@
   const userMenuItems = [
     { label: 'Profile', href: '/profile', icon: 'user' },
     { label: 'Settings', href: '/settings', icon: 'cog-6-tooth' },
-    { label: 'Sign Out', href: '/logout', icon: 'arrow-right-on-rectangle' }
+    { label: 'Sign Out', action: 'signOut', icon: 'arrow-right-on-rectangle' }
   ];
   
   let userMenuOpen = false;
@@ -45,6 +45,17 @@
     mobileMenuOpen = false;
     userMenuOpen = false;
     dispatch('navigate', { href });
+  }
+
+  function handleUserMenuClick(item) {
+    mobileMenuOpen = false;
+    userMenuOpen = false;
+    
+    if (item.action === 'signOut') {
+      dispatch('signOut');
+    } else if (item.href) {
+      dispatch('navigate', { href: item.href });
+    }
   }
   
   function isActive(href) {
@@ -167,7 +178,7 @@
                 {#each userMenuItems as item}
                   <button
                     class="flex items-center w-full px-sm py-xs text-left text-sm text-secondary-700 hover:text-secondary-900 hover:bg-secondary-50 dark:text-secondary-300 dark:hover:text-secondary-100 dark:hover:bg-secondary-700 transition-colors duration-fast"
-                    on:click={() => handleNavClick(item.href)}
+                    on:click={() => handleUserMenuClick(item)}
                   >
                     <svg class="w-[1rem] h-[1rem] mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d={getIcon(item.icon)}></path>

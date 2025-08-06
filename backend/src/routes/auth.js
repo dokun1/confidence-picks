@@ -16,13 +16,16 @@ router.get('/google/callback',
     try {
       const { accessToken, refreshToken } = await AuthService.createTokens(req.user);
       
-      // Redirect to frontend with tokens
+      // Get the correct frontend URL based on environment
       const frontendURL = process.env.NODE_ENV === 'production' 
         ? 'https://dokun1.github.io' 
         : 'http://localhost:5173';
       
       res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&refresh=${refreshToken}`);
     } catch (error) {
+      const frontendURL = process.env.NODE_ENV === 'production' 
+        ? 'https://dokun1.github.io' 
+        : 'http://localhost:5173';
       res.redirect(`${frontendURL}/auth/error?message=${encodeURIComponent(error.message)}`);
     }
   }

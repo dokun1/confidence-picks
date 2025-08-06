@@ -33,6 +33,12 @@ export function initRouter() {
             currentRoute.set('/picks');
         } else if (path.includes('/leaderboard')) {
             currentRoute.set('/leaderboard');
+        } else if (path.includes('/login')) {
+            currentRoute.set('/login');
+        } else if (path.includes('/profile')) {
+            currentRoute.set('/profile');
+        } else if (path.includes('/auth/callback')) {
+            currentRoute.set('/auth/callback');
         } else {
             currentRoute.set('404');
         }
@@ -41,6 +47,7 @@ export function initRouter() {
     // Handle initial route on page load
     const path = window.location.pathname;
     const hash = window.location.hash;
+    const search = window.location.search;
     
     if (hash === '#/design-system') {
         currentRoute.set('/design-system');
@@ -54,5 +61,11 @@ export function initRouter() {
         currentRoute.set('/picks');
     } else if (path.includes('/leaderboard')) {
         currentRoute.set('/leaderboard');
+    } else if (path.includes('/login')) {
+        currentRoute.set('/login');
+    } else if (path.includes('/profile')) {
+        currentRoute.set('/profile');
+    } else if (path.includes('/auth/callback') || search.includes('token=')) {
+        currentRoute.set('/auth/callback');
     }
 }

@@ -7,7 +7,7 @@ passport.use(new GoogleStrategy({
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: process.env.NODE_ENV === 'production' 
     ? "https://confidence-picks.vercel.app/auth/google/callback"
-    : "/auth/google/callback"
+    : "http://localhost:3001/auth/google/callback"
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     const userData = {
