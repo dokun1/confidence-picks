@@ -16,15 +16,15 @@ router.get('/google/callback',
     try {
       const { accessToken, refreshToken } = await AuthService.createTokens(req.user);
       
-      // Get the correct frontend URL based on environment
+      // Fix: Add the correct GitHub Pages path
       const frontendURL = process.env.NODE_ENV === 'production' 
-        ? 'https://dokun1.github.io' 
+        ? 'https://dokun1.github.io/confidence-picks'  // Added /confidence-picks
         : 'http://localhost:5173';
       
       res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&refresh=${refreshToken}`);
     } catch (error) {
       const frontendURL = process.env.NODE_ENV === 'production' 
-        ? 'https://dokun1.github.io' 
+        ? 'https://dokun1.github.io/confidence-picks'  // Added /confidence-picks
         : 'http://localhost:5173';
       res.redirect(`${frontendURL}/auth/error?message=${encodeURIComponent(error.message)}`);
     }
