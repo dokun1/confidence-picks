@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/database.js';
 import { GameService } from '../services/GameService.js';
+import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 

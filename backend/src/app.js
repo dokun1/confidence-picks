@@ -1,9 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
+import cookieParser from 'cookie-parser';
+import passport from './config/passport.js';
 import apiRoutes from './routes/api.js';
+import authRoutes from './routes/auth.js';
 import { initDatabase } from './database/init.js';
-
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,9 +21,24 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+app.use(cookieParser());
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Routes
 app.use('/api', apiRoutes);
+app.use('/auth', authRoutes);
 
 // Health check
 app.get('/', (req, res) => {
