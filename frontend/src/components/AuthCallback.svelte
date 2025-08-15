@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { navigateTo } from '../lib/router.js';
   import AuthService from '../lib/authService.js';
+  import { setAuthUser } from '../lib/authStore.js';
 
   let loading = true;
 
@@ -20,6 +21,9 @@
         const user = await AuthService.getCurrentUser();
         
         if (user) {
+          // update global auth store immediately
+          setAuthUser(user);
+          
           // Clear URL params and redirect to home
           window.history.replaceState({}, document.title, window.location.pathname);
           navigateTo('/');

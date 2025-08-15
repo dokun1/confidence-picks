@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { auth } from '../../lib/authStore.js';
   
   export let currentRoute = '/';
   export let userName = null; // If provided, shows user info
@@ -86,6 +87,9 @@
       userMenuOpen = false;
     }
   }
+
+  $: ({ isAuthenticated, user } = $auth);
+  $: userName = user?.name || null;
 </script>
 
 <svelte:window on:click={handleOutsideClick} />

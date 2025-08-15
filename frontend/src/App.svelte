@@ -8,10 +8,13 @@
   import ProfilePage from './components/ProfilePage.svelte';
   import AuthCallback from './components/AuthCallback.svelte';
   import AuthService from './lib/authService.js';
+  import { auth, setAuthUser, clearAuth } from './lib/authStore.js';
 
   let darkMode = false;
-  let userName = null;
-  let isAuthenticated = false;
+
+  // Reflect auth store into local vars used by the UI
+  $: isAuthenticated = $auth?.isAuthenticated ?? false;
+  $: userName = $auth?.user?.name || null;
 
   onMount(async () => {
     initRouter();
@@ -36,15 +39,19 @@
         }
         
         if (user) {
-          userName = user.name;
-          isAuthenticated = true;
+          // Update global auth store so UI updates immediately
+          setAuthUser(user);
         } else {
           AuthService.clearTokens();
+          clearAuth();
         }
       } catch (error) {
         console.error('Auth check failed:', error);
         AuthService.clearTokens();
+        clearAuth();
       }
+    } else {
+      clearAuth();
     }
   }
 
@@ -69,6 +76,7 @@
 
   function handleSignOut() {
     AuthService.logout();
+    clearAuth();
   }
 </script>
 
