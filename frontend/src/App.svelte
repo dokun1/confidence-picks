@@ -13,7 +13,7 @@
   let darkMode = false;
 
   // Reflect auth store into local vars used by the UI
-  $: isAuthenticated = $auth?.isAuthenticated ?? false;
+  $: isAuthenticated = $auth.isAuthenticated;
   $: userName = $auth?.user?.name || null;
 
   onMount(async () => {

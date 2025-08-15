@@ -3,7 +3,7 @@
   import { auth } from '../../lib/authStore.js';
   
   export let currentRoute = '/';
-  export let userName = null; // If provided, shows user info
+  export let displayName = null; // If provided, shows user info
   export let showThemeToggle = true;
   export let darkMode = false;
   
@@ -89,7 +89,7 @@
   }
 
   $: ({ isAuthenticated, user } = $auth);
-  $: userName = user?.name || null;
+  $: displayName = user?.name || null;
 </script>
 
 <svelte:window on:click={handleOutsideClick} />
@@ -158,7 +158,7 @@
         {/if}
 
         <!-- User Menu -->
-        {#if userName}
+        {#if displayName}
           <div class="relative user-menu-container">
             <button
               class="flex items-center p-xs rounded-base text-secondary-600 hover:text-secondary-900 hover:bg-secondary-100 dark:text-secondary-400 dark:hover:text-secondary-100 dark:hover:bg-secondary-800 transition-colors duration-fast focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -167,10 +167,10 @@
             >
               <div class="w-[2rem] h-[2rem] bg-primary-500 rounded-full flex items-center justify-center mr-xs">
                 <span class="text-sm font-medium text-neutral-0">
-                  {userName.charAt(0).toUpperCase()}
+                  {displayName.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <span class="hidden lg:block text-sm font-medium mr-xs">{userName}</span>
+              <span class="hidden lg:block text-sm font-medium mr-xs">{displayName}</span>
               <svg class="w-[1rem] h-[1rem] transition-transform duration-fast {userMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
               </svg>
@@ -224,7 +224,7 @@
           </button>
         {/each}
         
-        {#if !userName}
+        {#if !displayName}
           <div class="pt-sm border-t border-secondary-200 dark:border-secondary-700">
             <button
               class="w-full px-sm py-sm bg-primary-500 text-neutral-0 rounded-base text-base font-medium hover:bg-primary-600 transition-colors duration-fast focus:outline-none focus:ring-1 focus:ring-primary-500"
