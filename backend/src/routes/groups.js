@@ -14,7 +14,20 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     
     if (maxMembers > 40) {
-      return res.status(400).json({ error: 'Maximum members cannot exceed 40' });
+const MAX_GROUP_MEMBERS = 40;
+const router = express.Router();
+
+// Create a new group
+router.post('/', authenticateToken, async (req, res) => {
+  try {
+    const { name, identifier, description, isPublic = true, maxMembers = MAX_GROUP_MEMBERS, avatarUrl } = req.body;
+    
+    if (!name || !identifier) {
+      return res.status(400).json({ error: 'Name and identifier are required' });
+    }
+    
+    if (maxMembers > MAX_GROUP_MEMBERS) {
+      return res.status(400).json({ error: `Maximum members cannot exceed ${MAX_GROUP_MEMBERS}` });
     }
     
     const group = await Group.create({
