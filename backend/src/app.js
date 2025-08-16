@@ -50,9 +50,14 @@ app.get('/', (req, res) => {
 // Initialize database and start server
 async function startServer() {
   try {
-    console.log('Initializing database...');
-    await initDatabase();
-    console.log('Database initialized successfully');
+    // Skip database initialization in test environment if it's already done
+    if (process.env.NODE_ENV !== 'test' || process.env.INIT_DB !== 'false') {
+      console.log('Initializing database...');
+      await initDatabase();
+      console.log('Database initialized successfully');
+    } else {
+      console.log('Skipping database initialization in test environment');
+    }
 
     // Start server for both local and production
     if (process.env.NODE_ENV !== 'production') {
