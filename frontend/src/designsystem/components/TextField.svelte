@@ -149,8 +149,7 @@
 
   <!-- Input Container -->
   <div class="relative">
-    {#if secure}
-          <!-- Input Field -->
+    <!-- Input Field -->
     {#if multiline}
       <textarea
         bind:this={inputElement}

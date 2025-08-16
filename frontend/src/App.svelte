@@ -2,15 +2,7 @@
   import { onMount } from 'svelte';
   import { currentRoute, initRouter, navigateTo } from './lib/router';
   import Navigation from './designsystem/components/Navigation.svelte';
-  impo  {:else if $currentRoute === '/designsystem'}
-    <!-- Design System -->
-    <DesignSystemHub />
-  {:else if $currentRoute === '/groups-demo'}
-    <!-- Groups Demo -->
-    <GroupsDemo />
-  {:else if $currentRoute === '/login'}
-    <!-- Login Page -->
-    <LoginPage />esPage from './components/GamesPage.svelte';
+  import GamesPage from './components/GamesPage.svelte';
   import DesignSystemHub from './components/DesignSystemHub.svelte';
   import GroupsDemo from './components/GroupsDemo.svelte';
   import LoginPage from './components/LoginPage.svelte';
@@ -203,6 +195,9 @@
   {:else if $currentRoute === '/design-system'}
     <!-- Design System Hub -->
     <DesignSystemHub />
+  {:else if $currentRoute === '/groups-demo'}
+    <!-- Groups Demo -->
+    <GroupsDemo />
   {:else if $currentRoute === '/login'}
     <!-- Login Page -->
     <LoginPage />
