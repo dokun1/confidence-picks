@@ -15,23 +15,24 @@ describe('API Routes', () => {
       env: { 
         ...process.env, 
         NODE_ENV: 'test',
-        PORT: '3004'
+        PORT: '3004',
+        INIT_DB: 'false'  // Skip DB init since it's already done
       },
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
     // Wait for server to fully start
-    await setTimeout(5000);
+    await setTimeout(3000);  // Reduced from 5000ms
     
     // Verify server is actually running
     let attempts = 0;
-    while (attempts < 10) {
+    while (attempts < 5) {  // Reduced from 10 attempts
       try {
         const response = await fetch(`${baseURL}/`);
         if (response.ok) break;
       } catch (error) {
         attempts++;
-        await setTimeout(1000);
+        await setTimeout(500);  // Reduced from 1000ms
       }
     }
   });

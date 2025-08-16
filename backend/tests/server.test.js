@@ -16,13 +16,14 @@ describe('Server Startup', () => {
       env: { 
         ...process.env, 
         NODE_ENV: 'test',
-        PORT: testPort.toString()
+        PORT: testPort.toString(),
+        INIT_DB: 'false'  // Skip DB init since it's already done
       },
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
-    // Wait for server to start
-    await setTimeout(4000);
+    // Wait for server to start (reduced time since no DB init)
+    await setTimeout(2000);
   });
   
   after(async () => {
