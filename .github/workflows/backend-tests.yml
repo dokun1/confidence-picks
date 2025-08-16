@@ -20,7 +20,7 @@ jobs:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U test_user -d confidence_picks_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -35,12 +35,13 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: backend/package-lock.json
+    
+    - name: Install pnpm
+      run: npm install -g pnpm
     
     - name: Install dependencies
       working-directory: ./backend
-      run: npm ci
+      run: pnpm install --frozen-lockfile
     
     - name: Setup test environment
       working-directory: ./backend
@@ -48,38 +49,43 @@ jobs:
     
     - name: Wait for PostgreSQL
       run: |
-        until pg_isready -h localhost -p 5433 -U test_user -d confidence_picks_test; do
-          echo "Waiting for PostgreSQL..."
+        echo "Waiting for PostgreSQL to be ready..."
+        sleep 10
+        for i in {1..30}; do
+          if pg_isready -h localhost -p 5433 -U test_user -d confidence_picks_test; then
+            echo "PostgreSQL is ready!"
+            break
+          fi
+          echo "Attempt $i: PostgreSQL not ready yet..."
           sleep 2
         done
-        echo "PostgreSQL is ready!"
     
     - name: Initialize database
       working-directory: ./backend
-      run: npm run db:init
+      run: pnpm run db:init
       env:
         NODE_ENV: test
     
     - name: Run database tests
       working-directory: ./backend
-      run: npm run test:db
+      run: pnpm run test:db
       env:
         NODE_ENV: test
     
     - name: Run server tests
       working-directory: ./backend
-      run: npm run test:server
+      run: pnpm run test:server
       env:
         NODE_ENV: test
     
     - name: Run API routes tests
       working-directory: ./backend
-      run: npm run test:routes
+      run: pnpm run test:routes
       env:
         NODE_ENV: test
     
     - name: Run all tests
       working-directory: ./backend
-      run: npm test
+      run: pnpm test
       env:
         NODE_ENV: test
