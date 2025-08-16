@@ -14,6 +14,8 @@
   export let required = false;
   export let readonly = false;
   export let id = '';
+  export let multiline = false;
+  export let rows = 3;
 
   const dispatch = createEventDispatcher();
 
@@ -23,13 +25,20 @@
 
   $: hasValue = value && value.length > 0;
   $: actualType = secure ? 'password' : inputType;
-  $: showClear = showClearButton && hasValue && !disabled && !readonly;
+  $: showClear = showClearButton && hasValue && !disabled && !readonly && !multiline;
 
   // Size-specific classes
   const sizeClasses = {
     sm: 'px-xs py-xxxs text-sm h-[2rem]',
     md: 'px-sm py-xs text-base h-[2.5rem]',
     lg: 'px-md py-sm text-lg h-[3rem]'
+  };
+
+  // Multiline size classes (for textarea)
+  const multilineSizeClasses = {
+    sm: 'px-xs py-xxxs text-sm min-h-[4rem]',
+    md: 'px-sm py-xs text-base min-h-[5rem]',
+    lg: 'px-md py-sm text-lg min-h-[6rem]'
   };
 
   // Validation state classes
@@ -53,7 +62,7 @@
     error: 'text-error-600 dark:text-error-400'
   };
 
-  $: currentSize = sizeClasses[size];
+  $: currentSize = multiline ? multilineSizeClasses[size] : sizeClasses[size];
   $: currentValidation = validationClasses[validationState];
   $: currentDarkValidation = darkValidationClasses[validationState];
   $: currentMessageColor = messageColors[validationState];
@@ -140,7 +149,27 @@
 
   <!-- Input Container -->
   <div class="relative">
-    {#if secure}
+    <!-- Input Field -->
+    {#if multiline}
+      <textarea
+        bind:this={inputElement}
+        bind:value
+        {id}
+        {disabled}
+        {readonly}
+        {required}
+        {rows}
+        {placeholder}
+        class={inputClasses}
+        on:input={handleInput}
+        on:focus={handleFocus}
+        on:blur={handleBlur}
+        on:keydown={handleKeydown}
+        on:change
+        on:keyup
+        on:keypress
+      ></textarea>
+    {:else if secure && inputType === 'text'}
       <input
         bind:this={inputElement}
         bind:value
@@ -216,8 +245,8 @@
       />
     {/if}
 
-    <!-- Placeholder animation overlay -->
-    {#if placeholder && !hasValue}
+    <!-- Placeholder animation overlay (only for non-multiline inputs) -->
+    {#if placeholder && !hasValue && !multiline}
       <div 
         class="absolute inset-y-0 left-0 flex items-center px-sm pointer-events-none transition-opacity duration-fast ease-smooth"
         class:opacity-0={focused}
