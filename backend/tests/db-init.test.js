@@ -1,26 +1,30 @@
-import { test, describe, before, after } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { initDatabase } from '../src/database/init.js';
-import pool from '../src/config/database.js';
+import pg from 'pg';
 
 describe('Database Initialization', () => {
   
-  after(async () => {
-    // Clean up database connection
-    await pool.end();
-  });
+  const createClient = () => {
+    return new pg.Client({
+      connectionString: process.env.DATABASE_URL
+    });
+  };
 
   test('should initialize database schema successfully', async () => {
+    const client = createClient();
+    
     try {
       console.log('🧪 Testing database initialization...');
       
+      await client.connect();
       await initDatabase();
       
       // Verify core tables exist
       const tables = ['users', 'games', 'user_sessions', 'user_picks', 'groups', 'group_memberships', 'group_invitations', 'group_messages'];
       
       for (const table of tables) {
-        const result = await pool.query(
+        const result = await client.query(
           `SELECT EXISTS (
             SELECT FROM information_schema.tables 
             WHERE table_schema = 'public' 
@@ -33,7 +37,7 @@ describe('Database Initialization', () => {
       }
       
       // Verify foreign key constraints exist
-      const constraints = await pool.query(`
+      const constraints = await client.query(`
         SELECT constraint_name, table_name 
         FROM information_schema.table_constraints 
         WHERE constraint_type = 'FOREIGN KEY' 
@@ -43,7 +47,7 @@ describe('Database Initialization', () => {
       assert.ok(constraints.rows.length > 0, 'Foreign key constraints should exist');
       
       // Verify group_id column exists in user_picks
-      const groupIdColumn = await pool.query(`
+      const groupIdColumn = await client.query(`
         SELECT column_name, data_type 
         FROM information_schema.columns 
         WHERE table_name = 'user_picks' AND column_name = 'group_id'
@@ -55,15 +59,21 @@ describe('Database Initialization', () => {
     } catch (error) {
       console.error('❌ Database initialization failed:', error);
       throw error;
+    } finally {
+      await client.end();
     }
   });
 
   test('should create indexes for performance', async () => {
+    const client = createClient();
+    
     try {
       console.log('🧪 Testing database indexes...');
       
+      await client.connect();
+      
       // Check if key indexes exist
-      const indexes = await pool.query(`
+      const indexes = await client.query(`
         SELECT indexname, tablename 
         FROM pg_indexes 
         WHERE schemaname = 'public' 
@@ -76,6 +86,8 @@ describe('Database Initialization', () => {
     } catch (error) {
       console.error('❌ Database indexes test failed:', error);
       throw error;
+    } finally {
+      await client.end();
     }
   });
 });
