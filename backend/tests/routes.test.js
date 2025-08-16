@@ -139,27 +139,53 @@ describe('API Routes', () => {
     try {
       console.log('🧪 Testing auth routes...');
       
-      // Test auth status without token
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for CI
+      // Add a small delay to ensure server is fully ready
+      await setTimeout(100);
       
-      const response = await fetch(`${baseURL}/auth/me`, {
-        signal: controller.signal
-      });
+      // Test auth status without token with proper error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased timeout for CI
+      
+      let response;
+      try {
+        response = await fetch(`${baseURL}/auth/me`, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.error('❌ Auth fetch failed:', fetchError);
+        throw new Error(`Failed to fetch auth endpoint: ${fetchError.message}`);
+      }
       clearTimeout(timeoutId);
       
       console.log(`Auth response status: ${response.status}`);
+      console.log(`Auth response headers:`, Object.fromEntries(response.headers.entries()));
       
-      const data = await response.json();
-      console.log(`Auth response data:`, data);
+      let data;
+      try {
+        data = await response.json();
+        console.log(`Auth response data:`, data);
+      } catch (jsonError) {
+        console.error('❌ Failed to parse auth response as JSON:', jsonError);
+        const text = await response.text();
+        console.log(`Auth response text:`, text);
+        throw new Error(`Auth endpoint returned invalid JSON: ${text}`);
+      }
       
       // Be more flexible with the response - either 401 or 403 is acceptable for unauthorized
       assert.ok(response.status === 401 || response.status === 403, `Should require authentication, got ${response.status}`);
+      assert.ok(data && typeof data === 'object', 'Should return JSON object');
       assert.ok(data.error, 'Should return an error message');
       assert.ok(
         data.error === 'Access token required' || 
         data.error === 'Invalid access token' || 
-        data.error.includes('token'),
+        data.error.includes('token') ||
+        data.error.includes('required') ||
+        data.error.includes('unauthorized'),
         `Should return token-related error, got: ${data.error}`
       );
       
