@@ -160,19 +160,19 @@
           <h2 class="text-2xl font-heading font-semibold text-[var(--color-text-primary)]">
             Get Started
           </h2>
-          <div class="flex flex-col sm:flex-row gap-sm justify-center">
+                    <div class="flex flex-col sm:flex-row gap-sm justify-center">
             {#if isAuthenticated}
               <button
                 class="px-lg py-sm bg-primary-500 text-neutral-0 rounded-base text-base font-medium hover:bg-primary-600 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-                on:click={() => navigateTo('/games')}
+                on:click={() => navigateTo('/groups')}
               >
-                View This Week's Games
+                View Your Groups
               </button>
               <button
                 class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
-                on:click={() => navigateTo('/picks')}
+                on:click={() => navigateTo('/groups/create')}
               >
-                My Picks
+                Create New Group
               </button>
             {:else}
               <button
@@ -183,9 +183,9 @@
               </button>
               <button
                 class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
-                on:click={() => navigateTo('/games')}
+                on:click={() => navigateTo('/groups')}
               >
-                View Games
+                Browse Groups
               </button>
             {/if}
           </div>
@@ -207,6 +207,75 @@
   {:else if $currentRoute === '/groups'}
     <!-- Groups Page -->
     <GroupsPage />
+  {:else if $currentRoute === '/about'}
+    <!-- About Page -->
+    <div class="max-w-4xl mx-auto px-lg py-lg">
+      <div class="space-y-lg">
+        <header class="text-center space-y-md">
+          <h1 class="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+            About Confidence Picks
+          </h1>
+          <p class="text-lg text-[var(--color-text-secondary)] max-w-2xl mx-auto">
+            Learn more about how confidence picks work and what makes this app special.
+          </p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+          <div class="space-y-md">
+            <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+              How It Works
+            </h2>
+            <div class="space-y-sm text-[var(--color-text-secondary)]">
+              <p>
+                Confidence picks is a unique way to predict NFL games. Instead of just picking winners, 
+                you rank your picks by confidence level from 1 to the number of games that week.
+              </p>
+              <p>
+                Your highest confidence pick (worth the most points) should be the game you're most 
+                certain about, while your lowest confidence pick is the game you're least sure about.
+              </p>
+              <p>
+                When you're right, you earn the points equal to your confidence level. When you're wrong, 
+                you get zero points for that pick.
+              </p>
+            </div>
+          </div>
+
+          <div class="space-y-md">
+            <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+              Group Competition
+            </h2>
+            <div class="space-y-sm text-[var(--color-text-secondary)]">
+              <p>
+                Create or join groups with friends, family, or coworkers to compete throughout the season.
+              </p>
+              <p>
+                Each group has its own leaderboard, message board for friendly banter, and unique 
+                settings that the group owner can customize.
+              </p>
+              <p>
+                Track your progress week by week and see how you stack up against the competition!
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-base p-lg">
+          <h3 class="text-lg font-heading font-semibold text-primary-900 dark:text-primary-100 mb-sm">
+            Ready to Get Started?
+          </h3>
+          <p class="text-primary-800 dark:text-primary-200 mb-md">
+            Join a group or create your own to start making confidence picks with friends!
+          </p>
+          <button
+            class="px-md py-xs bg-primary-500 text-neutral-0 rounded-base text-sm font-medium hover:bg-primary-600 transition-colors duration-fast"
+            on:click={() => navigateTo('/groups')}
+          >
+            View Groups
+          </button>
+        </div>
+      </div>
+    </div>
   {:else if $currentRoute === '/design-system'}
     <!-- Design System Hub -->
     <DesignSystemHub />
@@ -219,42 +288,6 @@
   {:else if $currentRoute.startsWith('/auth/callback')}
     <!-- Auth Callback -->
     <AuthCallback />
-  {:else if $currentRoute === '/picks'}
-    <!-- My Picks Page (Future) -->
-    <div class="max-w-4xl mx-auto px-lg py-lg">
-      <div class="text-center space-y-md">
-        <h1 class="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
-          My Picks
-        </h1>
-        <p class="text-lg text-[var(--color-text-secondary)]">
-          Coming soon! This will be where you manage your confidence picks.
-        </p>
-        <div class="p-lg bg-neutral-50 dark:bg-secondary-800 rounded-base border border-secondary-200 dark:border-secondary-700">
-          <div class="text-4xl mb-md">🚧</div>
-          <p class="text-[var(--color-text-secondary)]">
-            This feature is under development. Check back soon!
-          </p>
-        </div>
-      </div>
-    </div>
-  {:else if $currentRoute === '/leaderboard'}
-    <!-- Leaderboard Page (Future) -->
-    <div class="max-w-4xl mx-auto px-lg py-lg">
-      <div class="text-center space-y-md">
-        <h1 class="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
-          Leaderboard
-        </h1>
-        <p class="text-lg text-[var(--color-text-secondary)]">
-          Coming soon! This will show rankings and scores for all players.
-        </p>
-        <div class="p-lg bg-neutral-50 dark:bg-secondary-800 rounded-base border border-secondary-200 dark:border-secondary-700">
-          <div class="text-4xl mb-md">🏆</div>
-          <p class="text-[var(--color-text-secondary)]">
-            This feature is under development. Check back soon!
-          </p>
-        </div>
-      </div>
-    </div>
   {:else}
     <!-- 404 Page -->
     <div class="max-w-4xl mx-auto px-lg py-lg">
