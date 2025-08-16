@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS groups (
   identifier VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly unique identifier
   description TEXT,
   is_public BOOLEAN DEFAULT true,
-  max_members group_member_count,
+  max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
   avatar_url VARCHAR(500),
   created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
