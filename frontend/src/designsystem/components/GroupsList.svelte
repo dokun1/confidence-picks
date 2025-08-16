@@ -1,6 +1,6 @@
 <script>
   import GroupCard from './GroupCard.svelte';
-  import Button from '../designsystem/components/Button.svelte';
+  import Button from './Button.svelte';
   
   export let groups = [];
   export let isLoading = false;

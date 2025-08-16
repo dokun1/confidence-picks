@@ -4,7 +4,6 @@
   import Navigation from './designsystem/components/Navigation.svelte';
   import GamesPage from './components/GamesPage.svelte';
   import DesignSystemHub from './components/DesignSystemHub.svelte';
-  import GroupsDemo from './components/GroupsDemo.svelte';
   import LoginPage from './components/LoginPage.svelte';
   import ProfilePage from './components/ProfilePage.svelte';
   import AuthCallback from './components/AuthCallback.svelte';
@@ -195,9 +194,6 @@
   {:else if $currentRoute === '/design-system'}
     <!-- Design System Hub -->
     <DesignSystemHub />
-  {:else if $currentRoute === '/groups-demo'}
-    <!-- Groups Demo -->
-    <GroupsDemo />
   {:else if $currentRoute === '/login'}
     <!-- Login Page -->
     <LoginPage />

@@ -1,6 +1,6 @@
 <script>
-  import Button from '../designsystem/components/Button.svelte';
-  import TextField from '../designsystem/components/TextField.svelte';
+  import Button from './Button.svelte';
+  import TextField from './TextField.svelte';
   
   export let onSubmit = () => {};
   export let onCancel = () => {};

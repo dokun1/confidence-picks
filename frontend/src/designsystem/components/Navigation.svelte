@@ -17,7 +17,6 @@
     { label: 'Games', href: '/games', icon: 'calendar-days' },
     { label: 'My Picks', href: '/picks', icon: 'star' },
     { label: 'Leaderboard', href: '/leaderboard', icon: 'trophy' },
-    { label: 'Groups Demo', href: '/groups-demo', icon: 'users' },
     { label: 'Design System', href: '/design-system', icon: 'cog-6-tooth' }
   ];
   

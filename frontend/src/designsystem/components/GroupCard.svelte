@@ -1,5 +1,5 @@
 <script>
-  import Button from '../designsystem/components/Button.svelte';
+  import Button from './Button.svelte';
   
   export let group = {
     id: '',
