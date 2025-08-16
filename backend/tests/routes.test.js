@@ -39,12 +39,19 @@ describe('API Routes', () => {
   after(async () => {
     if (serverProcess) {
       console.log('🧹 Cleaning up server process...');
-      serverProcess.kill('SIGTERM');
-      await setTimeout(1000);
       
+      // Try graceful shutdown first
+      serverProcess.kill('SIGTERM');
+      await setTimeout(2000);
+      
+      // Force kill if still running
       if (!serverProcess.killed) {
+        console.log('⚠️ Force killing server process...');
         serverProcess.kill('SIGKILL');
       }
+      
+      // Wait a bit more for cleanup
+      await setTimeout(1000);
     }
   });
   
@@ -133,7 +140,7 @@ describe('API Routes', () => {
       
       // Test auth status without token
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for CI
       
       const response = await fetch(`${baseURL}/auth/me`, {
         signal: controller.signal
@@ -158,7 +165,7 @@ describe('API Routes', () => {
       
       // Test games endpoint (might require specific parameters)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for CI
       
       const response = await fetch(`${baseURL}/api/games/2024/2/1`, {
         signal: controller.signal

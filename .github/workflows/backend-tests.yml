@@ -11,6 +11,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     services:
       postgres:
@@ -66,26 +67,26 @@ jobs:
       env:
         NODE_ENV: test
     
-    - name: Run database tests
+    - name: Run structure tests
       working-directory: ./backend
-      run: timeout 300 pnpm run test:db
+      run: timeout 60 pnpm run test:structure
       env:
         NODE_ENV: test
     
-    - name: Run server tests
+    - name: Run database tests
       working-directory: ./backend
-      run: timeout 300 pnpm run test:server
+      run: timeout 180 pnpm run test:db
       env:
         NODE_ENV: test
     
     - name: Run API routes tests
       working-directory: ./backend
-      run: timeout 300 pnpm run test:routes
+      run: timeout 180 pnpm run test:routes
       env:
         NODE_ENV: test
     
-    - name: Run structure tests
+    - name: Run server tests
       working-directory: ./backend
-      run: timeout 60 pnpm run test:structure
+      run: timeout 180 pnpm run test:server
       env:
         NODE_ENV: test
