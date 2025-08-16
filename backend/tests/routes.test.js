@@ -132,7 +132,14 @@ describe('API Routes', () => {
       console.log('🧪 Testing auth routes...');
       
       // Test auth status without token
-      const response = await fetch(`${baseURL}/auth/me`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(`${baseURL}/auth/me`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       const data = await response.json();
       
       assert.strictEqual(response.status, 401, 'Should require authentication');
@@ -150,7 +157,13 @@ describe('API Routes', () => {
       console.log('🧪 Testing games API routes...');
       
       // Test games endpoint (might require specific parameters)
-      const response = await fetch(`${baseURL}/api/games/2024/2/1`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(`${baseURL}/api/games/2024/2/1`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
       
       // Should not return 500, even if no data
       assert.ok(response.status !== 500, 'Games API should not return server error');

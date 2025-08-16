@@ -68,24 +68,24 @@ jobs:
     
     - name: Run database tests
       working-directory: ./backend
-      run: pnpm run test:db
+      run: timeout 300 pnpm run test:db
       env:
         NODE_ENV: test
     
     - name: Run server tests
       working-directory: ./backend
-      run: pnpm run test:server
+      run: timeout 300 pnpm run test:server
       env:
         NODE_ENV: test
     
     - name: Run API routes tests
       working-directory: ./backend
-      run: pnpm run test:routes
+      run: timeout 300 pnpm run test:routes
       env:
         NODE_ENV: test
     
-    - name: Run all tests
+    - name: Run structure tests
       working-directory: ./backend
-      run: pnpm test
+      run: timeout 60 pnpm run test:structure
       env:
         NODE_ENV: test

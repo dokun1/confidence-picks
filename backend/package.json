@@ -10,6 +10,7 @@
     "test:db": "node --test tests/db-init.test.js",
     "test:server": "node --test tests/server.test.js",
     "test:routes": "node --test tests/routes.test.js",
+    "test:structure": "node --test tests/structure.test.js",
     "test:setup": "docker-compose -f docker-compose.test.yml up -d",
     "test:teardown": "docker-compose -f docker-compose.test.yml down -v",
     "test:full": "npm run test:setup && sleep 15 && NODE_ENV=test npm run db:init && NODE_ENV=test npm run test && npm run test:teardown"
