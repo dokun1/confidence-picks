@@ -5,7 +5,17 @@ import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/')
+router.get('/', (req, res) => {
+  res.json({ 
+    message: 'Confidence Picks API',
+    version: '1.0.0',
+    endpoints: [
+      'GET /api/games/:year/:seasonType/:week',
+      'GET /api/games/:espnId',
+      'GET /api/debug/espn/:year/:seasonType/:week'
+    ]
+  });
+});
 
 router.get('/games/:year/:seasonType/:week', async (req, res) => {
   try {
