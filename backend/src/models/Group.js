@@ -22,7 +22,12 @@ export class Group {
     const { name, identifier, description, isPublic, maxMembers, avatarUrl } = groupData;
     
     // Ensure identifier is unique and URL-friendly
-    const cleanIdentifier = identifier.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
+    const cleanIdentifier = identifier
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')      // Replace invalid chars with dash
+      .replace(/-+/g, '-')              // Collapse consecutive dashes
+      .replace(/^-+|-+$/g, '');         // Trim leading/trailing dashes
     
     const client = await pool.connect();
     try {
