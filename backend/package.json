@@ -5,7 +5,14 @@
   "scripts": {
     "dev": "node --watch src/app.js",
     "start": "node src/app.js",
-    "db:init": "node src/database/init.js"
+    "db:init": "node src/database/init.js",
+    "test": "node --test tests/*.test.js",
+    "test:db": "node --test tests/db-init.test.js",
+    "test:server": "node --test tests/server.test.js",
+    "test:routes": "node --test tests/routes.test.js",
+    "test:setup": "docker-compose -f docker-compose.test.yml up -d",
+    "test:teardown": "docker-compose -f docker-compose.test.yml down -v",
+    "test:full": "npm run test:setup && sleep 15 && NODE_ENV=test npm run db:init && NODE_ENV=test npm run test && npm run test:teardown"
   },
   "dependencies": {
     "cors": "^2.8.5",

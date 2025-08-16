@@ -1,0 +1,85 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main, develop, feature/backend-testing ]
+    paths: [ 'backend/**' ]
+  pull_request:
+    branches: [ main, develop ]
+    paths: [ 'backend/**' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: confidence_picks_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+    
+    - name: Setup test environment
+      working-directory: ./backend
+      run: cp .env.test .env
+    
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5433 -U test_user -d confidence_picks_test; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+        echo "PostgreSQL is ready!"
+    
+    - name: Initialize database
+      working-directory: ./backend
+      run: npm run db:init
+      env:
+        NODE_ENV: test
+    
+    - name: Run database tests
+      working-directory: ./backend
+      run: npm run test:db
+      env:
+        NODE_ENV: test
+    
+    - name: Run server tests
+      working-directory: ./backend
+      run: npm run test:server
+      env:
+        NODE_ENV: test
+    
+    - name: Run API routes tests
+      working-directory: ./backend
+      run: npm run test:routes
+      env:
+        NODE_ENV: test
+    
+    - name: Run all tests
+      working-directory: ./backend
+      run: npm test
+      env:
+        NODE_ENV: test
