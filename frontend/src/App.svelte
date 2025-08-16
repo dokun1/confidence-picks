@@ -4,6 +4,10 @@
   import Navigation from './designsystem/components/Navigation.svelte';
   import GamesPage from './components/GamesPage.svelte';
   import DesignSystemHub from './components/DesignSystemHub.svelte';
+  import GroupsPage from './components/GroupsPage.svelte';
+  import CreateGroupPage from './components/CreateGroupPage.svelte';
+  import JoinGroupPage from './components/JoinGroupPage.svelte';
+  import GroupDetailsPage from './components/GroupDetailsPage.svelte';
   import LoginPage from './components/LoginPage.svelte';
   import ProfilePage from './components/ProfilePage.svelte';
   import AuthCallback from './components/AuthCallback.svelte';
@@ -191,6 +195,18 @@
   {:else if $currentRoute === '/games'}
     <!-- Games Page -->
     <GamesPage />
+  {:else if $currentRoute === '/groups/create'}
+    <!-- Create Group Page -->
+    <CreateGroupPage />
+  {:else if $currentRoute === '/groups/join'}
+    <!-- Join Group Page -->
+    <JoinGroupPage />
+  {:else if $currentRoute.startsWith('/groups/') && $currentRoute.split('/').length === 3}
+    <!-- Group Details Page -->
+    <GroupDetailsPage groupId={$currentRoute.split('/')[2]} />
+  {:else if $currentRoute === '/groups'}
+    <!-- Groups Page -->
+    <GroupsPage />
   {:else if $currentRoute === '/design-system'}
     <!-- Design System Hub -->
     <DesignSystemHub />

@@ -1,0 +1,468 @@
+<script>
+  import { onMount } from 'svelte';
+  import { navigateTo } from '../lib/router.js';
+  import Button from '../designsystem/components/Button.svelte';
+  import TextField from '../designsystem/components/TextField.svelte';
+  import { auth } from '../lib/authStore.js';
+
+  export let groupId = '';
+
+  let group = null;
+  let members = [];
+  let messages = [];
+  let isLoading = false;
+  let error = null;
+  let activeTab = 'overview'; // 'overview', 'messages', 'members'
+  
+  // Message form
+  let newMessage = '';
+  let isPostingMessage = false;
+
+  onMount(async () => {
+    if (groupId) {
+      await loadGroupData();
+    }
+  });
+
+  async function loadGroupData() {
+    isLoading = true;
+    error = null;
+    
+    try {
+      // TODO: Replace with actual API calls
+      const [groupResponse, membersResponse, messagesResponse] = await Promise.all([
+        fetch(`/api/groups/${groupId}`, {
+          headers: { 'Authorization': `Bearer ${$auth.token}` }
+        }),
+        fetch(`/api/groups/${groupId}/members`, {
+          headers: { 'Authorization': `Bearer ${$auth.token}` }
+        }),
+        fetch(`/api/groups/${groupId}/messages`, {
+          headers: { 'Authorization': `Bearer ${$auth.token}` }
+        })
+      ]);
+
+      if (!groupResponse.ok) {
+        throw new Error('Group not found');
+      }
+
+      // For now, use mock data
+      group = {
+        id: groupId,
+        name: 'Fantasy Friends',
+        identifier: 'fantasy-friends-2024',
+        description: 'Our yearly fantasy football confidence pool with college friends. Winner takes all!',
+        memberCount: 8,
+        isOwner: true,
+        createdAt: '2024-08-01T10:00:00Z'
+      };
+
+      members = [
+        { id: '1', name: 'John Doe', email: 'john@example.com', isOwner: true, joinedAt: '2024-08-01T10:00:00Z' },
+        { id: '2', name: 'Jane Smith', email: 'jane@example.com', isOwner: false, joinedAt: '2024-08-02T14:30:00Z' },
+        { id: '3', name: 'Bob Johnson', email: 'bob@example.com', isOwner: false, joinedAt: '2024-08-03T09:15:00Z' },
+        { id: '4', name: 'Alice Brown', email: 'alice@example.com', isOwner: false, joinedAt: '2024-08-04T16:45:00Z' }
+      ];
+
+      messages = [
+        {
+          id: '1',
+          authorId: '1',
+          authorName: 'John Doe',
+          content: 'Welcome everyone to the 2024 season! Let\'s have a great year of picks.',
+          createdAt: '2024-08-01T10:30:00Z'
+        },
+        {
+          id: '2',
+          authorId: '2',
+          authorName: 'Jane Smith',
+          content: 'Thanks for setting this up John! Ready to defend my title from last year 😊',
+          createdAt: '2024-08-02T15:00:00Z'
+        },
+        {
+          id: '3',
+          authorId: '3',
+          authorName: 'Bob Johnson',
+          content: 'Looking forward to it! When do we start making picks for week 1?',
+          createdAt: '2024-08-03T10:00:00Z'
+        }
+      ];
+
+    } catch (err) {
+      error = err.message;
+      console.error('Error loading group data:', err);
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function postMessage() {
+    if (!newMessage.trim()) return;
+
+    isPostingMessage = true;
+    
+    try {
+      // TODO: Replace with actual API call
+      const response = await fetch(`/api/groups/${groupId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${$auth.token}`
+        },
+        body: JSON.stringify({ content: newMessage.trim() })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to post message');
+      }
+
+      // Mock adding the message locally
+      const newMsg = {
+        id: Date.now().toString(),
+        authorId: $auth.user?.id || 'current-user',
+        authorName: $auth.user?.name || 'You',
+        content: newMessage.trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      messages = [...messages, newMsg];
+      newMessage = '';
+
+    } catch (err) {
+      error = err.message;
+      console.error('Error posting message:', err);
+    } finally {
+      isPostingMessage = false;
+    }
+  }
+
+  function formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function copyGroupIdentifier() {
+    navigator.clipboard.writeText(group.identifier);
+    // TODO: Show toast notification
+  }
+</script>
+
+<div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
+  {#if isLoading}
+    <!-- Loading State -->
+    <div class="max-w-6xl mx-auto px-md py-lg">
+      <div class="animate-pulse space-y-lg">
+        <div class="h-8 bg-secondary-200 dark:bg-secondary-700 rounded w-1/3"></div>
+        <div class="h-4 bg-secondary-200 dark:bg-secondary-700 rounded w-2/3"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+          <div class="lg:col-span-2 space-y-md">
+            <div class="h-48 bg-secondary-200 dark:bg-secondary-700 rounded"></div>
+          </div>
+          <div class="space-y-md">
+            <div class="h-32 bg-secondary-200 dark:bg-secondary-700 rounded"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {:else if error}
+    <!-- Error State -->
+    <div class="max-w-4xl mx-auto px-md py-lg">
+      <div class="text-center">
+        <h1 class="text-3xl font-heading font-bold text-[var(--color-text-primary)] mb-md">Group Not Found</h1>
+        <p class="text-[var(--color-text-secondary)] mb-lg">{error}</p>
+        <Button on:click={() => navigateTo('/groups')}>
+          Back to Groups
+        </Button>
+      </div>
+    </div>
+  {:else if group}
+    <!-- Group Details -->
+    <div class="max-w-6xl mx-auto px-md py-lg">
+      <!-- Header -->
+      <div class="mb-lg">
+        <button
+          class="flex items-center text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100 mb-md transition-colors"
+          on:click={() => navigateTo('/groups')}
+        >
+          <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+          </svg>
+          Back to Groups
+        </button>
+        
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-md">
+          <div>
+            <h1 class="text-3xl font-heading font-bold text-[var(--color-text-primary)] mb-sm">
+              {group.name}
+            </h1>
+            <p class="text-[var(--color-text-secondary)] mb-sm">{group.description}</p>
+            <div class="flex items-center gap-md text-sm text-[var(--color-text-secondary)]">
+              <span class="flex items-center">
+                <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                {group.memberCount} members
+              </span>
+              <span>Created {formatDate(group.createdAt)}</span>
+              {#if group.isOwner}
+                <span class="px-xs py-xxxs bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded text-xs font-medium">
+                  Owner
+                </span>
+              {/if}
+            </div>
+          </div>
+          
+          <div class="flex gap-sm">
+            <button
+              class="flex items-center px-sm py-xs bg-secondary-100 dark:bg-secondary-700 text-secondary-700 dark:text-secondary-300 rounded hover:bg-secondary-200 dark:hover:bg-secondary-600 transition-colors"
+              on:click={copyGroupIdentifier}
+              title="Copy group identifier"
+            >
+              <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
+              {group.identifier}
+            </button>
+            {#if group.isOwner}
+              <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.id}/edit`)}>
+                Edit Group
+              </Button>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="mb-lg border-b border-secondary-200 dark:border-secondary-700">
+        <div class="flex gap-lg">
+          <button
+            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'overview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
+            on:click={() => activeTab = 'overview'}
+          >
+            Overview
+          </button>
+          <button
+            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'messages' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
+            on:click={() => activeTab = 'messages'}
+          >
+            Messages ({messages.length})
+          </button>
+          <button
+            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'members' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
+            on:click={() => activeTab = 'members'}
+          >
+            Members ({members.length})
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content -->
+      {#if activeTab === 'overview'}
+        <!-- Overview Tab -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+          <div class="lg:col-span-2 space-y-lg">
+            <!-- Group Stats -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Group Statistics</h2>
+              <div class="grid grid-cols-2 gap-md">
+                <div class="text-center p-md bg-secondary-50 dark:bg-secondary-700 rounded">
+                  <div class="text-2xl font-bold text-[var(--color-text-primary)]">{members.length}</div>
+                  <div class="text-sm text-[var(--color-text-secondary)]">Active Members</div>
+                </div>
+                <div class="text-center p-md bg-secondary-50 dark:bg-secondary-700 rounded">
+                  <div class="text-2xl font-bold text-[var(--color-text-primary)]">{messages.length}</div>
+                  <div class="text-sm text-[var(--color-text-secondary)]">Messages</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Recent Activity</h2>
+              <div class="space-y-sm">
+                {#each messages.slice(-3).reverse() as message}
+                  <div class="flex items-start gap-sm p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
+                    <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                      {message.authorName[0]}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-sm mb-xs">
+                        <span class="font-medium text-[var(--color-text-primary)]">{message.authorName}</span>
+                        <span class="text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</span>
+                      </div>
+                      <p class="text-sm text-[var(--color-text-secondary)]">{message.content}</p>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-lg">
+            <!-- Quick Actions -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Quick Actions</h2>
+              <div class="space-y-sm">
+                <Button variant="primary" size="sm" class="w-full" on:click={() => activeTab = 'messages'}>
+                  View Messages
+                </Button>
+                <Button variant="secondary" size="sm" class="w-full" on:click={() => activeTab = 'members'}>
+                  View Members
+                </Button>
+                {#if group.isOwner}
+                  <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.id}/edit`)}>
+                    Edit Group
+                  </Button>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {:else if activeTab === 'messages'}
+        <!-- Messages Tab -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-lg">
+          <div class="lg:col-span-3">
+            <!-- Messages List -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg">
+              <div class="p-lg border-b border-secondary-200 dark:border-secondary-700">
+                <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">Group Messages</h2>
+              </div>
+              
+              <div class="p-lg space-y-md max-h-96 overflow-y-auto">
+                {#each messages as message}
+                  <div class="flex items-start gap-sm">
+                    <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium">
+                      {message.authorName[0]}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-sm mb-xs">
+                        <span class="font-medium text-[var(--color-text-primary)]">{message.authorName}</span>
+                        <span class="text-sm text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</span>
+                      </div>
+                      <p class="text-[var(--color-text-secondary)]">{message.content}</p>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+
+              <!-- Message Form -->
+              <div class="p-lg border-t border-secondary-200 dark:border-secondary-700">
+                <form on:submit|preventDefault={postMessage} class="flex gap-sm">
+                  <div class="flex-1">
+                    <TextField
+                      bind:value={newMessage}
+                      placeholder="Type your message..."
+                      disabled={isPostingMessage}
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={!newMessage.trim() || isPostingMessage}
+                    loading={isPostingMessage}
+                  >
+                    Send
+                  </Button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- Message Guidelines -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <h3 class="font-semibold text-[var(--color-text-primary)] mb-sm">Message Guidelines</h3>
+              <ul class="text-sm text-[var(--color-text-secondary)] space-y-xs">
+                <li>• Keep discussions friendly and respectful</li>
+                <li>• Share picks strategies and insights</li>
+                <li>• Celebrate wins and support others</li>
+                <li>• No spam or off-topic content</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      {:else if activeTab === 'members'}
+        <!-- Members Tab -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+          <div class="lg:col-span-2">
+            <!-- Members List -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg">
+              <div class="p-lg border-b border-secondary-200 dark:border-secondary-700">
+                <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">Group Members</h2>
+              </div>
+              
+              <div class="p-lg space-y-sm">
+                {#each members as member}
+                  <div class="flex items-center justify-between p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
+                    <div class="flex items-center gap-sm">
+                      <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium">
+                        {member.name[0]}
+                      </div>
+                      <div>
+                        <div class="font-medium text-[var(--color-text-primary)]">{member.name}</div>
+                        <div class="text-sm text-[var(--color-text-secondary)]">{member.email}</div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-sm">
+                      {#if member.isOwner}
+                        <span class="px-xs py-xxxs bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded text-xs font-medium">
+                          Owner
+                        </span>
+                      {/if}
+                      <span class="text-sm text-[var(--color-text-secondary)]">
+                        Joined {formatDate(member.joinedAt)}
+                      </span>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <!-- Invite Members -->
+            {#if group.isOwner}
+              <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+                <h3 class="font-semibold text-[var(--color-text-primary)] mb-sm">Invite New Members</h3>
+                <p class="text-sm text-[var(--color-text-secondary)] mb-md">
+                  Share the group identifier with friends to invite them:
+                </p>
+                <div class="p-sm bg-secondary-50 dark:bg-secondary-700 rounded border mb-md">
+                  <code class="text-sm font-mono text-primary-600 dark:text-primary-400">{group.identifier}</code>
+                </div>
+                <Button variant="secondary" size="sm" class="w-full" on:click={copyGroupIdentifier}>
+                  Copy Identifier
+                </Button>
+              </div>
+            {/if}
+
+            <!-- Member Stats -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg {group.isOwner ? 'mt-lg' : ''}">
+              <h3 class="font-semibold text-[var(--color-text-primary)] mb-sm">Member Statistics</h3>
+              <div class="space-y-sm">
+                <div class="flex justify-between text-sm">
+                  <span class="text-[var(--color-text-secondary)]">Total Members:</span>
+                  <span class="font-medium text-[var(--color-text-primary)]">{members.length}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-[var(--color-text-secondary)]">Group Owners:</span>
+                  <span class="font-medium text-[var(--color-text-primary)]">{members.filter(m => m.isOwner).length}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-[var(--color-text-secondary)]">Regular Members:</span>
+                  <span class="font-medium text-[var(--color-text-primary)]">{members.filter(m => !m.isOwner).length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
+</div>
