@@ -2,11 +2,56 @@ import { writable } from "svelte/store";
 
 export const currentRoute = writable('/');
 
+// Helper function to determine the correct route for the store
+function getRouteForPath(path, hash = '', search = '') {
+    // Handle hash-based routing first
+    if (hash === '#/design-system') {
+        return '/design-system';
+    } else if (path === '/') {
+        return '/';
+    } else if (path === '/groups') {
+        return '/groups';
+    } else if (path === '/about') {
+        return '/about';
+    } else if (path === '/design-system') {
+        return '/design-system';
+    } else if (path === '/login') {
+        return '/login';
+    } else if (path === '/profile') {
+        return '/profile';
+    } else if (path.startsWith('/groups/create')) {
+        return '/groups/create';
+    } else if (path.startsWith('/groups/join')) {
+        return '/groups/join';
+    } else if (path.startsWith('/groups/') && path.split('/').length === 3) {
+        return path; // Set the full path for group details
+    } else if (path.startsWith('/auth/callback') || search.includes('token=')) {
+        return '/auth/callback';
+    } else if (path === '/games') {
+        return '/games';
+    } else if (path === '/picks') {
+        return '/picks';
+    } else if (path === '/leaderboard') {
+        return '/leaderboard';
+    } else {
+        return '404';
+    }
+}
+
 export function navigateTo(route) {
     // Normalize the route
     const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
-    currentRoute.set(normalizedRoute);
-
+    
+    // Apply the same route matching logic as the router
+    const processedRoute = getRouteForPath(normalizedRoute);
+    
+    console.log('navigateTo:', { 
+        input: route, 
+        normalized: normalizedRoute, 
+        processed: processedRoute 
+    });
+    
+    currentRoute.set(processedRoute);
     window.history.pushState({}, '', normalizedRoute);
 }
 
@@ -14,29 +59,10 @@ export function initRouter() {
     window.addEventListener('popstate', () => {
         const path = window.location.pathname;
         const hash = window.location.hash;
+        const search = window.location.search;
         
-        // Handle hash-based routing
-        if (hash === '#/design-system') {
-            currentRoute.set('/design-system');
-        } else if (path === '/') {
-            currentRoute.set('/');
-        } else if (path.includes('/games')) {
-            currentRoute.set('/games');
-        } else if (path.includes('/design-system')) {
-            currentRoute.set('/design-system');
-        } else if (path.includes('/picks')) {
-            currentRoute.set('/picks');
-        } else if (path.includes('/leaderboard')) {
-            currentRoute.set('/leaderboard');
-        } else if (path.includes('/login')) {
-            currentRoute.set('/login');
-        } else if (path.includes('/profile')) {
-            currentRoute.set('/profile');
-        } else if (path.includes('/auth/callback')) {
-            currentRoute.set('/auth/callback');
-        } else {
-            currentRoute.set('404');
-        }
+        const route = getRouteForPath(path, hash, search);
+        currentRoute.set(route);
     });
 
     // Handle initial route on page load
@@ -44,23 +70,6 @@ export function initRouter() {
     const hash = window.location.hash;
     const search = window.location.search;
     
-    if (hash === '#/design-system') {
-        currentRoute.set('/design-system');
-    } else if (path === '/') {
-        currentRoute.set('/');
-    } else if (path.includes('/games')) {
-        currentRoute.set('/games');
-    } else if (path.includes('/design-system')) {
-        currentRoute.set('/design-system');
-    } else if (path.includes('/picks')) {
-        currentRoute.set('/picks');
-    } else if (path.includes('/leaderboard')) {
-        currentRoute.set('/leaderboard');
-    } else if (path.includes('/login')) {
-        currentRoute.set('/login');
-    } else if (path.includes('/profile')) {
-        currentRoute.set('/profile');
-    } else if (path.includes('/auth/callback') || search.includes('token=')) {
-        currentRoute.set('/auth/callback');
-    }
+    const route = getRouteForPath(path, hash, search);
+    currentRoute.set(route);
 }
