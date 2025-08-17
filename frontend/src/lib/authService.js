@@ -1,16 +1,23 @@
-// Frontend authentication service
 class AuthService {
   // Get the correct API base URL based on environment
   static getApiBaseUrl() {
+    // Use environment variable first, then fallback logic
+    if (import.meta.env.VITE_API_URL) {
+      return import.meta.env.VITE_API_URL;
+    }
+    
     if (typeof window !== 'undefined') {
       // Check if we're running locally
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         return 'http://localhost:3001';
       }
     }
-    return 'https://confidence-picks.vercel.app';
+    
+    // Production API URL
+    return 'https://api.confidence-picks.com';
   }
 
+  // ... rest of your existing methods stay exactly the same
   static getToken() {
     return localStorage.getItem('accessToken');
   }

@@ -1,0 +1,26 @@
+{
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist", 
+  "devCommand": "pnpm run dev",
+  "installCommand": "pnpm install",
+  "framework": "svelte",
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://www.confidence-picks.com/$1",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "confidence-picks.com"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

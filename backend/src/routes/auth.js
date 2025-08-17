@@ -18,13 +18,13 @@ router.get('/google/callback',
       
       // Fix: Add the correct GitHub Pages path
       const frontendURL = process.env.NODE_ENV === 'production' 
-        ? 'https://dokun1.github.io/confidence-picks'  // Added /confidence-picks
+        ? 'https://www.confidence-picks.com'
         : 'http://localhost:5173';
       
       res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&refresh=${refreshToken}`);
     } catch (error) {
       const frontendURL = process.env.NODE_ENV === 'production' 
-        ? 'https://dokun1.github.io/confidence-picks'  // Added /confidence-picks
+        ? 'https://www.confidence-picks.com'
         : 'http://localhost:5173';
       res.redirect(`${frontendURL}/auth/error?message=${encodeURIComponent(error.message)}`);
     }

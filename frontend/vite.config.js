@@ -3,13 +3,15 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 export default defineConfig({
   plugins: [svelte()],
-  base: '/confidence-picks/',
-  css: {
-    postcss: './postcss.config.js'
+  base: '/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'esbuild'
   },
-  server: {
-    fs: {
-      strict: false
-    }
+  preview: {
+    port: 4173,
+    strictPort: true
   }
 })
