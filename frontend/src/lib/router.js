@@ -6,13 +6,8 @@ export function navigateTo(route) {
     // Normalize the route
     const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
     currentRoute.set(normalizedRoute);
-    
-    // Update the URL
-    if (normalizedRoute === '/') {
-        window.history.pushState({}, '', '/confidence-picks/');
-    } else {
-        window.history.pushState({}, '', `/confidence-picks${normalizedRoute}`);
-    }
+
+    window.history.pushState({}, '', normalizedRoute);
 }
 
 export function initRouter() {
@@ -23,7 +18,7 @@ export function initRouter() {
         // Handle hash-based routing
         if (hash === '#/design-system') {
             currentRoute.set('/design-system');
-        } else if (path === '/' || path === '/confidence-picks' || path === '/confidence-picks/') {
+        } else if (path === '/') {
             currentRoute.set('/');
         } else if (path.includes('/games')) {
             currentRoute.set('/games');
@@ -51,7 +46,7 @@ export function initRouter() {
     
     if (hash === '#/design-system') {
         currentRoute.set('/design-system');
-    } else if (path === '/' || path === '/confidence-picks' || path === '/confidence-picks/') {
+    } else if (path === '/') {
         currentRoute.set('/');
     } else if (path.includes('/games')) {
         currentRoute.set('/games');

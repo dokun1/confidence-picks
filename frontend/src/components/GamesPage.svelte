@@ -5,7 +5,7 @@
 
     // API Configuration
     const API_URL = import.meta.env.PROD 
-        ? 'https://confidence-picks.vercel.app'
+        ? 'https://api.confidence-picks.com'
         : 'http://localhost:3001';
 
     let games = [];
