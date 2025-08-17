@@ -88,7 +88,7 @@
 <Navigation 
   currentRoute={$currentRoute}
   {darkMode}
-  {userName}
+  displayName={userName}
   on:navigate={handleNavigate}
   on:themeToggle={handleThemeToggle}
   on:mobileMenuToggle={handleMobileMenuToggle}
