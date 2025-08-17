@@ -120,7 +120,7 @@ confidence-picks/
 
 ### Frontend
 - Automatically deploys to GitHub Pages when changes are pushed to `frontend/` directory on the `main` branch
-- Live at: https://dokun1.github.io/confidence-picks
+- Live at: https://www.confidence-picks.com
 
 ### Backend  
 - Automatically deploys to Vercel when changes are pushed to `backend/` directory on the `main` branch

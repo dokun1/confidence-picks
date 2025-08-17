@@ -1,17 +1,14 @@
-name: Deploy Frontend to GitHub Pages
+name: Deploy Frontend to Vercel
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'frontend/**'
-
-env:
-  # Set this to change deployment target
-  DEPLOY_TARGET: github-pages  # Options: github-pages, vercel, netlify, etc.
+  workflow_dispatch:
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     
     steps:
@@ -35,62 +32,13 @@ jobs:
     - name: Build application
       run: pnpm build
       working-directory: ./frontend
-      
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist
-        path: frontend/dist/
-
-  deploy-github-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
-    permissions:
-      pages: write
-      id-token: write
-    
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist
-        path: dist/
-        
-    - name: Setup Pages
-      uses: actions/configure-pages@v4
-      
-    - name: Upload to GitHub Pages
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: dist/
-        
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
-
-  # Example of how to add other deployment targets
-  # deploy-vercel:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push' && env.DEPLOY_TARGET == 'vercel'
-  #   
-  #   steps:
-  #   - name: Download build artifacts
-  #     uses: actions/download-artifact@v3
-  #     with:
-  #       name: dist
-  #       path: dist/
-  #       
-  #   - name: Deploy to Vercel
-  #     uses: vercel/action@v1
-  #     with:
-  #       vercel-token: ${{ secrets.VERCEL_TOKEN }}
-  #       vercel-org-id: ${{ secrets.ORG_ID }}
-  #       vercel-project-id: ${{ secrets.PROJECT_ID }}
+      env:
+        VITE_API_URL: https://api.confidence-picks.com        
+  
+    - name: Deploy to Vercel
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      working-directory: ./frontend
+      run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+      env:
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_FRONTEND_PROJECT_ID }}

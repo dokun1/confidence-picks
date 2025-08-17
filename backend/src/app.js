@@ -16,10 +16,15 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
     origin: [
         'http://localhost:5173',      // Local development
+        'http://localhost:5175',      // Local development
         'http://localhost:4173',      // Vite preview
-        'https://dokun1.github.io'    // Your GitHub Pages domain
+        'https://www.confidence-picks.com', // Production
+        'https://confidence-picks.com', // Production
+        'https://confidence-picks-frontend.vercel.app' // Vercel domain
     ],
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(cookieParser());
