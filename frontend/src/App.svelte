@@ -106,7 +106,7 @@
             Welcome to Confidence Picks!
           </h1>
           <p class="text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-            Your ultimate destination for NFL confidence picks. Compete with friends, track your performance, and climb the leaderboard.
+            Your destination for NFL confidence picks. Compete with friends, track your performance, and climb the leaderboard.
           </p>
         </header>
 
