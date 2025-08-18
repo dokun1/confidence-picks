@@ -40,6 +40,27 @@ jobs:
         with:
           version: 8
 
+      - name: Verify pnpm availability (fallback to corepack)
+        run: |
+          if ! command -v pnpm >/dev/null 2>&1; then
+            echo 'pnpm not found on PATH; enabling via corepack'
+            corepack enable
+            corepack prepare pnpm@8 --activate
+          fi
+          echo "pnpm version: $(pnpm --version)"
+
+      - name: Determine pnpm store path
+        id: pnpm-store
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ matrix.node }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-${{ matrix.node }}-
+
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
