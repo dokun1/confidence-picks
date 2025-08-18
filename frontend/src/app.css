@@ -37,9 +37,10 @@
     min-height: 100vh;
   }
 
+  /* Root mount: allow full-width; page components handle their own max-width & padding */
   #app {
-    max-width: 1280px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
     padding: 2rem;
   }
 }
