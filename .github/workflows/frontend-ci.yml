@@ -35,11 +35,13 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install pnpm via corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@8 --activate
-          echo "pnpm version: $(pnpm --version)"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+      - name: Show pnpm version
+        run: pnpm --version
       - name: Determine pnpm store path
         id: pnpm-store
         run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
