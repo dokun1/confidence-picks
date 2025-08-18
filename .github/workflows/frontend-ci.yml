@@ -31,17 +31,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+            node-version: ${{ matrix.node }}
+    
+      - name: Install pnpm
+        run: npm install -g pnpm
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-          run_install: false
       - name: Show pnpm version
         run: pnpm --version
+        
       - name: Determine pnpm store path
         id: pnpm-store
         run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
