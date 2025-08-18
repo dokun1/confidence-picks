@@ -68,8 +68,9 @@
     }
   };
 
-  $: currentVariant = variantClasses[variant];
-  $: currentDarkVariant = darkVariantClasses[variant];
+  // Gracefully fallback if an unknown variant is provided
+  $: currentVariant = variantClasses[variant] || variantClasses.primary;
+  $: currentDarkVariant = darkVariantClasses[variant] || darkVariantClasses.primary;
   $: currentSize = sizeClasses[size];
 
   $: buttonState = disabled ? 'disabled' : 'default';
