@@ -22,7 +22,7 @@
   // Navigation items configuration
   const navigationItems = [
     { label: 'Home', href: '/', icon: 'home' },
-    { label: 'Groups', href: '/groups', icon: 'user-group' },
+    { label: 'Groups', href: '/groups', icon: 'user-group', requiresAuth: true },
     { label: 'About', href: '/about', icon: 'information-circle' },
     { label: 'Design System', href: '/design-system', icon: 'cog-6-tooth' }
   ];
@@ -122,7 +122,7 @@
 
       <!-- Desktop Navigation -->
       <div class="hidden md:flex md:items-center md:space-x-lg">
-        {#each navigationItems as item}
+  {#each navigationItems.filter(item => displayName || !item.requiresAuth) as item}
           <button
             class="flex items-center px-xs py-xxxs rounded-base text-sm font-medium transition-colors duration-fast {isActive(item.href) 
               ? 'text-primary-600 bg-primary-50 dark:text-primary-400 dark:bg-primary-900' 
@@ -236,7 +236,7 @@
   <div class="space-y-sm mt-sm">
     <h2 class="text-xs font-semibold tracking-wide uppercase text-secondary-500 dark:text-secondary-400">Menu</h2>
     <div class="space-y-xxs">
-      {#each navigationItems as item}
+  {#each navigationItems.filter(item => displayName || !item.requiresAuth) as item}
         <button
           class="flex items-center w-full px-sm py-xs rounded-base text-left text-sm font-medium transition-colors duration-fast {isActive(item.href)
             ? 'text-primary-600 bg-primary-50 dark:text-primary-400 dark:bg-primary-900'

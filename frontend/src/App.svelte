@@ -60,7 +60,12 @@
   }
 
   function handleNavigate(event) {
-    navigateTo(event.detail.href);
+    const target = event.detail.href;
+    if (!isAuthenticated && target.startsWith('/groups')) {
+      navigateTo('/login');
+      return;
+    }
+    navigateTo(target);
   }
 
   function handleThemeToggle(event) {
@@ -81,6 +86,10 @@
   function handleSignOut() {
     AuthService.logout();
     clearAuth();
+  }
+  // Route guard: if user manually lands on groups routes unauthenticated, redirect to login
+  $: if ($currentRoute.startsWith('/groups') && !isAuthenticated) {
+    navigateTo('/login');
   }
 </script>
 
@@ -183,7 +192,7 @@
               </button>
               <button
                 class="px-lg py-sm bg-secondary-100 text-secondary-900 border border-secondary-300 rounded-base text-base font-medium hover:bg-secondary-200 transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 dark:bg-secondary-800 dark:text-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
-                on:click={() => navigateTo('/groups')}
+                on:click={() => navigateTo(isAuthenticated ? '/groups' : '/login')}
               >
                 Browse Groups
               </button>
