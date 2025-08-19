@@ -23,8 +23,10 @@ function getRouteForPath(path, hash = '', search = '') {
         return '/groups/create';
     } else if (path.startsWith('/groups/join')) {
         return '/groups/join';
+    } else if (path.startsWith('/groups/') && path.endsWith('/edit') && path.split('/').length === 4) {
+        return path; // Full path for group edit page
     } else if (path.startsWith('/groups/') && path.split('/').length === 3) {
-        return path; // Set the full path for group details
+        return path; // Full path for group details
     } else if (path.startsWith('/auth/callback') || search.includes('token=')) {
         return '/auth/callback';
     } else if (path === '/games') {

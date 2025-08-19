@@ -66,7 +66,7 @@
       size="sm"
       on:click={onView}
     >
-      View Picks
+      View Group
     </Button>
     
     {#if group.isOwner}
@@ -86,7 +86,7 @@
       </Button>
     {:else}
       <Button 
-        variant="secondary" 
+        variant="tertiary" 
         size="sm"
         on:click={onLeave}
       >

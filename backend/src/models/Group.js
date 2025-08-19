@@ -335,4 +335,31 @@ export class Group {
     const result = await pool.query(query, values);
     return result.rows[0];
   }
+
+  // Delete group (admin only). Cascades: memberships, messages, picks assumed by FK constraints or manual cleanup here.
+  static async delete(groupId, userId) {
+    // Verify admin
+    const roleCheck = await pool.query(
+      'SELECT role FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+      [groupId, userId]
+    );
+    if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
+      throw new Error('Only group admins can delete the group');
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM group_messages WHERE group_id = $1', [groupId]);
+      await client.query('DELETE FROM user_picks WHERE group_id = $1', [groupId]);
+      await client.query('DELETE FROM group_memberships WHERE group_id = $1', [groupId]);
+      const res = await client.query('DELETE FROM groups WHERE id = $1 RETURNING id', [groupId]);
+      await client.query('COMMIT');
+      return res.rows.length > 0;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 }

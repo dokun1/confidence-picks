@@ -249,15 +249,37 @@ router.post('/:identifier/messages', authenticateToken, async (req, res) => {
 router.put('/:identifier', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+    // Disallow identifier changes explicitly (immutable slug)
+    if (Object.prototype.hasOwnProperty.call(updates, 'identifier')) {
+      delete updates.identifier;
+    }
     
     const group = await Group.findByIdentifier(identifier, req.user.id);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
     
-    const updatedGroup = await Group.update(group.id, updates, req.user.id);
+  const updatedGroup = await Group.update(group.id, updates, req.user.id);
     res.json(updatedGroup);
+  } catch (error) {
+    if (error.message.includes('Only group admins')) {
+      return res.status(403).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete group
+router.delete('/:identifier', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    await Group.delete(group.id, req.user.id);
+    res.status(204).send();
   } catch (error) {
     if (error.message.includes('Only group admins')) {
       return res.status(403).json({ error: error.message });

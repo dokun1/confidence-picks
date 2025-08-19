@@ -8,6 +8,7 @@
   import CreateGroupPage from './components/CreateGroupPage.svelte';
   import JoinGroupPage from './components/JoinGroupPage.svelte';
   import GroupDetailsPage from './components/GroupDetailsPage.svelte';
+  import EditGroupPage from './components/EditGroupPage.svelte';
   import LoginPage from './components/LoginPage.svelte';
   import ProfilePage from './components/ProfilePage.svelte';
   import AuthCallback from './components/AuthCallback.svelte';
@@ -210,6 +211,9 @@
   {:else if $currentRoute === '/groups/join'}
     <!-- Join Group Page -->
     <JoinGroupPage />
+  {:else if $currentRoute.startsWith('/groups/') && $currentRoute.split('/').length === 4 && $currentRoute.endsWith('/edit')}
+    <!-- Edit Group Page -->
+    <EditGroupPage groupId={$currentRoute.split('/')[2]} />
   {:else if $currentRoute.startsWith('/groups/') && $currentRoute.split('/').length === 3}
     <!-- Group Details Page -->
     <GroupDetailsPage groupId={$currentRoute.split('/')[2]} />

@@ -6,11 +6,26 @@
   export let onCancel = () => {};
   export let isLoading = false;
   
+  export let initialValues = null; // { name, identifier, description }
   let formData = {
     name: '',
     identifier: '',
     description: ''
   };
+  $: if (initialValues && !formData.name && !formData.identifier) {
+    // Prefill once when arriving with initial values
+    formData = {
+      name: initialValues.name || '',
+      identifier: initialValues.identifier || '',
+      description: initialValues.description || ''
+    };
+    // If identifier provided, treat as manually edited so slug doesn't overwrite
+    if (initialValues.identifier) {
+      identifierManuallyEdited = true;
+    }
+  }
+  // Track whether user manually changed identifier; if not, keep auto-syncing from name
+  let identifierManuallyEdited = false;
   
   let errors = {};
   
@@ -48,20 +63,30 @@
     }
   }
   
-  function generateIdentifier() {
-    // Generate a clean identifier from the name
-    const cleanName = formData.name
+  function slugifyName(name) {
+    return name
       .toLowerCase()
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\s-]/g, '') // remove invalid chars
+      .trim()
+      .replace(/\s+/g, '-') // spaces to dashes
+      .replace(/-+/g, '-')   // collapse multiple dashes
+      .replace(/^-+|-+$/g, '') // trim leading/trailing dashes
       .substring(0, 30);
-    
-    formData.identifier = cleanName;
   }
-  
-  // Auto-generate identifier when name changes
-  $: if (formData.name && !formData.identifier) {
-    generateIdentifier();
+
+  // Continuously sync identifier from name while not manually edited
+  $: if (!identifierManuallyEdited) {
+    formData.identifier = slugifyName(formData.name || '');
+  }
+
+  function handleIdentifierInput(e) {
+    const value = e.target.value;
+    // If user diverges from auto slug, stop auto-updating
+    const expected = slugifyName(formData.name || '');
+    if (value !== expected) {
+      identifierManuallyEdited = true;
+    }
+    formData.identifier = value;
   }
 </script>
 
@@ -82,15 +107,20 @@
     <div>
       <TextField
         label="Group ID"
-        bind:value={formData.identifier}
+        value={formData.identifier}
+        on:input={handleIdentifierInput}
         placeholder="unique-group-id"
         validationMessage={errors.identifier}
         validationState={errors.identifier ? 'error' : 'none'}
         required
-        disabled={isLoading}
+        disabled={isLoading || !!initialValues?.identifier}
       />
       <p class="mt-1 text-sm text-gray-500">
-        This will be used to share your group with others. It must be unique.
+        {#if initialValues?.identifier}
+          Group ID cannot be changed after creation.
+        {:else}
+          This will be used to share your group with others. It must be unique.
+        {/if}
       </p>
     </div>
     

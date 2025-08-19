@@ -26,7 +26,7 @@
   
   function handleSubmit() {
     if (validateForm()) {
-      onSubmit(formData.identifier);
+      onSubmit({ identifier: formData.identifier.trim().toLowerCase() });
     }
   }
 </script>

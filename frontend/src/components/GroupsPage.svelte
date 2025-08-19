@@ -2,11 +2,16 @@
   import { onMount } from 'svelte';
   import { navigateTo } from '../lib/router.js';
   import GroupsList from '../designsystem/components/GroupsList.svelte';
-  import { auth } from '../lib/authStore.js';
+  import AuthService from '../lib/authService.js';
+  import { getMyGroups, leaveGroup, deleteGroup } from '../lib/groupsService.js';
+  import ConfirmDeleteModal from './ConfirmDeleteModal.svelte';
 
   let groups = [];
   let isLoading = false;
   let error = null;
+  let deleting = false;
+  let showDeleteModal = false;
+  let groupPendingDelete = null;
 
   onMount(async () => {
     await loadGroups();
@@ -15,46 +20,12 @@
   async function loadGroups() {
     isLoading = true;
     error = null;
-    
     try {
-      // TODO: Replace with actual API call
-      const response = await fetch('/api/groups', {
-        headers: {
-          'Authorization': `Bearer ${$auth.token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load groups');
-      }
-
-      groups = await response.json();
-      
+      groups = await getMyGroups();
     } catch (err) {
       error = err.message;
       console.error('Error loading groups:', err);
-      
-      // Mock data for development
-      groups = [
-        {
-          id: '1',
-          name: 'Fantasy Friends',
-          identifier: 'fantasy-friends-2024',
-          description: 'Our yearly fantasy football confidence pool with college friends. Winner takes all!',
-          memberCount: 8,
-          isOwner: true,
-          createdAt: '2024-08-01T10:00:00Z'
-        },
-        {
-          id: '2',
-          name: 'Office Championship',
-          identifier: 'office-champs',
-          description: 'Company-wide confidence picks league. May the best predictor win!',
-          memberCount: 24,
-          isOwner: false,
-          createdAt: '2024-07-15T14:30:00Z'
-        }
-      ];
+      groups = [];
     } finally {
       isLoading = false;
     }
@@ -68,40 +39,50 @@
     navigateTo('/groups/join');
   }
 
-  function handleViewGroup(event) {
-    const group = event.detail;
-    navigateTo(`/groups/${group.id}`);
+  function handleViewGroup(group) {
+    // Use identifier for route (backend identifies groups by identifier)
+    if (!group || !group.identifier) return;
+    navigateTo(`/groups/${group.identifier}`);
   }
 
-  function handleEditGroup(event) {
-    const group = event.detail;
-    navigateTo(`/groups/${group.id}/edit`);
+  function handleEditGroup(group) {
+    if (!group || !group.identifier) return;
+    navigateTo(`/groups/${group.identifier}/edit`);
   }
 
-  async function handleLeaveGroup(event) {
-    const group = event.detail;
-    
+  async function handleLeaveGroup(group) {
+    if (!group) return;
     if (confirm(`Are you sure you want to leave "${group.name}"?`)) {
       try {
-        // TODO: Replace with actual API call
-        const response = await fetch(`/api/groups/${group.id}/leave`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${$auth.token}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to leave group');
-        }
-
-        // Remove from local groups list
-        groups = groups.filter(g => g.id !== group.id);
-        
+        await leaveGroup(group.identifier);
+        groups = groups.filter(g => g.identifier !== group.identifier);
       } catch (err) {
         error = err.message;
         console.error('Error leaving group:', err);
       }
+    }
+  }
+
+  function handleDeleteGroup(group) {
+    if (!group?.isOwner) return; // Only allow owner
+    groupPendingDelete = group;
+    showDeleteModal = true;
+    error = null;
+  }
+
+  async function confirmDelete() {
+    if (!groupPendingDelete) return;
+    deleting = true;
+    error = null;
+    try {
+      await deleteGroup(groupPendingDelete.identifier);
+      groups = groups.filter(g => g.identifier !== groupPendingDelete.identifier);
+      showDeleteModal = false;
+      groupPendingDelete = null;
+    } catch (e) {
+      error = e.message;
+    } finally {
+      deleting = false;
     }
   }
 </script>
@@ -148,6 +129,7 @@
       onViewGroup={handleViewGroup}
       onEditGroup={handleEditGroup}
       onLeaveGroup={handleLeaveGroup}
+  onDeleteGroup={handleDeleteGroup}
     />
 
     <!-- Quick Stats -->
@@ -192,3 +174,13 @@
     {/if}
   </div>
 </div>
+
+<ConfirmDeleteModal
+  open={showDeleteModal}
+  name={groupPendingDelete?.name}
+  slug={groupPendingDelete?.identifier}
+  loading={deleting}
+  error={error && deleting ? error : null}
+  on:cancel={() => { if (!deleting) { showDeleteModal = false; groupPendingDelete = null; } }}
+  on:confirm={confirmDelete}
+/>

@@ -29,9 +29,7 @@
   }
   
   function handleDeleteGroup(group) {
-    if (confirm(`Are you sure you want to delete "${group.name}"? This action cannot be undone.`)) {
-      onDeleteGroup(group);
-    }
+  onDeleteGroup(group);
   }
 </script>
 
