@@ -7,7 +7,23 @@ export class Game {
     this.homeTeam = data.homeTeam;
     this.awayTeam = data.awayTeam;
     this.gameDate = data.gameDate;
-    this.status = data.status;
+  // Normalized status (one of: SCHEDULED | IN_PROGRESS | FINAL)
+  this.status = data.status; 
+  // Raw ESPN status name (e.g., STATUS_IN_PROGRESS) for debugging
+  this.rawStatus = data.rawStatus;
+  // High-level category (alias of status for clarity)
+  this.statusCategory = data.statusCategory || data.status;
+  // Additional live status metadata (not persisted yet)
+  this.statusState = data.statusState; // 'pre' | 'in' | 'post'
+  this.completed = data.completed; // boolean
+  this.statusDescription = data.statusDescription; // e.g. 'Final' / 'Halftime'
+  this.statusDetail = data.statusDetail; // e.g. 'Q3 05:32'
+  this.clock = data.clock; // seconds remaining in current period (number)
+  this.displayClock = data.displayClock; // formatted clock string
+  this.period = data.period; // current period number
+  // Odds & probability (not persisted yet)
+  this.odds = data.odds; // { favoriteTeamId, favoriteAbbr, spread, overUnder, details, provider }
+  this.probability = data.probability; // { homeWinPct, awayWinPct }
     this.homeScore = data.homeScore || 0;
     this.awayScore = data.awayScore || 0;
     this.week = data.week;
@@ -39,20 +55,85 @@ static fromESPNData(espnGame) {
   const seasonYear = season.year || new Date().getFullYear();
   const seasonType = season.type || 2;
 
+  const statusBlock = competition.status || {};
+  const statusType = statusBlock.type || {};
+  const period = statusBlock.period;
+  const clock = statusBlock.clock;
+  const displayClock = statusBlock.displayClock;
+
+  // Normalize to one of three categories
+  const statusState = statusType.state; // 'pre' | 'in' | 'post'
+  let normalized;
+  if (statusState === 'pre') normalized = 'SCHEDULED';
+  else if (statusState === 'in') normalized = 'IN_PROGRESS';
+  else if (statusState === 'post') normalized = statusType.completed ? 'FINAL' : 'IN_PROGRESS';
+  else normalized = statusType.completed ? 'FINAL' : 'SCHEDULED';
+
+  // Odds extraction
+  let oddsObj = null;
+  if (competition.odds && competition.odds.length > 0) {
+    const o = competition.odds[0];
+    let favoriteTeamId = null;
+    let favoriteAbbr = null;
+    if (o.awayTeamOdds && o.awayTeamOdds.favorite) {
+      favoriteTeamId = awayTeam.id;
+      favoriteAbbr = awayTeam.team.abbreviation;
+    } else if (o.homeTeamOdds && o.homeTeamOdds.favorite) {
+      favoriteTeamId = homeTeam.id;
+      favoriteAbbr = homeTeam.team.abbreviation;
+    }
+    oddsObj = {
+      favoriteTeamId,
+      favoriteAbbr,
+      spread: o.spread,
+      overUnder: o.overUnder,
+      details: o.details,
+      provider: o.provider ? o.provider.name : undefined
+    };
+  }
+
+  // Win probability (only available in situation.lastPlay.probability sometimes)
+  let probability = null;
+  const situation = competition.situation || {};
+  const lastPlay = situation.lastPlay || {};
+  if (lastPlay.probability) {
+    probability = {
+      homeWinPct: lastPlay.probability.homeWinPercentage,
+      awayWinPct: lastPlay.probability.awayWinPercentage
+    };
+  }
+
   return new Game({
     espnId: espnGame.id,
     homeTeam: {
-      id: homeTeam.id,
-      name: homeTeam.team.displayName,
-      abbreviation: homeTeam.team.abbreviation
+  id: homeTeam.id,
+  name: homeTeam.team.displayName,
+  abbreviation: homeTeam.team.abbreviation,
+  logo: homeTeam.team.logo,
+  color: homeTeam.team.color,
+  altColor: homeTeam.team.alternateColor
     },
     awayTeam: {
-      id: awayTeam.id,
-      name: awayTeam.team.displayName,
-      abbreviation: awayTeam.team.abbreviation
+  id: awayTeam.id,
+  name: awayTeam.team.displayName,
+  abbreviation: awayTeam.team.abbreviation,
+  logo: awayTeam.team.logo,
+  color: awayTeam.team.color,
+  altColor: awayTeam.team.alternateColor
     },
     gameDate: new Date(espnGame.date),
-    status: competition.status.type.name,
+    status: normalized,
+    rawStatus: statusType.name,
+    statusCategory: normalized,
+    statusState: statusType.state, // 'pre' | 'in' | 'post'
+    completed: statusType.completed,
+    statusDescription: statusType.description,
+    statusDetail: statusType.detail,
+    clock,
+    displayClock,
+    period,
+    odds: oddsObj,
+    probability,
     homeScore: parseInt(homeTeam.score) || 0,
     awayScore: parseInt(awayTeam.score) || 0,
     week: week,
@@ -66,9 +147,12 @@ static fromESPNData(espnGame) {
   isDifferentFrom(otherGame) {
     return (
       this.gameDate.getTime() !== otherGame.gameDate.getTime() ||
-      this.status !== otherGame.status ||
+  this.status !== otherGame.status ||
       this.homeScore !== otherGame.homeScore ||
-      this.awayScore !== otherGame.awayScore
+  this.awayScore !== otherGame.awayScore ||
+  this.period !== otherGame.period ||
+  this.displayClock !== otherGame.displayClock ||
+  this.statusDetail !== otherGame.statusDetail
     );
   }
 
@@ -84,20 +168,24 @@ async save() {
   const query = `
     INSERT INTO games (
       espn_id, home_team, away_team, game_date, status, 
+      period, display_clock, status_detail,
       home_score, away_score, week, season, season_type, last_updated
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ON CONFLICT (espn_id) 
     DO UPDATE SET
       home_team = $2,
       away_team = $3,
       game_date = $4,
-      status = $5,
-      home_score = $6,
-      away_score = $7,
-      week = $8,
-      season = $9,
-      season_type = $10,
-      last_updated = $11
+  status = $5,
+      period = $6,
+      display_clock = $7,
+      status_detail = $8,
+      home_score = $9,
+      away_score = $10,
+      week = $11,
+      season = $12,
+      season_type = $13,
+      last_updated = $14
     RETURNING *
   `;
 
@@ -113,7 +201,10 @@ async save() {
     JSON.stringify(this.homeTeam),
     JSON.stringify(this.awayTeam),
     this.gameDate,
-    this.status,
+  this.status, // normalized (SCHEDULED | IN_PROGRESS | FINAL)
+  this.period,
+  this.displayClock,
+  this.statusDetail,
     this.homeScore,
     this.awayScore,
     this.week,
@@ -161,7 +252,11 @@ static async findByESPNId(espnId) {
     homeTeam: homeTeam,
     awayTeam: awayTeam,
     gameDate: new Date(row.game_date),
-    status: row.status,
+  status: row.status, // already normalized after migration; if legacy, frontend can still interpret
+  rawStatus: row.status, // fallback
+  period: row.period,
+  displayClock: row.display_clock,
+  statusDetail: row.status_detail,
     homeScore: row.home_score,
     awayScore: row.away_score,
     week: row.week,
@@ -171,4 +266,59 @@ static async findByESPNId(espnId) {
     createdAt: new Date(row.created_at)
   });
 }
+
+// Find all games for a given week/season/seasonType
+static async findByWeekSeason(season, seasonType, week) {
+  const query = `SELECT * FROM games WHERE season = $1 AND season_type = $2 AND week = $3`;
+  const result = await pool.query(query, [season, seasonType, week]);
+  if (result.rows.length === 0) return [];
+  return result.rows.map(row => new Game({
+    id: row.id,
+    espnId: row.espn_id,
+    homeTeam: typeof row.home_team === 'string' ? JSON.parse(row.home_team) : row.home_team,
+    awayTeam: typeof row.away_team === 'string' ? JSON.parse(row.away_team) : row.away_team,
+    gameDate: new Date(row.game_date),
+    status: row.status,
+    rawStatus: row.status,
+  period: row.period,
+  displayClock: row.display_clock,
+  statusDetail: row.status_detail,
+    homeScore: row.home_score,
+    awayScore: row.away_score,
+    week: row.week,
+    season: row.season,
+    seasonType: row.season_type,
+    lastUpdated: new Date(row.last_updated),
+    createdAt: new Date(row.created_at)
+  }));
+}
+
+  toJSON() {
+    return {
+      id: this.id,
+      espnId: this.espnId,
+      homeTeam: this.homeTeam,
+      awayTeam: this.awayTeam,
+      gameDate: this.gameDate,
+      status: this.status,
+  statusCategory: this.statusCategory,
+  rawStatus: this.rawStatus,
+      statusState: this.statusState,
+      completed: this.completed,
+      statusDescription: this.statusDescription,
+      statusDetail: this.statusDetail,
+      clock: this.clock,
+      displayClock: this.displayClock,
+      period: this.period,
+  odds: this.odds,
+  probability: this.probability,
+      homeScore: this.homeScore,
+      awayScore: this.awayScore,
+      week: this.week,
+      season: this.season,
+      seasonType: this.seasonType,
+      lastUpdated: this.lastUpdated,
+      createdAt: this.createdAt
+    };
+  }
 }

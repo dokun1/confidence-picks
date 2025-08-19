@@ -20,7 +20,7 @@ router.get('/', (req, res) => {
 router.get('/games/:year/:seasonType/:week', async (req, res) => {
   try {
     const { year, seasonType, week } = req.params;
-    const forceRefresh = req.query.refresh === 'true';
+  const forceRefresh = (req.query.refresh === 'true') || (req.query.force === 'true') || (req.query.force === '1');
     
     const games = await GameService.getGamesForWeek(
       parseInt(year),
@@ -30,7 +30,7 @@ router.get('/games/:year/:seasonType/:week', async (req, res) => {
     );
     
     res.json({
-      games,
+      games: games.map(g => (typeof g.toJSON === 'function' ? g.toJSON() : g)),
       count: games.length,
       cached: !forceRefresh
     });
