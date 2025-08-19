@@ -213,7 +213,16 @@ router.get('/:identifier/messages', authenticateToken, async (req, res) => {
     }
     
     const messages = await Group.getMessages(group.id, limit, offset);
-    res.json(messages);
+    // Normalize shape
+    const normalized = messages.map(m => ({
+      id: m.id,
+      content: m.message,
+      authorId: m.user_id,
+      authorName: m.user_name || m.userName || m.authorName || 'Unknown',
+      authorPictureUrl: m.user_picture || m.userPicture || m.authorPictureUrl || null,
+      createdAt: m.created_at
+    }));
+    res.json(normalized);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -239,7 +248,15 @@ router.post('/:identifier/messages', authenticateToken, async (req, res) => {
     }
     
     const newMessage = await Group.postMessage(group.id, req.user.id, message.trim());
-    res.status(201).json(newMessage);
+    // Fetch user for picture/name consistency (could be optimized with join in postMessage)
+    res.status(201).json({
+      id: newMessage.id,
+      content: newMessage.message,
+      authorId: req.user.id,
+      authorName: req.user.name,
+      authorPictureUrl: req.user.pictureUrl,
+      createdAt: newMessage.created_at
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -2,12 +2,16 @@
   import { createEventDispatcher } from 'svelte';
   
   export let currentRoute = '/';
-  export let displayName = null;
+  export let displayName = null; // kept for backward compatibility (string name)
+  export let user = null; // full user object (id, name, email, pictureUrl)
   export let showThemeToggle = true;
   export let darkMode = false;
   
   const dispatch = createEventDispatcher();
   let userMenuOpen = false;
+  let avatarSources = [];
+  let avatarIndex = 0;
+  let avatarFailed = false;
   
   // Mobile menu state - using the exact same pattern that worked in TestMobileMenu
   let mobileMenuOpen = false;
@@ -23,14 +27,13 @@
   const navigationItems = [
     { label: 'Home', href: '/', icon: 'home' },
     { label: 'Groups', href: '/groups', icon: 'user-group', requiresAuth: true },
-    { label: 'About', href: '/about', icon: 'information-circle' },
-    { label: 'Design System', href: '/design-system', icon: 'cog-6-tooth' }
+    { label: 'About', href: '/about', icon: 'information-circle' }
+    // Design System link intentionally hidden from nav; still accessible via direct URL
   ];
   
   // User menu items (shown when authenticated)
   const userMenuItems = [
     { label: 'Profile', href: '/profile', icon: 'user' },
-    { label: 'Settings', href: '/settings', icon: 'cog-6-tooth' },
     { label: 'Sign Out', action: 'signOut', icon: 'arrow-right-on-rectangle' }
   ];
   
@@ -87,6 +90,25 @@
     if (userMenuOpen && !event.target.closest('.user-menu-container')) {
       userMenuOpen = false;
     }
+  }
+
+  $: if (user?.pictureUrl) {
+    const base = user.pictureUrl;
+    const variants = new Set();
+    variants.add(base);
+    if (/=s\d+-c$/.test(base)) {
+      variants.add(base.replace(/=s\d+-c$/, '=s64-c'));
+      variants.add(base.replace(/=s\d+-c$/, '=s128-c'));
+      variants.add(base.replace(/=s\d+-c$/, ''));
+    } else if (!/[?&]sz=/.test(base)) {
+      variants.add(base + (base.includes('?') ? '&' : '?') + 'sz=128');
+    }
+    avatarSources = Array.from(variants);
+    avatarIndex = 0;
+    avatarFailed = false;
+  } else {
+    avatarSources = [];
+    avatarFailed = true;
   }
 </script>
 
@@ -157,19 +179,34 @@
         {/if}
 
         <!-- User Menu or Sign In -->
-        {#if displayName}
+        {#if displayName || user}
           <div class="relative user-menu-container">
             <button
               class="flex items-center p-xs rounded-base text-secondary-600 hover:text-secondary-900 hover:bg-secondary-100 dark:text-secondary-400 dark:hover:text-secondary-100 dark:hover:bg-secondary-800 transition-colors duration-fast focus:outline-none focus:ring-1 focus:ring-primary-500"
               on:click={toggleUserMenu}
               aria-label="User menu"
             >
-              <div class="w-[2rem] h-[2rem] bg-primary-500 rounded-full flex items-center justify-center mr-xs">
-                <span class="text-sm font-medium text-neutral-0">
-                  {displayName.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <span class="hidden lg:block text-sm font-medium mr-xs">{displayName}</span>
+              {#if !avatarFailed && user?.pictureUrl}
+                <img
+                  src={avatarSources[avatarIndex] || user.pictureUrl}
+                  alt={user.name || displayName}
+                  class="w-[2rem] h-[2rem] rounded-full object-cover mr-xs border border-primary-100 dark:border-primary-800"
+                  referrerpolicy="no-referrer"
+                  crossorigin="anonymous"
+                  on:error={() => {
+                    if (avatarIndex < avatarSources.length - 1) {
+                      avatarIndex += 1;
+                    } else {
+                      avatarFailed = true;
+                    }
+                  }}
+                />
+              {:else}
+                <div class="w-[2rem] h-[2rem] bg-primary-500 rounded-full flex items-center justify-center mr-xs">
+                  <span class="text-sm font-medium text-neutral-0">{(user?.name || displayName || user?.email || '?').charAt(0).toUpperCase()}</span>
+                </div>
+              {/if}
+              <span class="hidden lg:block text-sm font-medium mr-xs">{user?.name || displayName}</span>
               <svg class="w-[1rem] h-[1rem] transition-transform duration-fast {userMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
               </svg>

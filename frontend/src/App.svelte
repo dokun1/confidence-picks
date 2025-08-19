@@ -108,6 +108,7 @@
   currentRoute={$currentRoute}
   {darkMode}
   displayName={userName}
+  user={$auth.user}
   on:navigate={handleNavigate}
   on:themeToggle={handleThemeToggle}
   on:mobileMenuToggle={handleMobileMenuToggle}

@@ -16,7 +16,9 @@ export class User {
 
   // Create or update user from OAuth provider
   static async createOrUpdate(providerData) {
-    const { provider, id: providerId, email, name, picture } = providerData;
+  const { provider, id: providerId, email, name, picture } = providerData;
+  // Basic guard: ensure picture looks like a URL before persisting
+  const safePicture = (typeof picture === 'string' && /^(https?:)?\/\//.test(picture)) ? picture : null;
     
     const query = `
       INSERT INTO users (
@@ -24,15 +26,16 @@ export class User {
       ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT (email) 
       DO UPDATE SET
-        ${provider}_id = $1,
-        name = $2,
-        picture_url = $3,
+        ${provider}_id = EXCLUDED.${provider}_id,
+        name = EXCLUDED.name,
+        picture_url = EXCLUDED.picture_url,
+        provider = EXCLUDED.provider,
         updated_at = CURRENT_TIMESTAMP,
         last_login = CURRENT_TIMESTAMP
       RETURNING *
     `;
     
-    const values = [providerId, email, name, picture, provider];
+  const values = [providerId, email, name, safePicture, provider];
     const result = await pool.query(query, values);
     
     return new User({

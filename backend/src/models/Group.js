@@ -265,16 +265,15 @@ export class Group {
   // Get group messages
   static async getMessages(groupId, limit = 50, offset = 0) {
     const query = `
-      SELECT gm.*, u.name as user_name, u.picture_url as user_picture
+      SELECT gm.id, gm.user_id, gm.message, gm.created_at, u.name as user_name, u.picture_url as user_picture
       FROM group_messages gm
       JOIN users u ON gm.user_id = u.id
       WHERE gm.group_id = $1
       ORDER BY gm.created_at DESC
       LIMIT $2 OFFSET $3
     `;
-    
     const result = await pool.query(query, [groupId, limit, offset]);
-    return result.rows.reverse(); // Return in chronological order
+    return result.rows.reverse();
   }
 
   // Post message to group
