@@ -1,46 +1,25 @@
 <script>
   import { navigateTo } from '../lib/router.js';
   import JoinGroupForm from '../designsystem/components/JoinGroupForm.svelte';
-  import { auth } from '../lib/authStore.js';
+  import { joinGroup, getGroup } from '../lib/groupsService.js';
 
   let isLoading = false;
   let error = null;
   let successMessage = null;
 
-  async function handleSubmit(event) {
+  // Receives { identifier } directly from JoinGroupForm prop callback
+  async function handleSubmit({ identifier }) {
     isLoading = true;
     error = null;
     successMessage = null;
     
     try {
-      const { identifier } = event.detail;
-      
-      // TODO: Replace with actual API call
-      const response = await fetch(`/api/groups/${identifier}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${$auth.token}`
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Group not found. Please check the group identifier.');
-        } else if (response.status === 409) {
-          throw new Error('You are already a member of this group.');
-        } else {
-          throw new Error('Failed to join group. Please try again.');
-        }
-      }
-
-      const group = await response.json();
-      successMessage = `Successfully joined "${group.name}"!`;
-      
-      // Navigate to the group after a short delay
-      setTimeout(() => {
-        navigateTo(`/groups/${group.id}`);
-      }, 2000);
+      if (!identifier) throw new Error('Group ID missing');
+      await joinGroup(identifier);
+      // Fetch group to display its name
+      const groupData = await getGroup(identifier);
+      successMessage = `Successfully joined "${groupData.name}"!`;
+      setTimeout(() => navigateTo(`/groups/${identifier}`), 1500);
       
     } catch (err) {
       error = err.message;

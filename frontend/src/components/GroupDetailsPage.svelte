@@ -24,70 +24,28 @@
     }
   });
 
+  import { getGroup, getMembers, getMessages, postMessage as apiPostMessage } from '../lib/groupsService.js';
+
   async function loadGroupData() {
     isLoading = true;
     error = null;
-    
     try {
-      // TODO: Replace with actual API calls
-      const [groupResponse, membersResponse, messagesResponse] = await Promise.all([
-        fetch(`/api/groups/${groupId}`, {
-          headers: { 'Authorization': `Bearer ${$auth.token}` }
-        }),
-        fetch(`/api/groups/${groupId}/members`, {
-          headers: { 'Authorization': `Bearer ${$auth.token}` }
-        }),
-        fetch(`/api/groups/${groupId}/messages`, {
-          headers: { 'Authorization': `Bearer ${$auth.token}` }
-        })
+      const [groupResp, membersResp, messagesResp] = await Promise.all([
+        getGroup(groupId),
+        getMembers(groupId),
+        getMessages(groupId)
       ]);
-
-      if (!groupResponse.ok) {
-        throw new Error('Group not found');
-      }
-
-      // For now, use mock data
       group = {
-        id: groupId,
-        name: 'Fantasy Friends',
-        identifier: 'fantasy-friends-2024',
-        description: 'Our yearly fantasy football confidence pool with college friends. Winner takes all!',
-        memberCount: 8,
-        isOwner: true,
-        createdAt: '2024-08-01T10:00:00Z'
+        id: groupResp.id,
+        name: groupResp.name,
+        identifier: groupResp.identifier,
+        description: groupResp.description,
+        memberCount: groupResp.memberCount,
+        isOwner: groupResp.userRole === 'admin',
+        createdAt: groupResp.createdAt
       };
-
-      members = [
-        { id: '1', name: 'John Doe', email: 'john@example.com', isOwner: true, joinedAt: '2024-08-01T10:00:00Z' },
-        { id: '2', name: 'Jane Smith', email: 'jane@example.com', isOwner: false, joinedAt: '2024-08-02T14:30:00Z' },
-        { id: '3', name: 'Bob Johnson', email: 'bob@example.com', isOwner: false, joinedAt: '2024-08-03T09:15:00Z' },
-        { id: '4', name: 'Alice Brown', email: 'alice@example.com', isOwner: false, joinedAt: '2024-08-04T16:45:00Z' }
-      ];
-
-      messages = [
-        {
-          id: '1',
-          authorId: '1',
-          authorName: 'John Doe',
-          content: 'Welcome everyone to the 2024 season! Let\'s have a great year of picks.',
-          createdAt: '2024-08-01T10:30:00Z'
-        },
-        {
-          id: '2',
-          authorId: '2',
-          authorName: 'Jane Smith',
-          content: 'Thanks for setting this up John! Ready to defend my title from last year 😊',
-          createdAt: '2024-08-02T15:00:00Z'
-        },
-        {
-          id: '3',
-          authorId: '3',
-          authorName: 'Bob Johnson',
-          content: 'Looking forward to it! When do we start making picks for week 1?',
-          createdAt: '2024-08-03T10:00:00Z'
-        }
-      ];
-
+      members = membersResp;
+      messages = messagesResp;
     } catch (err) {
       error = err.message;
       console.error('Error loading group data:', err);
@@ -98,36 +56,11 @@
 
   async function postMessage() {
     if (!newMessage.trim()) return;
-
     isPostingMessage = true;
-    
     try {
-      // TODO: Replace with actual API call
-      const response = await fetch(`/api/groups/${groupId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${$auth.token}`
-        },
-        body: JSON.stringify({ content: newMessage.trim() })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to post message');
-      }
-
-      // Mock adding the message locally
-      const newMsg = {
-        id: Date.now().toString(),
-        authorId: $auth.user?.id || 'current-user',
-        authorName: $auth.user?.name || 'You',
-        content: newMessage.trim(),
-        createdAt: new Date().toISOString()
-      };
-
-      messages = [...messages, newMsg];
+      const posted = await apiPostMessage(groupId, newMessage.trim());
+      messages = [...messages, posted];
       newMessage = '';
-
     } catch (err) {
       error = err.message;
       console.error('Error posting message:', err);
@@ -229,7 +162,7 @@
               {group.identifier}
             </button>
             {#if group.isOwner}
-              <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.id}/edit`)}>
+              <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
                 Edit Group
               </Button>
             {/if}
@@ -315,7 +248,7 @@
                   View Members
                 </Button>
                 {#if group.isOwner}
-                  <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.id}/edit`)}>
+                  <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
                     Edit Group
                   </Button>
                 {/if}

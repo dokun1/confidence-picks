@@ -2,37 +2,18 @@
   import { onMount } from 'svelte';
   import { navigateTo } from '../lib/router.js';
   import CreateGroupForm from '../designsystem/components/CreateGroupForm.svelte';
-  import { auth } from '../lib/authStore.js';
+  import { createGroup } from '../lib/groupsService.js';
 
   let isLoading = false;
   let error = null;
 
-  async function handleSubmit(event) {
+  // Receives formData directly from CreateGroupForm prop callback
+  async function handleSubmit(formData) {
     isLoading = true;
     error = null;
-    
     try {
-      const formData = event.detail;
-      
-      // TODO: Replace with actual API call
-      const response = await fetch('/api/groups', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${$auth.token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create group');
-      }
-
-      const newGroup = await response.json();
-      
-      // Navigate to the new group's details page
-      navigateTo(`/groups/${newGroup.id}`);
-      
+      const newGroup = await createGroup(formData);
+      navigateTo(`/groups/${newGroup.identifier}`);
     } catch (err) {
       error = err.message;
       console.error('Error creating group:', err);
