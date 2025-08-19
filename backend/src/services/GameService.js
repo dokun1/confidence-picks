@@ -31,42 +31,77 @@ export class GameService {
   // Get games for a specific week with caching
   static async getGamesForWeek(year, seasonType, week, forceRefresh = false) {
     const games = [];
-    
     try {
-      // Fetch fresh data from ESPN
+      // If not forcing refresh, load cached set first to decide refresh strategy
+      if (!forceRefresh) {
+        const cachedSet = await Game.findByWeekSeason(year, seasonType, week);
+        if (cachedSet.length > 0) {
+          const now = Date.now();
+          const anyInProgress = cachedSet.some(g => g.status === 'IN_PROGRESS');
+
+          // Detect games that are scheduled but should have started (or will start imminently)
+          const startWindowMs = 2 * 60 * 1000; // 2 minutes look‑ahead
+          const needStartRefresh = cachedSet.some(g => {
+            try {
+              const gameTime = new Date(g.gameDate).getTime();
+              const lastUpdated = g.lastUpdated ? new Date(g.lastUpdated).getTime() : 0;
+              const recentlyUpdated = now - lastUpdated < 60 * 1000; // we refreshed within last minute
+              return g.status === 'SCHEDULED' && gameTime - now <= startWindowMs && gameTime <= now + startWindowMs && !recentlyUpdated;
+            } catch (e) { return false; }
+          });
+
+          if (anyInProgress) {
+            const oldestUpdated = Math.min(...cachedSet.map(g => g.lastUpdated ? new Date(g.lastUpdated).getTime() : 0));
+            const ageMs = now - oldestUpdated;
+            if (ageMs < 60 * 1000 && !needStartRefresh) {
+              console.log('Returning cached in-progress games (<60s old).');
+              return cachedSet;
+            } else {
+              console.log('In-progress games cache older than 60s or start refresh needed -> refreshing from ESPN');
+            }
+          } else if (needStartRefresh) {
+            console.log('Detected games at/after start time still marked SCHEDULED -> refreshing');
+          } else {
+            // No in-progress games; if none are stale (24h rule) return cached directly
+            const anyStale = cachedSet.some(g => g.isStale());
+            if (!anyStale) {
+              console.log('All games are non in-progress and cache valid (no imminent starts) -> returning cached set.');
+              return cachedSet;
+            }
+            console.log('Some games stale by 24h rule -> refreshing');
+          }
+        }
+      }
+
+      // Fetch fresh data from ESPN (forceRefresh or refresh needed)
       const espnGames = await ESPNService.fetchGames(year, seasonType, week);
-      
       for (const espnGame of espnGames) {
         const espnId = espnGame.id;
         let cachedGame = await Game.findByESPNId(espnId);
-        
-        // Create new game from ESPN data
         const freshGame = Game.fromESPNData(espnGame);
-        
         if (!cachedGame) {
-          // No cached game, save the fresh one
           console.log(`Creating new game: ${espnId}`);
           await freshGame.save();
           games.push(freshGame);
-        } else if (cachedGame.isStale() || forceRefresh) {
-          // Cached game is stale, check if data has changed
-          if (freshGame.isDifferentFrom(cachedGame)) {
-            console.log(`Updating changed game: ${espnId}`);
-            await freshGame.save();
-            games.push(freshGame);
-          } else {
-            console.log(`No changes detected for game: ${espnId}, updating timestamp only`);
-            cachedGame.lastUpdated = new Date();
-            await cachedGame.save();
-            games.push(cachedGame);
-          }
+          continue;
+        }
+        // Update if force, stale, or data changed (scores/status)
+        if (forceRefresh || cachedGame.isStale() || freshGame.isDifferentFrom(cachedGame)) {
+          console.log(`Saving refresh for game: ${espnId}`);
+          await freshGame.save();
+          games.push(freshGame);
         } else {
-          // Use cached game
-          console.log(`Using cached game: ${espnId}`);
+          // For in-progress ensure lastUpdated bump every refresh attempt if older than 60s
+            if (freshGame.status === 'IN_PROGRESS') {
+              const ageMs = Date.now() - new Date(cachedGame.lastUpdated).getTime();
+              if (ageMs >= 60 * 1000) {
+                cachedGame.lastUpdated = new Date();
+                await cachedGame.save();
+              }
+            }
           games.push(cachedGame);
         }
       }
-      
       return games;
     } catch (error) {
       console.error('Failed to fetch games for week:', error);

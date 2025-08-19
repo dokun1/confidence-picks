@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS games (
   away_team JSONB NOT NULL,
   game_date TIMESTAMP NOT NULL,
   status VARCHAR(50) NOT NULL,
+  -- Live status metadata (added after initial creation; may be null for historical rows)
+  period INTEGER NULL,
+  display_clock VARCHAR(20) NULL,
+  status_detail VARCHAR(80) NULL,
   home_score INTEGER DEFAULT 0,
   away_score INTEGER DEFAULT 0,
   week INTEGER NOT NULL,
@@ -143,3 +147,26 @@ CREATE INDEX IF NOT EXISTS idx_group_memberships_group ON group_memberships(grou
 CREATE INDEX IF NOT EXISTS idx_group_invitations_token ON group_invitations(token);
 CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages(group_id);
 CREATE INDEX IF NOT EXISTS idx_user_picks_group ON user_picks(group_id);
+
+-- Add live fields to games table if they do not exist (for environments with older schema)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'games' AND column_name = 'period'
+  ) THEN
+    ALTER TABLE games ADD COLUMN period INTEGER NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'games' AND column_name = 'display_clock'
+  ) THEN
+    ALTER TABLE games ADD COLUMN display_clock VARCHAR(20) NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'games' AND column_name = 'status_detail'
+  ) THEN
+    ALTER TABLE games ADD COLUMN status_detail VARCHAR(80) NULL;
+  END IF;
+END $$;
