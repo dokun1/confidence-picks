@@ -48,6 +48,10 @@ class AuthService {
     try {
       // Decode JWT to get user info (without verification - just for display)
       const payload = JSON.parse(atob(token.split('.')[1]));
+      // If token expired, signal caller to refresh by returning null
+      if (payload?.exp && Date.now() / 1000 >= payload.exp) {
+        return null;
+      }
       return {
         id: payload.userId,
         email: payload.email,
