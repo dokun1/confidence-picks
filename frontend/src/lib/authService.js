@@ -42,24 +42,39 @@ class AuthService {
   }
   
   static getUser() {
+    // Prefer enriched cached user (may include pictureUrl) if available and token valid
     const token = this.getToken();
     if (!token) return null;
-    
+
+    let payload;
     try {
-      // Decode JWT to get user info (without verification - just for display)
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      // If token expired, signal caller to refresh by returning null
-      if (payload?.exp && Date.now() / 1000 >= payload.exp) {
-        return null;
-      }
-      return {
-        id: payload.userId,
-        email: payload.email,
-        name: payload.name
-      };
-    } catch (error) {
+      payload = JSON.parse(atob(token.split('.')[1]));
+    } catch {
       return null;
     }
+
+    if (payload?.exp && Date.now() / 1000 >= payload.exp) {
+      return null; // caller should attempt refresh
+    }
+
+    // If we previously fetched the full profile (/auth/me) use that (ensures pictureUrl present)
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.id === payload.userId) {
+          return parsed;
+        }
+      }
+    } catch {/* ignore */}
+
+    // Fallback to basic token-derived user (without pictureUrl)
+    return {
+      id: payload.userId,
+      email: payload.email,
+      name: payload.name,
+      pictureUrl: payload.pictureUrl
+    };
   }
   
   static isAuthenticated() {

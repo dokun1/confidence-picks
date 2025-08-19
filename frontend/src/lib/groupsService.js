@@ -103,10 +103,11 @@ export async function getMessages(identifier, { limit = 50, offset = 0 } = {}) {
   const data = await res.json();
   return data.map(msg => ({
     id: msg.id,
-    authorId: msg.user_id,
-    authorName: msg.user_name,
-    content: msg.message,
-    createdAt: msg.created_at
+    authorId: msg.authorId,
+    authorName: msg.authorName,
+    authorPictureUrl: msg.authorPictureUrl,
+    content: msg.content,
+    createdAt: msg.createdAt
   }));
 }
 
@@ -118,11 +119,12 @@ export async function postMessage(identifier, message) {
   if (!res.ok) throw new Error('Failed to post message');
   const data = await res.json();
   return {
-    id: data.id,
-    authorId: data.user_id,
-    authorName: 'You', // Will be replaced if we have user info
-    content: data.message,
-    createdAt: data.created_at
+  id: data.id,
+  authorId: data.authorId,
+  authorName: data.authorName,
+  authorPictureUrl: data.authorPictureUrl,
+  content: data.content,
+  createdAt: data.createdAt
   };
 }
 

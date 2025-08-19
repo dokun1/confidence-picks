@@ -86,6 +86,7 @@
   }
   let showCopyToast = false;
   import InlineToast from '../designsystem/components/InlineToast.svelte';
+  import Avatar from '../designsystem/components/Avatar.svelte';
 </script>
 
 <div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
@@ -227,9 +228,7 @@
                 {#each messages.slice(-3).reverse() as message}
                   <div class="p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
                     <div class="flex items-center gap-sm">
-                      <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                        {message.authorName[0]}
-                      </div>
+                      <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} size={32} className="text-xs" />
                       <span class="font-medium text-[var(--color-text-primary)] truncate">{message.authorName}</span>
                     </div>
                     <div class="mt-xxs text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</div>
@@ -280,9 +279,7 @@
               <div class="p-lg space-y-md max-h-96 overflow-y-auto">
                 {#each messages as message}
                   <div class="flex items-start gap-sm">
-                    <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium shrink-0">
-                      {message.authorName[0]}
-                    </div>
+                    <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} size={40} className="shrink-0" />
                     <div class="flex-1 min-w-0">
                       <div class="font-medium text-[var(--color-text-primary)] break-all">{message.authorName}</div>
                       <div class="text-xs text-[var(--color-text-secondary)] mt-xxs">{formatDate(message.createdAt)}</div>
@@ -342,9 +339,7 @@
                 {#each members as member}
                   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-xs p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
                     <div class="flex items-center gap-sm">
-                      <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium">
-                        {member.name[0]}
-                      </div>
+                      <Avatar name={member.name} pictureUrl={member.pictureUrl} size={40} />
                       <div class="leading-tight">
                         <div class="font-medium text-[var(--color-text-primary)] break-words">{member.name}</div>
                         <div class="text-sm text-[var(--color-text-secondary)] break-all">{member.email}</div>

@@ -15,7 +15,10 @@
 			if (!token) throw new Error('Missing token');
 			AuthService.setTokens(token, refresh);
 			// Attempt to get user info from token
-			const user = AuthService.getUser() || await AuthService.getCurrentUser();
+			let user = AuthService.getUser();
+			// Always fetch /auth/me once to enrich with pictureUrl/provider
+			const enriched = await AuthService.getCurrentUser();
+			if (enriched) user = enriched;
 			if (user) setAuthUser(user);
 			status = 'Authenticated. Redirecting...';
 			setTimeout(() => navigateTo('/groups'), 500);

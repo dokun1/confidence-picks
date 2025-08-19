@@ -13,7 +13,8 @@ export class AuthService {
       { 
         userId: user.id, 
         email: user.email,
-        name: user.name 
+  name: user.name,
+  pictureUrl: user.pictureUrl
       },
       this.JWT_SECRET,
       { expiresIn: this.ACCESS_TOKEN_EXPIRES }
