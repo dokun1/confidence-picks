@@ -81,8 +81,11 @@
 
   function copyGroupIdentifier() {
     navigator.clipboard.writeText(group.identifier);
-    // TODO: Show toast notification
+    showCopyToast = false; // reset so animation restarts if clicked repeatedly
+    requestAnimationFrame(() => { showCopyToast = true; });
   }
+  let showCopyToast = false;
+  import InlineToast from '../designsystem/components/InlineToast.svelte';
 </script>
 
 <div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
@@ -151,16 +154,19 @@
           </div>
           
           <div class="flex gap-sm">
-            <button
-              class="flex items-center px-sm py-xs bg-secondary-100 dark:bg-secondary-700 text-secondary-700 dark:text-secondary-300 rounded hover:bg-secondary-200 dark:hover:bg-secondary-600 transition-colors"
-              on:click={copyGroupIdentifier}
-              title="Copy group identifier"
-            >
-              <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-              </svg>
-              {group.identifier}
-            </button>
+            <div class="inline-toast-anchor">
+              <button
+                class="flex items-center px-sm py-xs bg-secondary-100 dark:bg-secondary-700 text-secondary-700 dark:text-secondary-300 rounded hover:bg-secondary-200 dark:hover:bg-secondary-600 transition-colors"
+                on:click={copyGroupIdentifier}
+                title="Copy group identifier"
+              >
+                <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                {group.identifier}
+              </button>
+              <InlineToast open={showCopyToast} message="Copied" variant="success" onClose={() => showCopyToast = false} />
+            </div>
             {#if group.isOwner}
               <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
                 Edit Group
@@ -219,17 +225,15 @@
               <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Recent Activity</h2>
               <div class="space-y-sm">
                 {#each messages.slice(-3).reverse() as message}
-                  <div class="flex items-start gap-sm p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
-                    <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                      {message.authorName[0]}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-sm mb-xs">
-                        <span class="font-medium text-[var(--color-text-primary)]">{message.authorName}</span>
-                        <span class="text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</span>
+                  <div class="p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
+                    <div class="flex items-center gap-sm">
+                      <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                        {message.authorName[0]}
                       </div>
-                      <p class="text-sm text-[var(--color-text-secondary)]">{message.content}</p>
+                      <span class="font-medium text-[var(--color-text-primary)] truncate">{message.authorName}</span>
                     </div>
+                    <div class="mt-xxs text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</div>
+                    <p class="mt-sm text-sm text-[var(--color-text-secondary)] break-words">{message.content}</p>
                   </div>
                 {/each}
               </div>
@@ -240,17 +244,23 @@
             <!-- Quick Actions -->
             <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
               <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Quick Actions</h2>
-              <div class="space-y-sm">
-                <Button variant="primary" size="sm" class="w-full" on:click={() => activeTab = 'messages'}>
-                  View Messages
-                </Button>
-                <Button variant="secondary" size="sm" class="w-full" on:click={() => activeTab = 'members'}>
-                  View Members
-                </Button>
-                {#if group.isOwner}
-                  <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
-                    Edit Group
+              <div class="flex flex-col md:flex-row md:items-center md:gap-sm">
+                <div class="w-full md:w-auto mb-sm md:mb-0">
+                  <Button variant="primary" size="sm" on:click={() => activeTab = 'messages'}>
+                    View Messages
                   </Button>
+                </div>
+                <div class="w-full md:w-auto mb-sm md:mb-0">
+                  <Button variant="secondary" size="sm" on:click={() => activeTab = 'members'}>
+                    View Members
+                  </Button>
+                </div>
+                {#if group.isOwner}
+                  <div class="w-full md:w-auto">
+                    <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
+                      Edit Group
+                    </Button>
+                  </div>
                 {/if}
               </div>
             </div>
@@ -270,15 +280,13 @@
               <div class="p-lg space-y-md max-h-96 overflow-y-auto">
                 {#each messages as message}
                   <div class="flex items-start gap-sm">
-                    <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium">
+                    <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium shrink-0">
                       {message.authorName[0]}
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-sm mb-xs">
-                        <span class="font-medium text-[var(--color-text-primary)]">{message.authorName}</span>
-                        <span class="text-sm text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</span>
-                      </div>
-                      <p class="text-[var(--color-text-secondary)]">{message.content}</p>
+                      <div class="font-medium text-[var(--color-text-primary)] break-all">{message.authorName}</div>
+                      <div class="text-xs text-[var(--color-text-secondary)] mt-xxs">{formatDate(message.createdAt)}</div>
+                      <p class="mt-xs text-sm text-[var(--color-text-secondary)] break-words whitespace-pre-wrap">{message.content}</p>
                     </div>
                   </div>
                 {/each}
@@ -332,25 +340,23 @@
               
               <div class="p-lg space-y-sm">
                 {#each members as member}
-                  <div class="flex items-center justify-between p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
+                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-xs p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
                     <div class="flex items-center gap-sm">
                       <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-medium">
                         {member.name[0]}
                       </div>
-                      <div>
-                        <div class="font-medium text-[var(--color-text-primary)]">{member.name}</div>
-                        <div class="text-sm text-[var(--color-text-secondary)]">{member.email}</div>
+                      <div class="leading-tight">
+                        <div class="font-medium text-[var(--color-text-primary)] break-words">{member.name}</div>
+                        <div class="text-sm text-[var(--color-text-secondary)] break-all">{member.email}</div>
                       </div>
                     </div>
-                    <div class="flex items-center gap-sm">
+                    <div class="flex flex-wrap items-center gap-sm text-sm text-[var(--color-text-secondary)] md:justify-end">
                       {#if member.isOwner}
                         <span class="px-xs py-xxxs bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded text-xs font-medium">
                           Owner
                         </span>
                       {/if}
-                      <span class="text-sm text-[var(--color-text-secondary)]">
-                        Joined {formatDate(member.joinedAt)}
-                      </span>
+                      <span class="whitespace-nowrap">Joined {new Date(member.joinedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</span>
                     </div>
                   </div>
                 {/each}

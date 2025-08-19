@@ -11,8 +11,9 @@
   export let onLeaveGroup = () => {};
   export let onDeleteGroup = () => {};
   export let onRefresh = () => {};
+  export let showHeader = true; // allow parent to hide built-in header/subheader
   
-  let showActions = 'create'; // 'create', 'join', or null
+  // Removed expandable action panels; buttons now route directly
   
   function handleViewGroup(group) {
     onViewGroup(group);
@@ -34,56 +35,65 @@
 </script>
 
 <div class="space-y-6">
-  <!-- Header -->
-  <div class="flex justify-between items-center">
-    <div>
+  <!-- Header / Actions -->
+  {#if showHeader}
+  <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-sm md:gap-0">
+    <div class="order-1">
       <h1 class="text-2xl font-bold text-gray-900">My Groups</h1>
       <p class="text-gray-600 mt-1">Manage your confidence picks groups</p>
     </div>
-    
-    <div class="flex space-x-3">
+    <div class="flex flex-col order-2 md:order-none md:flex-row md:space-x-3 gap-sm md:gap-0 w-full md:w-auto md:items-center mt-sm md:mt-0">
+      <Button 
+        variant="primary"
+        on:click={onCreateNew}
+      >
+        Create Group
+      </Button>
+      <Button 
+        variant="secondary"
+        on:click={onJoinExisting}
+      >
+        Join Group
+      </Button>
       <Button 
         variant="secondary" 
         size="sm"
         on:click={onRefresh}
         disabled={isLoading}
       >
+        <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 14.652v4.992h4.992M19.207 15.6a8.25 8.25 0 01-14.64 2.474m-.774-9.574a8.25 8.25 0 0114.64-2.474" />
+        </svg>
         Refresh
-      </Button>
-      
-      <Button 
-        variant="primary"
-        on:click={() => showActions = showActions === 'create' ? null : 'create'}
-      >
-        Create Group
-      </Button>
-      
-      <Button 
-        variant="secondary"
-        on:click={() => showActions = showActions === 'join' ? null : 'join'}
-      >
-        Join Group
       </Button>
     </div>
   </div>
-  
-  <!-- Action panels -->
-  {#if showActions === 'create'}
-    <div class="border-l-4 border-blue-500 bg-blue-50 p-4 rounded-r-lg">
-      <p class="text-blue-700 mb-2">Create a new group to start making confidence picks with friends!</p>
-      <Button variant="primary" size="sm" on:click={onCreateNew}>
-        Open Create Form
-      </Button>
-    </div>
-  {/if}
-  
-  {#if showActions === 'join'}
-    <div class="border-l-4 border-green-500 bg-green-50 p-4 rounded-r-lg">
-      <p class="text-green-700 mb-2">Join an existing group using the Group ID shared by the owner.</p>
-      <Button variant="primary" size="sm" on:click={onJoinExisting}>
-        Open Join Form
-      </Button>
-    </div>
+  {:else}
+  <div class="flex flex-col md:flex-row md:justify-end md:items-center gap-sm md:gap-3">
+    <Button 
+      variant="primary"
+      on:click={onCreateNew}
+    >
+      Create Group
+    </Button>
+    <Button 
+      variant="secondary"
+      on:click={onJoinExisting}
+    >
+      Join Group
+    </Button>
+    <Button 
+      variant="secondary" 
+      size="sm"
+      on:click={onRefresh}
+      disabled={isLoading}
+    >
+      <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 14.652v4.992h4.992M19.207 15.6a8.25 8.25 0 01-14.64 2.474m-.774-9.574a8.25 8.25 0 0114.64-2.474" />
+      </svg>
+      Refresh
+    </Button>
+  </div>
   {/if}
   
   <!-- Loading state -->

@@ -124,6 +124,7 @@
     <GroupsList 
       {groups}
       {isLoading}
+  showHeader={false}
       onCreateNew={handleCreateNew}
       onJoinExisting={handleJoinExisting}
       onViewGroup={handleViewGroup}
@@ -132,46 +133,7 @@
   onDeleteGroup={handleDeleteGroup}
     />
 
-    <!-- Quick Stats -->
-    {#if groups.length > 0 && !isLoading}
-      <div class="mt-lg grid grid-cols-1 md:grid-cols-3 gap-md">
-        <div class="p-md bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-base">
-          <div class="flex items-center">
-            <svg class="w-8 h-8 text-primary-500 mr-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-            </svg>
-            <div>
-              <div class="text-2xl font-bold text-[var(--color-text-primary)]">{groups.length}</div>
-              <div class="text-sm text-[var(--color-text-secondary)]">Total Groups</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="p-md bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-base">
-          <div class="flex items-center">
-            <svg class="w-8 h-8 text-success-500 mr-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <div>
-              <div class="text-2xl font-bold text-[var(--color-text-primary)]">{groups.filter(g => g.isOwner).length}</div>
-              <div class="text-sm text-[var(--color-text-secondary)]">Groups Owned</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="p-md bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-base">
-          <div class="flex items-center">
-            <svg class="w-8 h-8 text-info-500 mr-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-            </svg>
-            <div>
-              <div class="text-2xl font-bold text-[var(--color-text-primary)]">{groups.reduce((sum, g) => sum + g.memberCount, 0)}</div>
-              <div class="text-sm text-[var(--color-text-secondary)]">Total Members</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
+  <!-- Stats section removed per UX request -->
   </div>
 </div>
 

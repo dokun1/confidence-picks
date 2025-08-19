@@ -4,7 +4,7 @@ function apiBase() {
   return `${AuthService.getApiBaseUrl()}/api/groups`;
 }
 
-async function authFetch(url, options = {}) {
+async function authFetch(url, options = {}, attempt = 0) {
   const token = AuthService.getToken();
   const res = await fetch(url, {
     ...options,
@@ -14,6 +14,23 @@ async function authFetch(url, options = {}) {
       Authorization: `Bearer ${token}`
     }
   });
+  // If unauthorized/forbidden, attempt silent refresh once
+  if ((res.status === 401 || res.status === 403) && attempt === 0) {
+    try {
+      await AuthService.refreshToken();
+      const newToken = AuthService.getToken();
+      return authFetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+          Authorization: `Bearer ${newToken}`
+        }
+      }, 1);
+    } catch (e) {
+      // fall through; caller will handle error
+    }
+  }
   return res;
 }
 

@@ -40,8 +40,17 @@
       try {
         let user = AuthService.getUser();
         if (!user) {
-          user = await AuthService.getCurrentUser();
-        }
+          // Try refreshing token silently if expired
+            try {
+              await AuthService.refreshToken();
+              user = AuthService.getUser() || await AuthService.getCurrentUser();
+            } catch (e) {
+              // Ignore; will clear tokens below
+            }
+          if (!user) {
+            user = await AuthService.getCurrentUser();
+          }
+  }
         
         if (user) {
           // Update global auth store so UI updates immediately
