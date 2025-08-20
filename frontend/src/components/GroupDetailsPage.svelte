@@ -235,7 +235,7 @@
                 {#each messages.slice(-3).reverse() as message}
                   <div class="p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
                     <div class="flex items-center gap-sm">
-                      <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} size={32} className="text-xs" />
+                      <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} variant="md" className="text-xs" />
                       <span class="font-medium text-[var(--color-text-primary)] truncate">{message.authorName}</span>
                     </div>
                     <div class="mt-xxs text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</div>
@@ -286,7 +286,7 @@
               <div class="p-lg space-y-md max-h-96 overflow-y-auto">
                 {#each messages as message}
                   <div class="flex items-start gap-sm">
-                    <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} size={40} className="shrink-0" />
+                    <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} variant="md" className="shrink-0" />
                     <div class="flex-1 min-w-0">
                       <div class="font-medium text-[var(--color-text-primary)] break-all">{message.authorName}</div>
                       <div class="text-xs text-[var(--color-text-secondary)] mt-xxs">{formatDate(message.createdAt)}</div>
@@ -346,7 +346,7 @@
                 {#each members as member}
                   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-xs p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
                     <div class="flex items-center gap-sm">
-                      <Avatar name={member.name} pictureUrl={member.pictureUrl} size={40} />
+                      <Avatar name={member.name} pictureUrl={member.pictureUrl} variant="md" />
                       <div class="leading-tight">
                         <div class="font-medium text-[var(--color-text-primary)] break-words">{member.name}</div>
                         <div class="text-sm text-[var(--color-text-secondary)] break-all">{member.email}</div>

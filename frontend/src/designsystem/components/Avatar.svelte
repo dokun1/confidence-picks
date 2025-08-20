@@ -2,9 +2,20 @@
   export let name = '';
   export let email = '';
   export let pictureUrl = null;
-  export let size = 40; // px
+  export let size = null; // px (deprecated, use variant instead)
+  export let variant = 'md'; // 'sm' | 'md' | 'lg'
   export let className = '';
   export let rounded = 'full'; // full or base
+  
+  // Size mapping based on 100% font size
+  const sizes = {
+    sm: 16,
+    md: 32,
+    lg: 48
+  };
+  
+  // Use size prop if provided (backward compatibility), otherwise use variant
+  $: actualSize = size !== null ? size : sizes[variant] || sizes.md;
 
   let sources = [];
   let index = 0;
@@ -36,7 +47,7 @@
     failed = true;
   }
 
-  const dimensionClass = `w-[${size}px] h-[${size}px]`;
+  const dimensionClass = `w-[${actualSize}px] h-[${actualSize}px]`;
 </script>
 
 {#if !failed && sources.length}
