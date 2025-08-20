@@ -169,8 +169,8 @@ async save() {
     INSERT INTO games (
       espn_id, home_team, away_team, game_date, status, 
       period, display_clock, status_detail,
-      home_score, away_score, week, season, season_type, last_updated
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      home_score, away_score, week, season, season_type, odds, probability, last_updated
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     ON CONFLICT (espn_id) 
     DO UPDATE SET
       home_team = $2,
@@ -185,7 +185,9 @@ async save() {
       week = $11,
       season = $12,
       season_type = $13,
-      last_updated = $14
+      odds = $14,
+      probability = $15,
+      last_updated = $16
     RETURNING *
   `;
 
@@ -210,6 +212,8 @@ async save() {
     this.week,
     this.season,
     this.seasonType,
+    JSON.stringify(this.odds || null),
+    JSON.stringify(this.probability || null),
     this.lastUpdated
   ];
 
@@ -258,6 +262,8 @@ static async findByESPNId(espnId) {
   displayClock: row.display_clock,
   statusDetail: row.status_detail,
     homeScore: row.home_score,
+  odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
+  probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
     awayScore: row.away_score,
     week: row.week,
     season: row.season,
@@ -284,6 +290,8 @@ static async findByWeekSeason(season, seasonType, week) {
   displayClock: row.display_clock,
   statusDetail: row.status_detail,
     homeScore: row.home_score,
+  odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
+  probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
     awayScore: row.away_score,
     week: row.week,
     season: row.season,
