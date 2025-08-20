@@ -79,7 +79,7 @@
 										<img
 											src={imgSources[currentSrcIndex] || user.pictureUrl}
 											alt={user.name}
-												class="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-primary-100 dark:border-primary-800 shadow-md flex-shrink-0"
+												class="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-primary-100 dark:border-primary-800 shadow-md flex-shrink-0"
 											referrerpolicy="no-referrer"
 											crossorigin="anonymous"
 											on:error={() => {
@@ -93,7 +93,7 @@
 											}}
 										/>
 							{:else}
-								<div class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-primary-500 flex items-center justify-center text-neutral-0 text-3xl font-heading font-semibold shadow-md flex-shrink-0">
+								<div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary-500 flex items-center justify-center text-neutral-0 text-2xl font-heading font-semibold shadow-md flex-shrink-0">
 					{initials(user.name || user.email)}
 				</div>
 			{/if}

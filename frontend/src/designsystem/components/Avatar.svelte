@@ -2,7 +2,7 @@
   export let name = '';
   export let email = '';
   export let pictureUrl = null;
-  export let size = 40; // px
+  export let size = 32; // px
   export let className = '';
   export let rounded = 'full'; // full or base
 
