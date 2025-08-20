@@ -20,14 +20,14 @@ function normalizeGame(g) { return typeof g.toJSON === 'function' ? g.toJSON() :
 async function computeClosestWeek(seasonYear, seasonType) {
   const { rows } = await pool.query(`SELECT week, MIN(status) as any_status
     FROM games WHERE season=$1 AND season_type=$2 GROUP BY week ORDER BY week`, [seasonYear, seasonType]);
-  if (rows.length === 0) return 1;
+  if (rows.length === 0) return 0; // allow week 0
   // naive: fetch weeks ascending, pick first where exists non-FINAL
   for (const r of rows) {
     // Need counts per week
     const { rows: games } = await pool.query('SELECT status FROM games WHERE season=$1 AND season_type=$2 AND week=$3', [seasonYear, seasonType, r.week]);
     if (games.some(g => g.status !== 'FINAL')) return r.week;
   }
-  return rows[rows.length - 1].week; // all final -> last week
+  return rows[rows.length - 1].week; // all final -> last week (could be 0)
 }
 
 function deriveGamePickMeta(gameJson, pick) {
@@ -49,8 +49,9 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     const { identifier } = req.params;
     const season = parseInt(req.query.season) || new Date().getFullYear();
     const seasonType = parseInt(req.query.seasonType) || 2;
-    const week = parseInt(req.query.week);
-    if (!week) return res.status(400).json({ error: 'week required' });
+  const weekRaw = req.query.week;
+  const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
+  if (Number.isNaN(week)) return res.status(400).json({ error: 'week required' });
 
     const group = await ensureMembership(identifier, req.user.id);
 
@@ -114,8 +115,8 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
 router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
-    const { season, seasonType, week, picks } = req.body;
-    if (!season || !seasonType || !week || !Array.isArray(picks)) return res.status(400).json({ error: 'Missing fields' });
+  const { season, seasonType, week, picks } = req.body;
+  if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) return res.status(400).json({ error: 'Missing fields' });
     const group = await ensureMembership(identifier, req.user.id);
 
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);
@@ -189,8 +190,8 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
 router.post('/:identifier/picks/clear', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
-    const { season, seasonType, week } = req.body;
-    if (!season || !seasonType || !week) return res.status(400).json({ error: 'Missing fields' });
+  const { season, seasonType, week } = req.body;
+  if (!season || !seasonType || (week === undefined || week === null)) return res.status(400).json({ error: 'Missing fields' });
     const group = await ensureMembership(identifier, req.user.id);
 
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);

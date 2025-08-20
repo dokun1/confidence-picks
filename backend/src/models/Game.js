@@ -48,12 +48,22 @@ static fromESPNData(espnGame) {
 
   
   const weekData = competition.week || espnGame.week || {};
-  const week = weekData.number || 1;
+  let week = weekData.number || 1;
 
     // Fix the season parsing - it's available in the competition
   const season = competition.season || espnGame.season || {};
   const seasonYear = season.year || new Date().getFullYear();
-  const seasonType = season.type || 2;
+  let seasonType = season.type || 2;
+
+  // Map ONLY the final preseason week to regular season week 0 for picks/testing
+  try {
+    const PRE_FINAL = parseInt(process.env.PRESEASON_FINAL_WEEK || '4', 10); // default 4
+    if (seasonType === 1 && week === PRE_FINAL) {
+      console.log(`[week-map] Mapping preseason week ${PRE_FINAL} to regular season week 0`);
+      week = 0; // represent as week 0
+      seasonType = 2; // treat as regular season for picks/standings
+    }
+  } catch (_) { /* ignore env parse issues */ }
 
   const statusBlock = competition.status || {};
   const statusType = statusBlock.type || {};

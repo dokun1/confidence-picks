@@ -33,7 +33,7 @@
   // For auto-scroll focus when a confidence value is overridden
   let focusGameId = null;
 
-  const TOTAL_WEEKS = 18; // reg season; TODO dynamic by seasonType
+  const TOTAL_WEEKS = 18; // reg season (weeks 1..18) plus we expose week 0 (preseason final)
 
   function isDirty() { return JSON.stringify(draft) !== JSON.stringify(original); }
   function completePicks() { return Object.values(draft).filter(p => p.pickedTeamId && p.confidence != null); }
@@ -45,17 +45,18 @@
   async function initWeek() {
     loading = true; error='';
     try {
-      if (week == null) {
+    if (week == null) {
         try {
           const cw = await getClosestWeek(groupIdentifier, season, seasonType);
           week = cw.week;
         } catch (e) {
           // fallback to week 1 if endpoint fails
-          if (!week) week = 1;
+      if (week == null) week = 0; // allow week 0 fallback
           raiseError(e.message);
         }
       }
-      if (week) await fetchPicks();
+  // Fetch even for week 0 (previously skipped due to falsy check)
+  if (week !== null && week !== undefined) await fetchPicks();
     } catch (e) { error = e.message; } finally { loading=false; }
   }
 
@@ -217,7 +218,8 @@
 <div class="space-y-lg">
   <div class="flex flex-wrap items-end gap-sm">
     <div>
-  <select id="week-select" bind:value={week} on:change={fetchPicks} class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800" aria-label="Select week">
+  <select id="week-select" bind:value={week} on:change={() => { week = Number(week); fetchPicks(); }} class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800" aria-label="Select week">
+        <option value={0}>Week 0 (Preseason)</option>
         {#each Array(TOTAL_WEEKS) as _, i}
           <option value={i+1}>Week {i+1}</option>
         {/each}
