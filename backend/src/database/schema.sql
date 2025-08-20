@@ -46,7 +46,54 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- User picks table (for confidence picks)
+-- Groups table (moved before user_picks to satisfy FK dependency)
+CREATE TABLE IF NOT EXISTS groups (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  identifier VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly unique identifier
+  description TEXT,
+  is_public BOOLEAN DEFAULT true,
+  max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
+  avatar_url VARCHAR(500),
+  created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Group memberships table
+CREATE TABLE IF NOT EXISTS group_memberships (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  role VARCHAR(20) DEFAULT 'member', -- 'admin', 'member'
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(group_id, user_id)
+);
+
+-- Group invitations table
+CREATE TABLE IF NOT EXISTS group_invitations (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+  invited_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  invited_email VARCHAR(255) NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  accepted_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(group_id, invited_email)
+);
+
+-- Group message board
+CREATE TABLE IF NOT EXISTS group_messages (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User picks table (for confidence picks) now that groups exists
 CREATE TABLE IF NOT EXISTS user_picks (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -130,52 +177,6 @@ BEGIN
   EXCEPTION WHEN undefined_column THEN END;
 END $$;
 
--- Groups table
-CREATE TABLE IF NOT EXISTS groups (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  identifier VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly unique identifier
-  description TEXT,
-  is_public BOOLEAN DEFAULT true,
-  max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
-  avatar_url VARCHAR(500),
-  created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Group memberships table
-CREATE TABLE IF NOT EXISTS group_memberships (
-  id SERIAL PRIMARY KEY,
-  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  role VARCHAR(20) DEFAULT 'member', -- 'admin', 'member'
-  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(group_id, user_id)
-);
-
--- Group invitations table
-CREATE TABLE IF NOT EXISTS group_invitations (
-  id SERIAL PRIMARY KEY,
-  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
-  invited_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  invited_email VARCHAR(255) NOT NULL,
-  token VARCHAR(255) UNIQUE NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
-  accepted_at TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(group_id, invited_email)
-);
-
--- Group message board
-CREATE TABLE IF NOT EXISTS group_messages (
-  id SERIAL PRIMARY KEY,
-  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  message TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- Add foreign key constraint for group_id in user_picks (if not exists)
 DO $$ 
