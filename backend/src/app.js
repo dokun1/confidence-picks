@@ -7,6 +7,7 @@ import passport from './config/passport.js';
 import apiRoutes from './routes/api.js';
 import authRoutes from './routes/auth.js';
 import groupsRoutes from './routes/groups.js';
+import picksRoutes from './routes/picks.js';
 import { initDatabase } from './database/init.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use(passport.session());
 app.use('/api', apiRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/groups', groupsRoutes);
+app.use('/api/groups', picksRoutes);
 
 // Health check
 app.get('/', (req, res) => {

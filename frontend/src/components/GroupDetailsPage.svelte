@@ -12,7 +12,7 @@
   let messages = [];
   let isLoading = false;
   let error = null;
-  let activeTab = 'overview'; // 'overview', 'messages', 'members'
+  let activeTab = 'picks'; // default to picks per requirements
   
   // Message form
   let newMessage = '';
@@ -86,6 +86,7 @@
   }
   let showCopyToast = false;
   import InlineToast from '../designsystem/components/InlineToast.svelte';
+  import PicksPanel from './PicksPanel.svelte';
   import Avatar from '../designsystem/components/Avatar.svelte';
 </script>
 
@@ -185,6 +186,12 @@
             on:click={() => activeTab = 'overview'}
           >
             Overview
+          </button>
+          <button
+            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'picks' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
+            on:click={() => activeTab = 'picks'}
+          >
+            Picks
           </button>
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'messages' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
@@ -394,6 +401,13 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      {:else if activeTab === 'picks'}
+        <div class="space-y-lg">
+          <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+            <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Make Your Picks</h2>
+            <PicksPanel groupIdentifier={group.identifier} />
           </div>
         </div>
       {/if}

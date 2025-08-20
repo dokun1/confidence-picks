@@ -50,28 +50,84 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE TABLE IF NOT EXISTS user_picks (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
   game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
-  picked_team_id VARCHAR(50) NOT NULL, -- ESPN team ID
-  confidence_level INTEGER NOT NULL CHECK (confidence_level >= 1 AND confidence_level <= 16),
+  picked_team_id VARCHAR(50) NULL, -- ESPN team ID (nullable until user selects)
+  confidence_level INTEGER NULL CHECK (confidence_level >= 1 AND confidence_level <= 30), -- upper bound generous; enforced per-week dynamically
   week INTEGER NOT NULL,
   season INTEGER NOT NULL,
   season_type INTEGER NOT NULL,
+  won BOOLEAN NULL, -- populated when game final
+  points INTEGER NULL, -- confidence if won else 0 when final
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(user_id, game_id),
-  UNIQUE(user_id, week, season, season_type, confidence_level) -- Each confidence level used once per week
+  UNIQUE(user_id, group_id, game_id), -- one pick record per game per user per group
+  -- Enforce unique confidence per week only when confidence_level NOT NULL (partial unique requires separate index below)
+  CONSTRAINT chk_pick_consistency CHECK (
+    (confidence_level IS NULL AND picked_team_id IS NULL) OR
+    (confidence_level IS NOT NULL AND picked_team_id IS NOT NULL)
+  )
 );
 
+-- Partial unique index for confidence values (Postgres specific) ensures uniqueness only for chosen confidences
+CREATE UNIQUE INDEX IF NOT EXISTS ux_user_picks_conf_per_week
+  ON user_picks(user_id, group_id, week, season, season_type, confidence_level)
+  WHERE confidence_level IS NOT NULL;
+
+-- Migrate legacy unique constraint (user_id, game_id) to (user_id, group_id, game_id)
+DO $$
+BEGIN
+  -- Drop old constraint if it exists
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conrelid='user_picks'::regclass AND conname='user_picks_user_id_game_id_key'
+  ) THEN
+    ALTER TABLE user_picks DROP CONSTRAINT user_picks_user_id_game_id_key;
+  END IF;
+  -- Add new composite unique if not already present (may already exist from table definition)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conrelid='user_picks'::regclass AND conname='user_picks_user_group_game_key'
+  ) THEN
+    ALTER TABLE user_picks ADD CONSTRAINT user_picks_user_group_game_key UNIQUE (user_id, group_id, game_id);
+  END IF;
+END $$;
+
+-- Add betting odds & probability JSON columns if they do not exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'games' AND column_name = 'odds'
+  ) THEN
+    ALTER TABLE games ADD COLUMN odds JSONB NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'games' AND column_name = 'probability'
+  ) THEN
+    ALTER TABLE games ADD COLUMN probability JSONB NULL;
+  END IF;
+END $$;
+
 -- Add group_id column to user_picks if it doesn't exist
-DO $$ 
-BEGIN 
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'user_picks' 
-        AND column_name = 'group_id'
-    ) THEN
-        ALTER TABLE user_picks ADD COLUMN group_id INTEGER;
-    END IF;
+-- Backfill / migrate legacy user_picks schema (add columns if missing)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='group_id') THEN
+    ALTER TABLE user_picks ADD COLUMN group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='won') THEN
+    ALTER TABLE user_picks ADD COLUMN won BOOLEAN NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='points') THEN
+    ALTER TABLE user_picks ADD COLUMN points INTEGER NULL;
+  END IF;
+  -- Relax NOT NULLs if old columns enforced
+  BEGIN
+    ALTER TABLE user_picks ALTER COLUMN picked_team_id DROP NOT NULL;
+  EXCEPTION WHEN undefined_column THEN END; -- ignore if already nullable
+  BEGIN
+    ALTER TABLE user_picks ALTER COLUMN confidence_level DROP NOT NULL;
+  EXCEPTION WHEN undefined_column THEN END;
 END $$;
 
 -- Groups table
