@@ -16,14 +16,19 @@ const getDatabaseURL = () => {
   return process.env.DEV_DATABASE_URL || process.env.DATABASE_URL;
 };
 
+const isProd = process.env.NODE_ENV === 'production';
 const pool = new Pool({
   connectionString: getDatabaseURL(),
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: isProd ? { rejectUnauthorized: false } : false,
+  // Keep pool small for serverless (avoid exhausting Postgres on cold starts)
+  max: isProd ? parseInt(process.env.PG_POOL_MAX || '5', 10) : 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
 });
 
 // Test the connection
 pool.on('connect', () => {
-  console.log(`Connected to ${process.env.NODE_ENV || 'development'} database`);
+  console.log(`Connected to ${process.env.NODE_ENV || 'development'} database (pool size: ${pool.options.max})`);
 });
 
 pool.on('error', (err) => {

@@ -54,23 +54,29 @@ app.get('/', (req, res) => {
   res.json({ message: 'Confidence Picks API is running!' });
 });
 
-// Initialize database and start server
+// Initialize database (optionally) and start server
 async function startServer() {
   try {
-    // Skip database initialization in test environment if it's already done
-    if (process.env.NODE_ENV !== 'test' || process.env.INIT_DB !== 'false') {
-      console.log('Initializing database...');
+    const env = process.env.NODE_ENV || 'development';
+    const initFlag = process.env.INIT_DB;
+    const shouldInit = (
+      // In development & test, initialize unless explicitly disabled
+      (env !== 'production' && initFlag !== 'false') ||
+      // In production only when explicitly enabled
+      (env === 'production' && initFlag === 'true')
+    );
+
+    if (shouldInit) {
+      console.log(`[startup] INIT_DB flag allows schema sync (env=${env}, INIT_DB=${initFlag})`);
       await initDatabase();
-      console.log('Database initialized successfully');
+      console.log('[startup] Database initialized successfully');
     } else {
-      console.log('Skipping database initialization in test environment');
+      console.log(`[startup] Skipping schema initialization (env=${env}, INIT_DB=${initFlag})`);
     }
 
-    // Start server for both local and production
-    if (process.env.NODE_ENV !== 'production') {
-      app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-      });
+    // Only call listen() outside serverless production; Vercel will invoke handler per request
+    if (env !== 'production') {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     }
   } catch (error) {
     console.error('Error starting server:', error);
