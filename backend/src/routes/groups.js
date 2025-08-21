@@ -170,7 +170,20 @@ router.post('/:identifier/invites', authenticateToken, async (req, res) => {
     if (group.userRole !== 'admin') return res.status(403).json({ error: 'Only group admins can create invites' });
     if (group.memberCount >= group.maxMembers) return res.status(400).json({ error: 'Group is full' });
     const invite = await GroupInvite.createLinkInvite({ groupId: group.id, userId: req.user.id, expiresInDays, maxUses });
-    const frontendBase = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+    // Determine frontend base: env override > request origin (if trusted) > localhost fallback
+    const trustedOrigins = new Set([
+      'https://www.confidence-picks.com',
+      'https://confidence-picks.com'
+    ]);
+    let frontendBase = process.env.FRONTEND_BASE_URL;
+    if (!frontendBase) {
+      const origin = (req.get('origin') || '').replace(/\/$/, '');
+      if (trustedOrigins.has(origin)) {
+        frontendBase = origin;
+      } else {
+        frontendBase = 'http://localhost:5173';
+      }
+    }
     const joinUrl = `${frontendBase}/invite/${invite.token}`;
     res.status(201).json({
       token: invite.token,
