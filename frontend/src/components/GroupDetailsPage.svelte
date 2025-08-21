@@ -89,6 +89,8 @@
   import PicksPanel from './PicksPanel.svelte';
   import Avatar from '../designsystem/components/Avatar.svelte';
   import { getScoreboard } from '../lib/picksService.js';
+  import ConfirmDeleteModal from './ConfirmDeleteModal.svelte';
+  import { leaveGroup } from '../lib/groupsService.js';
 
   const currentSeason = new Date().getFullYear();
   const currentSeasonType = 2; // Regular
@@ -96,6 +98,23 @@
   let leaderboardError = '';
   let leaderboardUsers = [];
   let leaderboardLoaded = false;
+  let showLeaveModal = false;
+  let leaving = false;
+  let leaveError = null;
+
+  async function handleLeaveGroup() {
+    leaveError = null;
+    leaving = true;
+    try {
+      await leaveGroup(group.identifier);
+      // Navigate back to groups list after leaving
+      navigateTo('/groups');
+    } catch (e) {
+      leaveError = e.message || 'Failed to leave group';
+    } finally {
+      leaving = false;
+    }
+  }
 
   async function loadLeaderboard() {
     if (!group) return;
@@ -273,23 +292,25 @@
             <!-- Quick Actions -->
             <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
               <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Quick Actions</h2>
-              <div class="flex flex-col md:flex-row md:items-center md:gap-sm">
-                <div class="w-full md:w-auto mb-sm md:mb-0">
-                  <Button variant="primary" size="sm" on:click={() => activeTab = 'messages'}>
-                    View Messages
-                  </Button>
-                </div>
-                <div class="w-full md:w-auto mb-sm md:mb-0">
-                  <Button variant="secondary" size="sm" on:click={() => activeTab = 'members'}>
-                    View Members
-                  </Button>
-                </div>
+              <div class="flex flex-col gap-sm">
+                <Button variant="primary" size="sm" class="w-full" on:click={() => activeTab = 'picks'}>
+                  Make Picks
+                </Button>
+                <Button variant="secondary" size="sm" class="w-full" on:click={() => activeTab = 'messages'}>
+                  View Messages
+                </Button>
                 {#if group.isOwner}
-                  <div class="w-full md:w-auto">
-                    <Button variant="tertiary" size="sm" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
-                      Edit Group
-                    </Button>
-                  </div>
+                  <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
+                    Edit Group
+                  </Button>
+                {/if}
+                {#if !group.isOwner}
+                  <Button variant="destructive" size="sm" class="w-full" on:click={() => { showLeaveModal = true; }} disabled={leaving}>
+                    {leaving ? 'Leaving...' : 'Leave Group'}
+                  </Button>
+                {/if}
+                {#if leaveError}
+                  <div class="text-sm text-error-600 dark:text-error-400">{leaveError}</div>
                 {/if}
               </div>
             </div>
@@ -435,5 +456,15 @@
         </div>
       {/if}
     </div>
+    <ConfirmDeleteModal
+      open={showLeaveModal}
+      name={group?.name}
+      slug={group?.identifier}
+      loading={leaving}
+      error={leaveError}
+      mode="leave"
+      on:cancel={() => { if(!leaving) { showLeaveModal = false; leaveError = null; } }}
+      on:confirm={() => { if(!leaving) handleLeaveGroup(); }}
+    />
   {/if}
 </div>
