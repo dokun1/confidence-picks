@@ -85,16 +85,26 @@
   function applyWeekSpecificFilters() {
     // Apply persistent week-specific filtering rules every time we set games.
     if (week === 0 && Array.isArray(games)) {
-      const cutoff = new Date(2025, 7, 21, 0, 0, 0, 0); // Aug 21 2025 local
-      const cutoffMs = cutoff.getTime();
+      // Previous static cutoff removed all games once date passed; switch to dynamic filter:
+      // Hide only games already started or final; if that would remove them all, show all.
       const before = games.length;
-      games = games.filter(g => {
+      const now = Date.now();
+      const filtered = games.filter(g => {
+        if (!g || !g.status) return true;
+        if (g.status === 'FINAL') return false;
+        if (g.status === 'IN_PROGRESS') return false;
+        // If status suggests scheduled but start time already passed, allow (user may have missed lock) so keep it
+        if (g.status === 'SCHEDULED') return true;
+        // Fallback: compare start time
         const startTs = Date.parse(g.gameDate);
-        if (Number.isNaN(startTs)) return false; // drop invalid dates
-        return startTs >= cutoffMs;
+        if (!Number.isNaN(startTs) && startTs < now) return false; // treat as started
+        return true;
       });
-      if (before !== games.length) {
-        console.debug('[week0 filter] removed', before - games.length, 'games; remaining', games.length);
+      if (filtered.length > 0 && filtered.length < before) {
+        games = filtered;
+        console.debug('[week0 filter] removed', before - filtered.length, 'games; remaining', filtered.length);
+      } else {
+        console.debug('[week0 filter] skipped (would remove all or none)');
       }
       // Keep derived totalGames in sync for internal display logic if desired
       // (weekGameCount reactive already uses games.length)
@@ -253,12 +263,27 @@
   });
 
   $: console.debug('debug picksPanel -> draft', draft, 'complete', completePicks().length, 'canSave', canSaveValue);
+
+  // Expose reactive state to parent via bindings
+  export let canSave = false; // bound by parent (read-only external)
+  export let savingState = false;
+  export let clearingState = false;
+  export let hasSortedPicks = false; // exposed to parent for Clear All enable logic
+  $: canSave = canSaveValue;
+  $: savingState = saving;
+  $: clearingState = clearing;
+  $: hasSortedPicks = sortedGames.length > 0;
+
+  // Expose imperative actions for parent sticky bar
+  export function savePicksAction() { if (canSaveValue && !saving) doSave(); }
+  export function clearAllAction() { if (!clearing) doClear(); }
 </script>
 
 <div class="space-y-lg">
-  <div class="flex flex-wrap items-end gap-sm">
+  <!-- Week selection & refresh (Save/Clear moved to sticky parent bar) -->
+  <div class="flex flex-wrap items-end gap-sm picks-controls-internal">
     <div>
-  <select id="week-select" bind:value={week} on:change={() => { week = Number(week); fetchPicks(); }} class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800" aria-label="Select week">
+      <select id="week-select" bind:value={week} on:change={() => { week = Number(week); fetchPicks(); }} class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800" aria-label="Select week">
         <option value={0}>Week 0 (Preseason)</option>
         {#each Array(TOTAL_WEEKS) as _, i}
           <option value={i+1}>Week {i+1}</option>
@@ -266,16 +291,6 @@
       </select>
     </div>
     <Button variant="tertiary" size="sm" on:click={fetchPicks}>Refresh</Button>
-    <div class="ml-auto flex gap-sm">
-      <div class="flex flex-col items-start gap-1">
-        <button class="inline-flex items-center px-xs py-xxxs rounded-sm text-sm font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100"
-          disabled={!canSaveValue || saving}
-          on:click={() => { if (canSaveValue && !saving) doSave(); }} aria-disabled={!canSaveValue || saving}>
-          {saving ? 'Saving…' : 'Save Picks'}
-        </button>
-      </div>
-      <Button variant="tertiary" size="sm" disabled={clearing} loading={clearing} on:click={doClear}>Clear</Button>
-    </div>
   </div>
 
   {#if error}

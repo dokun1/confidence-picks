@@ -101,6 +101,12 @@
   let showLeaveModal = false;
   let leaving = false;
   let leaveError = null;
+  let picksPanelRef; // reference to PicksPanel for sticky action bar
+  // Reactive bindings from PicksPanel
+  let canSave = false;
+  let savingState = false;
+  let clearingState = false;
+  let hasSortedPicks = false;
 
   async function handleLeaveGroup() {
     leaveError = null;
@@ -222,30 +228,34 @@
         </div>
       </div>
 
-      <!-- Tab Navigation -->
-      <div class="mb-lg border-b border-secondary-200 dark:border-secondary-700">
-        <div class="flex gap-lg">
+      <!-- Tab Navigation (sticky, scrollable) -->
+  <div class="border-b border-secondary-200 dark:border-secondary-700 sticky top-0 z-30 bg-neutral-0/95 dark:bg-secondary-900/95 backdrop-blur supports-backdrop-blur:backdrop-blur-sm">
+        <div class="flex gap-lg overflow-x-auto no-scrollbar px-1" role="tablist" aria-label="Group sections">
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'leaderboard' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
             on:click={() => activeTab = 'leaderboard'}
+            role="tab" aria-selected={activeTab==='leaderboard'}
           >
             Leaderboard
           </button>
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'picks' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
             on:click={() => activeTab = 'picks'}
+            role="tab" aria-selected={activeTab==='picks'}
           >
             Picks
           </button>
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'messages' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
             on:click={() => activeTab = 'messages'}
+            role="tab" aria-selected={activeTab==='messages'}
           >
             Messages ({messages.length})
           </button>
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'members' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
             on:click={() => activeTab = 'members'}
+            role="tab" aria-selected={activeTab==='members'}
           >
             Members ({members.length})
           </button>
@@ -426,32 +436,26 @@
                 </Button>
               </div>
             {/if}
-
-            <!-- Member Stats -->
-            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg {group.isOwner ? 'mt-lg' : ''}">
-              <h3 class="font-semibold text-[var(--color-text-primary)] mb-sm">Member Statistics</h3>
-              <div class="space-y-sm">
-                <div class="flex justify-between text-sm">
-                  <span class="text-[var(--color-text-secondary)]">Total Members:</span>
-                  <span class="font-medium text-[var(--color-text-primary)]">{members.length}</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                  <span class="text-[var(--color-text-secondary)]">Group Owners:</span>
-                  <span class="font-medium text-[var(--color-text-primary)]">{members.filter(m => m.isOwner).length}</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                  <span class="text-[var(--color-text-secondary)]">Regular Members:</span>
-                  <span class="font-medium text-[var(--color-text-primary)]">{members.filter(m => !m.isOwner).length}</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       {:else if activeTab === 'picks'}
         <div class="space-y-lg">
+          <!-- Sticky subheader with actions -->
+          <div class="sticky top-[2.75rem] z-20 mb-lg bg-neutral-0/95 dark:bg-secondary-900/95 backdrop-blur supports-backdrop-blur:backdrop-blur-sm border-b border-secondary-200 dark:border-secondary-700 py-sm px-xs flex items-center gap-sm">
+            <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)] flex-1">Make Your Picks</h2>
+            <button class="inline-flex items-center px-sm py-xxs rounded text-sm font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100"
+              disabled={!canSave || savingState}
+              on:click={() => picksPanelRef?.savePicksAction()}>
+              {savingState ? 'Saving…' : 'Save Picks'}
+            </button>
+            <button class="inline-flex items-center px-sm py-xxs rounded text-sm font-medium bg-red-600 text-white disabled:opacity-50"
+              on:click={() => { if (!clearingState && hasSortedPicks) confirm('Clear all picks? This cannot be undone.') && picksPanelRef?.clearAllAction(); }}
+              disabled={clearingState || !hasSortedPicks}>
+              {clearingState ? 'Clearing…' : 'Clear All'}
+            </button>
+          </div>
           <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-            <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Make Your Picks</h2>
-            <PicksPanel groupIdentifier={group.identifier} />
+            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks groupIdentifier={group.identifier} />
           </div>
         </div>
       {/if}
@@ -468,3 +472,8 @@
     />
   {/if}
 </div>
+
+<style>
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+</style>
