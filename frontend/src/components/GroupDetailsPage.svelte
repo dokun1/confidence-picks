@@ -12,7 +12,7 @@
   let messages = [];
   let isLoading = false;
   let error = null;
-  let activeTab = 'picks'; // default to picks per requirements
+  let activeTab = 'leaderboard'; // default to leaderboard
   
   // Message form
   let newMessage = '';
