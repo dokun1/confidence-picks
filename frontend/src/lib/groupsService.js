@@ -47,7 +47,9 @@ export async function getMyGroups() {
     memberCount: g.memberCount,
     isOwner: g.userRole === 'admin',
     userRole: g.userRole,
-    createdAt: g.createdAt
+  createdAt: g.createdAt,
+  createdByName: g.createdByName || null,
+  createdByPictureUrl: g.createdByPictureUrl || null
   }));
 }
 

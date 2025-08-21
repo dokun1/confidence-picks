@@ -11,6 +11,8 @@ export class Group {
     this.maxMembers = data.maxMembers;
     this.avatarUrl = data.avatarUrl;
     this.createdBy = data.createdBy;
+  this.createdByName = data.createdByName; // owner display name
+  this.createdByPictureUrl = data.createdByPictureUrl; // owner avatar
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
     this.memberCount = data.memberCount;
@@ -81,12 +83,15 @@ export class Group {
     const query = `
       SELECT g.*, 
              COUNT(gm.id) as member_count,
+        u_owner.name as owner_name,
+        u_owner.picture_url as owner_picture_url,
              ${userId ? 'user_gm.role as user_role' : 'NULL as user_role'}
       FROM groups g
       LEFT JOIN group_memberships gm ON g.id = gm.group_id
+      LEFT JOIN users u_owner ON g.created_by = u_owner.id
       ${userId ? 'LEFT JOIN group_memberships user_gm ON g.id = user_gm.group_id AND user_gm.user_id = $2' : ''}
       WHERE g.identifier = $1
-      GROUP BY g.id${userId ? ', user_gm.role' : ''}
+      GROUP BY g.id, u_owner.name, u_owner.picture_url${userId ? ', user_gm.role' : ''}
     `;
     
     const values = userId ? [identifier, userId] : [identifier];
@@ -104,6 +109,8 @@ export class Group {
       maxMembers: row.max_members,
       avatarUrl: row.avatar_url,
       createdBy: row.created_by,
+  createdByName: row.owner_name,
+  createdByPictureUrl: row.owner_picture_url,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       memberCount: parseInt(row.member_count),
@@ -114,12 +121,15 @@ export class Group {
   // Get user's groups
   static async getUserGroups(userId) {
     const query = `
-      SELECT g.*, gm.role as user_role, COUNT(all_gm.id) as member_count
+      SELECT g.*, gm.role as user_role, COUNT(all_gm.id) as member_count,
+        u_owner.name as owner_name,
+        u_owner.picture_url as owner_picture_url
       FROM groups g
       JOIN group_memberships gm ON g.id = gm.group_id
       LEFT JOIN group_memberships all_gm ON g.id = all_gm.group_id
+      LEFT JOIN users u_owner ON g.created_by = u_owner.id
       WHERE gm.user_id = $1
-      GROUP BY g.id, gm.role
+      GROUP BY g.id, gm.role, u_owner.name, u_owner.picture_url
       ORDER BY g.name
     `;
     
@@ -134,6 +144,8 @@ export class Group {
       maxMembers: row.max_members,
       avatarUrl: row.avatar_url,
       createdBy: row.created_by,
+  createdByName: row.owner_name,
+  createdByPictureUrl: row.owner_picture_url,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       memberCount: parseInt(row.member_count),

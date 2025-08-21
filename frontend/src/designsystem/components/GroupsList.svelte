@@ -123,7 +123,7 @@
     </div>
   <!-- Groups list -->
   {:else}
-    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div class="groups-grid">
       {#each groups as group (group.id)}
         <GroupCard 
           {group}
@@ -138,5 +138,11 @@
 </div>
 
 <style>
-  /* Additional custom styles if needed */
+  .groups-grid { display:grid; gap:1.5rem; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { /* aggressive early switch to 2 cols */
+    .groups-grid { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (min-width: 1420px) { /* only show 3 cols on wide screens */
+    .groups-grid { grid-template-columns: repeat(3,1fr); }
+  }
 </style>
