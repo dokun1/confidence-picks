@@ -112,7 +112,7 @@
     }
   }
 
-  $: if (activeTab === 'overview' && group && !leaderboardLoaded && !leaderboardLoading) loadLeaderboard();
+  $: if (activeTab === 'leaderboard' && group && !leaderboardLoaded && !leaderboardLoading) loadLeaderboard();
 </script>
 
 <div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
@@ -207,10 +207,10 @@
       <div class="mb-lg border-b border-secondary-200 dark:border-secondary-700">
         <div class="flex gap-lg">
           <button
-            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'overview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
-            on:click={() => activeTab = 'overview'}
+            class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'leaderboard' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
+            on:click={() => activeTab = 'leaderboard'}
           >
-            Overview
+            Leaderboard
           </button>
           <button
             class="pb-sm px-xs text-sm font-medium border-b-2 transition-colors {activeTab === 'picks' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'}"
@@ -234,8 +234,8 @@
       </div>
 
       <!-- Tab Content -->
-      {#if activeTab === 'overview'}
-        <!-- Overview Tab -->
+      {#if activeTab === 'leaderboard'}
+        <!-- Leaderboard Tab -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
           <div class="lg:col-span-2 space-y-lg">
             <!-- Leaderboard Card -->
@@ -267,38 +267,7 @@
                 </ul>
               {/if}
             </div>
-            <!-- Group Stats -->
-            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-              <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Group Statistics</h2>
-              <div class="grid grid-cols-2 gap-md">
-                <div class="text-center p-md bg-secondary-50 dark:bg-secondary-700 rounded">
-                  <div class="text-2xl font-bold text-[var(--color-text-primary)]">{members.length}</div>
-                  <div class="text-sm text-[var(--color-text-secondary)]">Active Members</div>
-                </div>
-                <div class="text-center p-md bg-secondary-50 dark:bg-secondary-700 rounded">
-                  <div class="text-2xl font-bold text-[var(--color-text-primary)]">{messages.length}</div>
-                  <div class="text-sm text-[var(--color-text-secondary)]">Messages</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-              <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Recent Activity</h2>
-              <div class="space-y-sm">
-                {#each messages.slice(-3).reverse() as message}
-                  <div class="p-sm bg-secondary-50 dark:bg-secondary-700 rounded">
-                    <div class="flex items-center gap-sm">
-                      <Avatar name={message.authorName} pictureUrl={message.authorPictureUrl} variant="md" className="text-xs" />
-                      <span class="font-medium text-[var(--color-text-primary)] truncate">{message.authorName}</span>
-                    </div>
-                    <div class="mt-xxs text-xs text-[var(--color-text-secondary)]">{formatDate(message.createdAt)}</div>
-                    <p class="mt-sm text-sm text-[var(--color-text-secondary)] break-words">{message.content}</p>
-                  </div>
-                {/each}
-              </div>
-            </div>
-          </div>
+          </div> <!-- close first column before second column starts -->
 
           <div class="space-y-lg">
             <!-- Quick Actions -->
@@ -325,7 +294,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </div> <!-- close grid wrapper -->
 
       {:else if activeTab === 'messages'}
         <!-- Messages Tab -->
