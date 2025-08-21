@@ -88,6 +88,31 @@
   import InlineToast from '../designsystem/components/InlineToast.svelte';
   import PicksPanel from './PicksPanel.svelte';
   import Avatar from '../designsystem/components/Avatar.svelte';
+  import { getScoreboard } from '../lib/picksService.js';
+
+  const currentSeason = new Date().getFullYear();
+  const currentSeasonType = 2; // Regular
+  let leaderboardLoading = false;
+  let leaderboardError = '';
+  let leaderboardUsers = [];
+  let leaderboardLoaded = false;
+
+  async function loadLeaderboard() {
+    if (!group) return;
+    leaderboardLoading = true; leaderboardError='';
+    try {
+      const data = await getScoreboard(group.identifier, { season: currentSeason, seasonType: currentSeasonType });
+      const users = (data.users || []).slice().sort((a,b)=> b.totalPoints - a.totalPoints);
+      leaderboardUsers = users;
+      leaderboardLoaded = true;
+    } catch (e) {
+      leaderboardError = e.message || 'Failed to load leaderboard';
+    } finally {
+      leaderboardLoading = false;
+    }
+  }
+
+  $: if (activeTab === 'overview' && group && !leaderboardLoaded && !leaderboardLoading) loadLeaderboard();
 </script>
 
 <div class="min-h-screen bg-neutral-0 dark:bg-secondary-900 pt-16">
@@ -213,6 +238,35 @@
         <!-- Overview Tab -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
           <div class="lg:col-span-2 space-y-lg">
+            <!-- Leaderboard Card -->
+            <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <div class="flex items-center justify-between mb-md">
+                <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">Leaderboard</h2>
+                <button class="text-xs px-sm py-xxs rounded bg-secondary-100 dark:bg-secondary-700 text-secondary-700 dark:text-secondary-300 hover:bg-secondary-200 dark:hover:bg-secondary-600 disabled:opacity-50"
+                  on:click={loadLeaderboard}
+                  disabled={leaderboardLoading}>
+                  {leaderboardLoading ? 'Loading…' : 'Refresh'}
+                </button>
+              </div>
+              {#if leaderboardError}
+                <div class="text-sm text-red-600 dark:text-red-400">{leaderboardError}</div>
+              {:else if leaderboardLoading && !leaderboardLoaded}
+                <div class="text-sm text-[var(--color-text-secondary)]">Loading leaderboard…</div>
+              {:else if leaderboardUsers.length === 0}
+                <div class="text-sm text-[var(--color-text-secondary)]">No points yet.</div>
+              {:else}
+                <ul class="divide-y divide-secondary-200 dark:divide-secondary-700">
+                  {#each leaderboardUsers as u, i}
+                    <li class="flex items-center gap-sm py-sm">
+                      <div class="w-6 text-right pr-1 text-sm font-medium tabular-nums">{i+1}</div>
+                      <Avatar name={u.name} pictureUrl={u.pictureUrl} variant="sm" />
+                      <div class="flex-1 truncate text-sm">{u.name}</div>
+                      <div class="text-sm font-semibold tabular-nums">{u.totalPoints}</div>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
             <!-- Group Stats -->
             <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
               <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-md">Group Statistics</h2>
