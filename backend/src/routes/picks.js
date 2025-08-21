@@ -158,13 +158,44 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
       if (game.status !== 'SCHEDULED') return res.status(409).json({ error: 'Game locked', gameId: gid });
     }
 
-    // Perform clearing first to free any confidence numbers being reassigned
+    // Load existing picks for this user/week to detect implicit overrides
+    const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+
+    // Detect confidence overrides: if payload assigns confidence X to game A but some other existing game B already
+    // has confidence X (and B is not explicitly updated or cleared), we must clear that confidence first (retain winner).
+    const payloadGameIds = new Set(picks.map(p => p.gameId));
+    const implicitConfidenceClears = new Set();
+    for (const p of picks) {
+      if (p.confidence == null) continue;
+      const conflict = existingPicks.find(ep => ep.confidence === p.confidence && ep.gameId !== p.gameId);
+      if (conflict && !payloadGameIds.has(conflict.gameId) && !cleared.includes(conflict.gameId)) {
+        const conflictGame = gameById.get(conflict.gameId);
+        if (!conflictGame) continue; // safety
+        if (conflictGame.status !== 'SCHEDULED') {
+          return res.status(409).json({ error: 'Confidence locked by started game', confidence: p.confidence, gameId: conflict.gameId });
+        }
+        implicitConfidenceClears.add(conflict.gameId);
+      }
+    }
+
+    // Perform explicit clears (full clear: winner+confidence) first
     if (cleared.length > 0) {
       await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType, week, gameIds: cleared });
     }
 
+    // Then clear JUST the confidence for implicit overrides (retain picked_team_id so user can reassign)
+    if (implicitConfidenceClears.size > 0) {
+      const icIds = [...implicitConfidenceClears];
+      const params = [req.user.id, group.id, season, seasonType, week];
+      const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
+      params.push(...icIds);
+      await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
+        WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5 AND game_id IN (${inClause})` , params);
+    }
+
     // Filter out any picks that were also cleared to avoid re-upserting them
-    const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
+  // Filter out any picks that were explicitly cleared (implicit clears keep winner so payload may still include other picks)
+  const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
     if (effectivePicks.length > 0) {
       await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType, week, picks: effectivePicks });
     }
