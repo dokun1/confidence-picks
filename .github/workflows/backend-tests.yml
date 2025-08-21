@@ -1,11 +1,8 @@
 name: Backend Tests
 
 on:
-  push:
-    branches: [ main, develop, feature/backend-testing ]
-    paths: [ 'backend/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths: [ 'backend/**' ]
 
 jobs:

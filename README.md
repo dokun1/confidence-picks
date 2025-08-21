@@ -1,9 +1,9 @@
 # Confidence Picks
 
-> [!WARNING]
-> This is an open-source repository that I'm using to learn Svelte.js and other modern web development techniques. Feel free to explore, but expect occasional experiments and learning-in-progress code!
+> [!NOTE]
+> Open-source learning project (Svelte + Express + Postgres). Expect occasional experiments.
 
-This project is a full-stack web application that allows users to log in and join groups to make confidence picks in NFL games, competing against friends.
+This is a full-stack app where users authenticate, create or join groups, make weekly NFL confidence picks, view leaderboards, share invite links, and post simple group messages.
 
 ## Confidence Picks?
 
@@ -20,10 +20,9 @@ This is a monorepo containing both frontend and backend applications:
 confidence-picks/
 ├── frontend/                    # Svelte frontend application
 │   ├── src/
-│   │   ├── App.svelte          # Main Svelte component
+│   │   ├── App.svelte          # Root component / route switch
 │   │   ├── main.js             # Entry point
-│   │   └── components/
-│   │       └── Header.svelte   # Header component
+│   │   └── components/         # Pages & UI pieces (groups, picks, invite, auth, etc.)
 │   ├── public/
 │   │   ├── index.html          # Main HTML file
 │   │   └── global.css          # Global styles
@@ -32,33 +31,35 @@ confidence-picks/
 │   └── README.md
 ├── backend/                     # Express.js backend API
 │   ├── src/
-│   │   ├── app.js              # Main Express application
+│   │   ├── app.js              # Server bootstrap (conditional schema init)
 │   │   ├── config/
-│   │   │   └── database.js     # PostgreSQL/Neon database config
-│   │   └── routes/
-│   │       └── api.js          # API routes
+│   │   │   └── database.js     # Postgres (Neon) config
+│   │   ├── models/             # Data access (groups, picks, invites, users, games)
+│   │   ├── routes/             # Route modules (groups, picks, invites, auth)
+│   │   └── database/           # schema.sql + init script
 │   ├── package.json            # Backend dependencies
 │   ├── vercel.json             # Vercel deployment config
 │   └── .env                    # Environment variables (not in git)
 ├── .github/
 │   └── workflows/
-│       ├── deploy-frontend.yml # GitHub Pages deployment
-│       └── deploy-backend.yml  # Vercel deployment
+│       ├── deploy-frontend.yml # Frontend deploy (Vercel)
+│       └── deploy-backend.yml  # Backend deploy (Vercel)
 └── README.md                   # This file
 ```
 
 ## Tech Stack
 
 ### Frontend
-- **Svelte** - Reactive UI framework
-- **Vite** - Build tool and dev server
-- **Deployed on:** GitHub Pages
+- **Svelte**
+- **Vite** (dev/build)
+- **Deployed on:** Vercel (https://www.confidence-picks.com)
 
 ### Backend
-- **Express.js** - Web application framework
-- **PostgreSQL** - Database (hosted on Neon)
-- **Node.js** - Runtime environment
-- **Deployed on:** Vercel
+- **Express.js**
+- **PostgreSQL** (Neon)
+- **Node.js**
+- **Invite links** with token + expiry + usage count
+- **Deployed on:** Vercel (API: https://api.confidence-picks.com)
 
 ## Getting Started
 
@@ -119,12 +120,12 @@ confidence-picks/
 ## Deployment
 
 ### Frontend
-- Automatically deploys to GitHub Pages when changes are pushed to `frontend/` directory on the `main` branch
-- Live at: https://www.confidence-picks.com
+- Deploys to Vercel when changes are pushed to `frontend/` on `main`
+- Live: https://www.confidence-picks.com
 
 ### Backend  
-- Automatically deploys to Vercel when changes are pushed to `backend/` directory on the `main` branch
-- Live at: https://confidence-picks-eyb5l3nex-dokun1s-projects.vercel.app
+- Deploys to Vercel when changes are pushed to `backend/` on `main`
+- Primary API: https://api.confidence-picks.com
 
 ## Building for Production
 
@@ -142,7 +143,7 @@ pnpm run start
 
 ## Contributing
 
-This is a learning project, but contributions, suggestions, and feedback are welcome! Feel free to open issues or submit pull requests.
+Contributions (small fixes / suggestions) are welcome. Feel free to open issues or PRs.
 
 ## License
 
