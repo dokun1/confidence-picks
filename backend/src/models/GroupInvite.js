@@ -6,7 +6,44 @@ export class GroupInvite {
     return crypto.randomBytes(16).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
+  // Ensure link-invite related columns exist (production resilience if INIT_DB not run)
+  static async ensureLinkInviteSchema() {
+    try {
+      const check = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='invite_type'`);
+      if (check.rows.length > 0) return; // already present
+      console.log('[invites] Missing invite columns – applying alterations');
+      const ddl = `DO $$
+      BEGIN
+        -- Allow invited_email to be nullable
+        BEGIN
+          ALTER TABLE group_invitations ALTER COLUMN invited_email DROP NOT NULL;
+        EXCEPTION WHEN others THEN NULL; END;
+        -- Add invite_type
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='invite_type') THEN
+          ALTER TABLE group_invitations ADD COLUMN invite_type VARCHAR(20) DEFAULT 'email';
+        END IF;
+        -- Add max_uses
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='max_uses') THEN
+          ALTER TABLE group_invitations ADD COLUMN max_uses INTEGER NULL;
+        END IF;
+        -- Add uses counter
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='uses') THEN
+          ALTER TABLE group_invitations ADD COLUMN uses INTEGER NOT NULL DEFAULT 0;
+        END IF;
+        -- Add revoked_at
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='revoked_at') THEN
+          ALTER TABLE group_invitations ADD COLUMN revoked_at TIMESTAMP NULL;
+        END IF;
+      END $$;`;
+      await pool.query(ddl);
+      console.log('[invites] Invite schema alterations applied');
+    } catch (e) {
+      console.warn('[invites] Failed to ensure invite schema (may already exist):', e.message);
+    }
+  }
+
   static async createLinkInvite({ groupId, userId, expiresInDays = 14, maxUses = null }) {
+    await this.ensureLinkInviteSchema();
     const token = this.generateToken();
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
     const query = `
