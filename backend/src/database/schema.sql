@@ -83,6 +83,55 @@ CREATE TABLE IF NOT EXISTS group_invitations (
   UNIQUE(group_id, invited_email)
 );
 
+-- Shareable / link-style invitations enhancements (idempotent alterations)
+DO $$
+BEGIN
+  -- Allow invited_email to be nullable for link invites (idempotent)
+  ALTER TABLE group_invitations ALTER COLUMN invited_email DROP NOT NULL;
+
+  -- Add invite_type column (email | link)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='invite_type'
+  ) THEN
+    ALTER TABLE group_invitations ADD COLUMN invite_type VARCHAR(20) DEFAULT 'email';
+  END IF;
+
+  -- Add max_uses column
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='max_uses'
+  ) THEN
+    ALTER TABLE group_invitations ADD COLUMN max_uses INTEGER NULL;
+  END IF;
+
+  -- Add uses counter
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='uses'
+  ) THEN
+    ALTER TABLE group_invitations ADD COLUMN uses INTEGER NOT NULL DEFAULT 0;
+  END IF;
+
+  -- Add revoked_at timestamp
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns WHERE table_name='group_invitations' AND column_name='revoked_at'
+  ) THEN
+    ALTER TABLE group_invitations ADD COLUMN revoked_at TIMESTAMP NULL;
+  END IF;
+END $$;
+
+-- Track individual uses (who consumed an invite; supports analytics and preventing duplicate counting)
+CREATE TABLE IF NOT EXISTS group_invitation_uses (
+  id SERIAL PRIMARY KEY,
+  invitation_id INTEGER REFERENCES group_invitations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(invitation_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_invitations_group_type ON group_invitations(group_id, invite_type);
+CREATE INDEX IF NOT EXISTS idx_group_invitation_uses_invitation ON group_invitation_uses(invitation_id);
+-- Cleanup performance index for expiration-based pruning
+CREATE INDEX IF NOT EXISTS idx_group_invitations_expires_at ON group_invitations(expires_at);
+
 -- Group message board
 CREATE TABLE IF NOT EXISTS group_messages (
   id SERIAL PRIMARY KEY,

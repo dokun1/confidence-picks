@@ -21,7 +21,22 @@
 			if (enriched) user = enriched;
 			if (user) setAuthUser(user);
 			status = 'Authenticated. Redirecting...';
-			setTimeout(() => navigateTo('/groups'), 500);
+			// Determine post-login redirect / invite auto-accept
+			let target = '/groups';
+			try {
+				const storedRedirect = sessionStorage.getItem('postLoginRedirect');
+				const inviteToken = sessionStorage.getItem('postLoginInviteToken');
+				if (inviteToken) {
+					// We'll navigate to invite page and set auto-accept flag
+					sessionStorage.removeItem('postLoginInviteToken');
+					sessionStorage.setItem('autoAcceptInviteToken', inviteToken);
+					target = `/invite/${inviteToken}`;
+				} else if (storedRedirect) {
+					target = storedRedirect;
+				}
+				sessionStorage.removeItem('postLoginRedirect');
+			} catch(_) {}
+			setTimeout(() => navigateTo(target), 400);
 		} catch (e) {
 			console.error('Auth callback error', e);
 			error = e.message;

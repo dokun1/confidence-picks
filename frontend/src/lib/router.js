@@ -35,6 +35,8 @@ function getRouteForPath(path, hash = '', search = '') {
         return '/picks';
     } else if (path === '/leaderboard') {
         return '/leaderboard';
+    } else if (path.startsWith('/invite/') && path.split('/').length === 3) {
+        return path; // invite landing page
     } else {
         return '404';
     }

@@ -1,6 +1,7 @@
 import express from 'express';
 import { Group } from '../models/Group.js';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
+import { GroupInvite } from '../models/GroupInvite.js';
 
 const router = express.Router();
 
@@ -156,6 +157,30 @@ router.post('/:identifier/invite', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Create shareable link invite (no email)
+router.post('/:identifier/invites', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const { expiresInDays = 14, maxUses = null } = req.body || {};
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (group.userRole !== 'admin') return res.status(403).json({ error: 'Only group admins can create invites' });
+    if (group.memberCount >= group.maxMembers) return res.status(400).json({ error: 'Group is full' });
+    const invite = await GroupInvite.createLinkInvite({ groupId: group.id, userId: req.user.id, expiresInDays, maxUses });
+    const frontendBase = process.env.FRONTEND_BASE_URL || 'http://localhost:5173';
+    const joinUrl = `${frontendBase}/invite/${invite.token}`;
+    res.status(201).json({
+      token: invite.token,
+      joinUrl,
+      expiresAt: invite.expires_at,
+      maxUses: invite.max_uses,
+      uses: invite.uses
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

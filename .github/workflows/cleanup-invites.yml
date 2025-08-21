@@ -1,0 +1,42 @@
+name: Prune Expired Group Invites
+
+on:
+  schedule:
+    # Every day at 03:15 UTC
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install backend dependencies (frozen)
+        working-directory: ./backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Run invite cleanup (delete mode)
+        working-directory: ./backend
+        env:
+          NODE_ENV: production
+          # Set a repository secret named DATABASE_URL pointing at your production DB
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DEV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          INVITE_RETENTION_DAYS: 0
+        run: pnpm run cleanup:invites
+
+      - name: Summary
+        if: always()
+        run: |
+          echo 'Invite cleanup completed.' >> $GITHUB_STEP_SUMMARY

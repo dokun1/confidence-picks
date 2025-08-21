@@ -15,6 +15,10 @@
     // Check for error in URL params
     const urlParams = new URLSearchParams(window.location.search);
     const errorParam = urlParams.get('error');
+    const redirectParam = urlParams.get('redirect');
+    if (redirectParam) {
+      try { sessionStorage.setItem('postLoginRedirect', decodeURIComponent(redirectParam)); } catch(_) {}
+    }
     
     if (errorParam) {
       switch (errorParam) {
@@ -31,6 +35,12 @@
   });
 
   function handleGoogleSignIn() {
+    // Optionally capture current redirect (if user arrived via manual link) before leaving
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const redirectParam = urlParams.get('redirect');
+      if (redirectParam) sessionStorage.setItem('postLoginRedirect', decodeURIComponent(redirectParam));
+    } catch(_) {}
     AuthService.login();
   }
 </script>
