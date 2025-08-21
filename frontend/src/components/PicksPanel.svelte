@@ -32,6 +32,8 @@
   let loadingScoreboard = false;
   // For auto-scroll focus when a confidence value is overridden
   let focusGameId = null;
+  // Tracks games explicitly cleared so original server picks aren't used as fallback
+  let clearedPicks = new Set();
 
   const TOTAL_WEEKS = 18; // reg season (weeks 1..18) plus we expose week 0 (preseason final)
 
@@ -39,7 +41,8 @@
   function completePicks() { return Object.values(draft).filter(p => p.pickedTeamId && p.confidence != null); }
   function hasIncomplete() { return Object.values(draft).some(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)); }
   let canSaveValue = false;
-  function recalcCanSave() { canSaveValue = completePicks().length > 0 && !saving; }
+  // Allow save if there is at least one complete pick OR there are cleared picks to persist (so user can remove picks)
+  function recalcCanSave() { canSaveValue = (completePicks().length > 0 || clearedPicks.size > 0) && !saving; }
   function incompleteCount() { return Object.values(draft).filter(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)).length; }
 
   async function initWeek() {
@@ -62,8 +65,10 @@
 
   async function fetchPicks() {
     const data = await getPicks(groupIdentifier, { season, seasonType, week });
-    games = data.games;
+  games = data.games;
+  applyWeekSpecificFilters();
     availableConfidences = data.availableConfidences;
+    console.log("totalGames: "+ totalGames);
     totalGames = data.totalGames;
     weekPoints = data.weekPoints;
     original = {};
@@ -77,12 +82,32 @@
     lastRefreshed = new Date();
   }
 
+  function applyWeekSpecificFilters() {
+    // Apply persistent week-specific filtering rules every time we set games.
+    if (week === 0 && Array.isArray(games)) {
+      const cutoff = new Date(2025, 7, 21, 0, 0, 0, 0); // Aug 21 2025 local
+      const cutoffMs = cutoff.getTime();
+      const before = games.length;
+      games = games.filter(g => {
+        const startTs = Date.parse(g.gameDate);
+        if (Number.isNaN(startTs)) return false; // drop invalid dates
+        return startTs >= cutoffMs;
+      });
+      if (before !== games.length) {
+        console.debug('[week0 filter] removed', before - games.length, 'games; remaining', games.length);
+      }
+      // Keep derived totalGames in sync for internal display logic if desired
+      // (weekGameCount reactive already uses games.length)
+    }
+  }
+
   function raiseError(msg) {
     error = msg; showErrorToast = false; requestAnimationFrame(()=> showErrorToast = true); setTimeout(()=> showErrorToast = false, 4000);
   }
 
   function toggleWinner(game, teamId) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
+  clearedPicks.delete(game.id);
     const gState = draft[game.id] || {};
     const teamNum = Number(teamId);
     if (Number(gState.pickedTeamId) === teamNum) {
@@ -102,6 +127,7 @@
 
   function assignConfidence(game, value) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
+  clearedPicks.delete(game.id);
     if (Number.isNaN(value)) value = null;
     // Normalize numeric value (binding may supply string)
     if (typeof value === 'string' && value !== '') value = parseInt(value, 10);
@@ -148,10 +174,13 @@
       const picksPayload = Object.entries(draft)
         .filter(([_, val]) => val.pickedTeamId && val.confidence != null)
         .map(([gameId, val]) => ({ gameId: parseInt(gameId), pickedTeamId: val.pickedTeamId, confidence: val.confidence }));
-      const data = await savePicks(groupIdentifier, { season, seasonType, week, picks: picksPayload });
-      games = data.games; availableConfidences = data.availableConfidences; totalGames = data.totalGames; weekPoints = data.weekPoints;
+      const clearedGameIds = Array.from(clearedPicks);
+      const data = await savePicks(groupIdentifier, { season, seasonType, week, picks: picksPayload, clearedGameIds });
+  games = data.games; applyWeekSpecificFilters();
+  availableConfidences = data.availableConfidences; totalGames = data.totalGames; weekPoints = data.weekPoints;
       original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };
       draft = JSON.parse(JSON.stringify(original));
+      clearedPicks.clear();
       recalcCanSave();
       lastRefreshed = new Date();
     } catch(e) { error = e.message; } finally { saving=false; recalcCanSave(); }
@@ -174,10 +203,20 @@
   $: if (showScoreboard && !scoreboard && !loadingScoreboard) loadScoreboard();
 
   // Reactive derived lists for rendering
+  function handleClearPick(game) {
+    if (draft[game.id]) {
+      delete draft[game.id];
+      draft = { ...draft };
+    }
+    clearedPicks.add(game.id);
+    recalcCanSave();
+  }
+
   $: sortedGames = games
     .filter(g => {
+      if (clearedPicks.has(g.id)) return false;
       const d = draft[g.id];
-      const fallback = (g.pick && (g.pick.pickedTeamId != null && g.pick.confidence != null))
+      const fallback = (!clearedPicks.has(g.id) && g.pick && (g.pick.pickedTeamId != null && g.pick.confidence != null))
         ? { pickedTeamId: Number(g.pick.pickedTeamId), confidence: g.pick.confidence }
         : null;
       const eff = (d && d.pickedTeamId && d.confidence != null) ? d : fallback;
@@ -191,6 +230,7 @@
       return bConf - aConf;
     });
   $: unsortedGames = games.filter(g => !sortedGames.includes(g));
+  $: weekGameCount = games.length;
   $: console.debug('derived lists -> sorted', sortedGames.length, 'unsorted', unsortedGames.length);
 
   function gameWinnerClass(game, teamId) {
@@ -281,14 +321,14 @@
       {#if sortedGames.length > 0}
         <h3 class="mt-md text-sm font-semibold tracking-wide uppercase opacity-70">Sorted Picks</h3>
         {#each sortedGames as game (game.id)}
-          <GamePickRow {game} {draft} {totalGames} {focusGameId} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} />
+          <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={true} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => handleClearPick(game)} />
         {/each}
       {/if}
     </div>
     <div class="space-y-sm mt-lg">
       <h3 class="text-sm font-semibold tracking-wide uppercase opacity-70">Unsorted / Incomplete</h3>
-      {#each unsortedGames as game (game.id)}
-  <GamePickRow {game} {draft} {totalGames} {focusGameId} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} />
+    {#each unsortedGames as game (game.id)}
+  <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => handleClearPick(game)} />
       {/each}
       {#if hasIncomplete()}
         <div class="text-xs text-amber-600 dark:text-amber-400 mt-sm">Finish selecting a confidence and winner for highlighted games to enable saving.</div>

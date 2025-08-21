@@ -115,19 +115,25 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
 router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
-  const { season, seasonType, week, picks } = req.body;
-  if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) return res.status(400).json({ error: 'Missing fields' });
+    const { season, seasonType, week, picks, clearedGameIds } = req.body;
+    if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
     const group = await ensureMembership(identifier, req.user.id);
 
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);
     const gameById = new Map(games.map(g => [g.id, g]));
 
-    // Validation
+    // Normalise clearedGameIds (optional array of numbers)
+    const cleared = Array.isArray(clearedGameIds) ? clearedGameIds.map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n)) : [];
+
+    // Validate picks
     const totalGames = games.length;
     const seenConf = new Set();
     for (const p of picks) {
       const game = gameById.get(p.gameId);
       if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
+      if (cleared.includes(p.gameId)) continue; // if also cleared, skip (clear wins)
       const status = game.status;
       if (status !== 'SCHEDULED') return res.status(409).json({ error: 'Game locked', gameId: p.gameId });
       if (p.confidence != null) {
@@ -137,7 +143,6 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
         if (!p.pickedTeamId) return res.status(400).json({ error: 'Winner required when confidence set', gameId: p.gameId });
       }
       if (p.pickedTeamId != null) {
-        // Normalize both sides to string to tolerate numeric/string id differences from ESPN data
         const validTeam = [game.homeTeam.id, game.awayTeam.id].map(String).includes(String(p.pickedTeamId));
         if (!validTeam) {
           console.warn('Invalid team for game validation failed', { gameId: p.gameId, pickedTeamId: p.pickedTeamId, homeTeamId: game.homeTeam.id, awayTeamId: game.awayTeam.id });
@@ -146,7 +151,24 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
       }
     }
 
-    const saved = await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType, week, picks });
+    // Validate cleared ids (must be valid games & unlocked)
+    for (const gid of cleared) {
+      const game = gameById.get(gid);
+      if (!game) return res.status(400).json({ error: 'Invalid clearedGameId', gameId: gid });
+      if (game.status !== 'SCHEDULED') return res.status(409).json({ error: 'Game locked', gameId: gid });
+    }
+
+    // Perform clearing first to free any confidence numbers being reassigned
+    if (cleared.length > 0) {
+      await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType, week, gameIds: cleared });
+    }
+
+    // Filter out any picks that were also cleared to avoid re-upserting them
+    const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
+    if (effectivePicks.length > 0) {
+      await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType, week, picks: effectivePicks });
+    }
+
     // Return updated week state
     const updatedPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
     const pickMap = new Map(updatedPicks.map(p => [p.gameId, p]));
@@ -159,9 +181,9 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
         pick: pick ? {
           gameId: pick.gameId,
           pickedTeamId: pick.pickedTeamId,
-            confidence: pick.confidence,
-            won: pick.won,
-            points: pick.points
+          confidence: pick.confidence,
+          won: pick.won,
+          points: pick.points
         } : null,
         meta: deriveGamePickMeta(j, pick)
       };
