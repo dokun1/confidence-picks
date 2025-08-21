@@ -4,6 +4,7 @@
   import Button from '../designsystem/components/Button.svelte';
   import TextField from '../designsystem/components/TextField.svelte';
   import { auth } from '../lib/authStore.js';
+  import { createLinkInvite } from '../lib/invitesService.js';
 
   export let groupId = '';
 
@@ -17,6 +18,9 @@
   // Message form
   let newMessage = '';
   let isPostingMessage = false;
+  let inviteCreating = false;
+  let inviteError = null;
+  let lastInviteUrl = null;
 
   onMount(async () => {
     if (groupId) {
@@ -107,6 +111,30 @@
   let savingState = false;
   let clearingState = false;
   let hasSortedPicks = false;
+
+  async function shareInvite() {
+    inviteError = null;
+    try {
+      inviteCreating = true;
+      const invite = await createLinkInvite(group.identifier, {});
+      lastInviteUrl = invite.joinUrl;
+      const message = `Join my Confidence Picks group "${group.name}"\n${invite.joinUrl}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: `Join ${group.name}`, text: message, url: invite.joinUrl });
+        } catch (e) {
+          if (e.name !== 'AbortError') console.warn('Share aborted/failed', e);
+        }
+      } else {
+        await navigator.clipboard.writeText(message);
+        showCopyToast = false; requestAnimationFrame(()=> showCopyToast = true);
+      }
+    } catch(e) {
+      inviteError = e.message || 'Failed to create invite';
+    } finally {
+      inviteCreating = false;
+    }
+  }
 
   async function handleLeaveGroup() {
     leaveError = null;
@@ -313,6 +341,9 @@
                   <Button variant="tertiary" size="sm" class="w-full" on:click={() => navigateTo(`/groups/${group.identifier}/edit`)}>
                     Edit Group
                   </Button>
+                  <Button variant="secondary" size="sm" class="w-full" disabled={inviteCreating} on:click={shareInvite}>
+                    {inviteCreating ? 'Preparing…' : 'Invite / Share'}
+                  </Button>
                 {/if}
                 {#if !group.isOwner}
                   <Button variant="destructive" size="sm" class="w-full" on:click={() => { showLeaveModal = true; }} disabled={leaving}>
@@ -321,6 +352,9 @@
                 {/if}
                 {#if leaveError}
                   <div class="text-sm text-error-600 dark:text-error-400">{leaveError}</div>
+                {/if}
+                {#if inviteError}
+                  <div class="text-sm text-error-600 dark:text-error-400">{inviteError}</div>
                 {/if}
               </div>
             </div>

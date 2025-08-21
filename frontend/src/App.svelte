@@ -12,6 +12,7 @@
   import LoginPage from './components/LoginPage.svelte';
   import ProfilePage from './components/ProfilePage.svelte';
   import AuthCallback from './components/AuthCallback.svelte';
+  import InvitePage from './components/InvitePage.svelte';
   import AuthService from './lib/authService.js';
   import { auth, setAuthUser, clearAuth } from './lib/authStore.js';
 
@@ -311,6 +312,8 @@
   {:else if $currentRoute.startsWith('/auth/callback')}
     <!-- Auth Callback -->
     <AuthCallback />
+  {:else if $currentRoute.startsWith('/invite/') && $currentRoute.split('/').length === 3}
+    <InvitePage token={$currentRoute.split('/')[2]} />
   {:else}
     <!-- 404 Page -->
     <div class="max-w-4xl mx-auto px-lg py-lg">
