@@ -65,6 +65,7 @@
 
   async function fetchPicks() {
     const data = await getPicks(groupIdentifier, { season, seasonType, week });
+  console.debug('[PicksPanel] fetchPicks response', { groupIdentifier, season, seasonType, week, gameCount: data.games.length, available: data.availableConfidences, total: data.totalGames, weekPoints: data.weekPoints });
   games = data.games;
   applyWeekSpecificFilters();
     availableConfidences = data.availableConfidences;
@@ -118,6 +119,7 @@
   function toggleWinner(game, teamId) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
+  console.debug('[PicksPanel] toggleWinner start', { gameId: game.id, teamId, before: draft[game.id] });
     const gState = draft[game.id] || {};
     const teamNum = Number(teamId);
     if (Number(gState.pickedTeamId) === teamNum) {
@@ -133,11 +135,13 @@
     // force reactivity
     draft = { ...draft };
     recalcCanSave();
+  console.debug('[PicksPanel] toggleWinner end', { gameId: game.id, after: draft[game.id] });
   }
 
   function assignConfidence(game, value) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
+  console.debug('[PicksPanel] assignConfidence start', { gameId: game.id, incoming: value, before: draft[game.id] });
     if (Number.isNaN(value)) value = null;
     // Normalize numeric value (binding may supply string)
     if (typeof value === 'string' && value !== '') value = parseInt(value, 10);
@@ -170,6 +174,7 @@
     draft = { ...draft };
     recalcCanSave();
     console.debug('assignConfidence -> game', game.id, 'value', value, 'draft', draft);
+  console.debug('[PicksPanel] assignConfidence end', { gameId: game.id, after: draft[game.id] });
     if (overriddenGameId != null) {
       // trigger auto-scroll highlight
       focusGameId = overriddenGameId;
@@ -185,7 +190,9 @@
         .filter(([_, val]) => val.pickedTeamId && val.confidence != null)
         .map(([gameId, val]) => ({ gameId: parseInt(gameId), pickedTeamId: val.pickedTeamId, confidence: val.confidence }));
       const clearedGameIds = Array.from(clearedPicks);
+    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft });
       const data = await savePicks(groupIdentifier, { season, seasonType, week, picks: picksPayload, clearedGameIds });
+  console.debug('[PicksPanel] doSave response', { games: data.games.map(g => ({ id:g.id, pick:g.pick ? { conf:g.pick.confidence, team:g.pick.pickedTeamId } : null })), availableConfidences: data.availableConfidences });
   games = data.games; applyWeekSpecificFilters();
   availableConfidences = data.availableConfidences; totalGames = data.totalGames; weekPoints = data.weekPoints;
       original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };

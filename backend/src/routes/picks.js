@@ -46,20 +46,24 @@ function deriveGamePickMeta(gameJson, pick) {
 
 router.get('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
-  const { identifier } = req.params;
-  // Runtime safeguard: ensure confidence unique index is correct shape
-  UserPick.ensureConfidenceIndex().catch(()=>{});
+    const { identifier } = req.params;
+    // Runtime safeguard: ensure confidence unique index is correct shape
+    UserPick.ensureConfidenceIndex().catch(()=>{});
     const season = parseInt(req.query.season) || new Date().getFullYear();
     const seasonType = parseInt(req.query.seasonType) || 2;
-  const weekRaw = req.query.week;
-  const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
-  if (Number.isNaN(week)) return res.status(400).json({ error: 'week required' });
+    const weekRaw = req.query.week;
+    const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
+    if (Number.isNaN(week)) return res.status(400).json({ error: 'week required' });
+    console.log('[picks][GET] request', { userId: req.user.id, identifier, season, seasonType, week });
 
     const group = await ensureMembership(identifier, req.user.id);
+    console.log('[picks][GET] group', { groupId: group.id });
 
     // Get games and user picks
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);
+    console.log('[picks][GET] games', games.length, games.map(g=>({ id:g.id, status:g.status, date:g.gameDate })));
     const picks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+    console.log('[picks][GET] existing picks', picks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
     const pickMap = new Map(picks.map(p => [p.gameId, p]));
 
     const totalGames = games.length;
@@ -117,15 +121,18 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
 
 router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
-  const { identifier } = req.params;
-  UserPick.ensureConfidenceIndex().catch(()=>{});
+    const { identifier } = req.params;
+    UserPick.ensureConfidenceIndex().catch(()=>{});
     const { season, seasonType, week, picks, clearedGameIds } = req.body;
+    console.log('[picks][POST] incoming', { userId: req.user.id, identifier, season, seasonType, week, picksCount: picks?.length, clearedGameIds });
     if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) {
       return res.status(400).json({ error: 'Missing fields' });
     }
     const group = await ensureMembership(identifier, req.user.id);
+    console.log('[picks][POST] group', { groupId: group.id });
 
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);
+    console.log('[picks][POST] games', games.length);
     const gameById = new Map(games.map(g => [g.id, g]));
 
     // Normalise clearedGameIds (optional array of numbers)
@@ -134,7 +141,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     // Validate picks
     const totalGames = games.length;
     const seenConf = new Set();
-    for (const p of picks) {
+  for (const p of picks) {
       const game = gameById.get(p.gameId);
       if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       if (cleared.includes(p.gameId)) continue; // if also cleared, skip (clear wins)
@@ -154,6 +161,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
         }
       }
     }
+  console.log('[picks][POST] validation complete');
 
     // Validate cleared ids (must be valid games & unlocked)
     for (const gid of cleared) {
@@ -163,13 +171,14 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     }
 
     // Load existing picks for this user/week to detect implicit overrides
-    const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  console.log('[picks][POST] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
 
     // Detect confidence overrides: if payload assigns confidence X to game A but some other existing game B already
     // has confidence X (and B is not explicitly updated or cleared), we must clear that confidence first (retain winner).
     const payloadGameIds = new Set(picks.map(p => p.gameId));
     const implicitConfidenceClears = new Set();
-    for (const p of picks) {
+  for (const p of picks) {
       if (p.confidence == null) continue;
       const conflict = existingPicks.find(ep => ep.confidence === p.confidence && ep.gameId !== p.gameId);
       if (conflict && !payloadGameIds.has(conflict.gameId) && !cleared.includes(conflict.gameId)) {
@@ -181,14 +190,15 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
         implicitConfidenceClears.add(conflict.gameId);
       }
     }
+  console.log('[picks][POST] implicit clears', [...implicitConfidenceClears]);
 
     // Perform explicit clears (full clear: winner+confidence) first
-    if (cleared.length > 0) {
+  if (cleared.length > 0) {
       await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType, week, gameIds: cleared });
     }
 
     // Then clear JUST the confidence for implicit overrides (retain picked_team_id so user can reassign)
-    if (implicitConfidenceClears.size > 0) {
+  if (implicitConfidenceClears.size > 0) {
       const icIds = [...implicitConfidenceClears];
       const params = [req.user.id, group.id, season, seasonType, week];
       const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
@@ -196,16 +206,19 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
       await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
         WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5 AND game_id IN (${inClause})` , params);
     }
+  console.log('[picks][POST] performed clears', { explicit: cleared, implicit:[...implicitConfidenceClears] });
 
     // Filter out any picks that were also cleared to avoid re-upserting them
   // Filter out any picks that were explicitly cleared (implicit clears keep winner so payload may still include other picks)
   const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
-    if (effectivePicks.length > 0) {
+  if (effectivePicks.length > 0) {
       await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType, week, picks: effectivePicks });
     }
+  console.log('[picks][POST] upsert done');
 
     // Return updated week state
-    const updatedPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  const updatedPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  console.log('[picks][POST] updated picks', updatedPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
     const pickMap = new Map(updatedPicks.map(p => [p.gameId, p]));
 
     const payloadGames = games.map(g => {
@@ -228,13 +241,14 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     const availableConfidences = Array.from({ length: games.length }, (_, i) => i + 1).filter(n => !usedConfidences.includes(n));
     const weekPoints = updatedPicks.reduce((sum, p) => sum + (p.points || 0), 0);
 
-    res.json({
-      games: payloadGames,
+    const responseBody = { games: payloadGames, availableConfidences, totalGames: games.length, pickedCount: usedConfidences.length, weekPoints };
+    console.log('[picks][POST] response', {
       availableConfidences,
-      totalGames: games.length,
-      pickedCount: usedConfidences.length,
-      weekPoints
+      usedConfidences,
+      weekPoints,
+      games: payloadGames.map(g=>({ id:g.id, status:g.status, pick:g.pick ? { conf:g.pick.confidence, team:g.pick.pickedTeamId } : null }))
     });
+    res.json(responseBody);
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
