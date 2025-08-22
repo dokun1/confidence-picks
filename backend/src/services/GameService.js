@@ -30,11 +30,25 @@ export class GameService {
 
   // Get games for a specific week with caching
   static async getGamesForWeek(year, seasonType, week, forceRefresh = false) {
+    // Handle 2025 exception: store preseason week 4 games as regular season week 0
+    let dbSeasonType = seasonType;
+    let dbWeek = week;
+    let espnSeasonType = seasonType;
+    let espnWeek = week;
+    
+    if (year === 2025 && seasonType === 2 && week === 0) {
+      // For 2025 week 0, we actually fetch preseason week 4 from ESPN
+      // but store/query in database as regular season week 0
+      espnSeasonType = 1;
+      espnWeek = 4;
+      console.log('[GameService] 2025 exception: fetching preseason week 4 as regular season week 0');
+    }
+    
     const games = [];
     try {
       // If not forcing refresh, load cached set first to decide refresh strategy
       if (!forceRefresh) {
-        const cachedSet = await Game.findByWeekSeason(year, seasonType, week);
+        const cachedSet = await Game.findByWeekSeason(year, dbSeasonType, dbWeek);
         if (cachedSet.length > 0) {
           const now = Date.now();
           const anyInProgress = cachedSet.some(g => g.status === 'IN_PROGRESS');
@@ -74,11 +88,19 @@ export class GameService {
       }
 
       // Fetch fresh data from ESPN (forceRefresh or refresh needed)
-      const espnGames = await ESPNService.fetchGames(year, seasonType, week);
+      const espnGames = await ESPNService.fetchGames(year, espnSeasonType, espnWeek);
       for (const espnGame of espnGames) {
         const espnId = espnGame.id;
         let cachedGame = await Game.findByESPNId(espnId);
         const freshGame = Game.fromESPNData(espnGame);
+        
+        // For 2025 exception, override the stored season/week values
+        if (year === 2025 && espnSeasonType === 1 && espnWeek === 4 && dbSeasonType === 2 && dbWeek === 0) {
+          freshGame.season = year;
+          freshGame.seasonType = dbSeasonType;
+          freshGame.week = dbWeek;
+        }
+        
         if (!cachedGame) {
           console.log(`Creating new game: ${espnId}`);
           await freshGame.save();

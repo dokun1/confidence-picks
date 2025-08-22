@@ -12,8 +12,21 @@
   $: pick = (() => {
     // If row is marked cleared, only consider draft (which will usually be undefined) and never fall back to server pick
     if (cleared) return draft[game.id] || null;
+    
+    // For final games, merge draft with server pick to get all properties (won, points, etc.)
+    if (game.meta?.final && game.pick) {
+      const draftPick = draft[game.id];
+      return {
+        pickedTeamId: (draftPick?.pickedTeamId ?? game.pick.pickedTeamId) != null ? Number(draftPick?.pickedTeamId ?? game.pick.pickedTeamId) : null,
+        confidence: draftPick?.confidence ?? game.pick.confidence,
+        points: game.pick.points,
+        won: game.pick.won
+      };
+    }
+    
+    // For non-final games, use draft or fallback to server pick
     return draft[game.id] || (game.pick && (game.pick.pickedTeamId != null || game.pick.confidence != null)
-      ? { pickedTeamId: game.pick.pickedTeamId != null ? Number(game.pick.pickedTeamId) : null, confidence: game.pick.confidence, points: game.pick.points }
+      ? { pickedTeamId: game.pick.pickedTeamId != null ? Number(game.pick.pickedTeamId) : null, confidence: game.pick.confidence, points: game.pick.points, won: game.pick.won }
       : null);
   })();
   $: awayTeamId = Number(game.awayTeam.id);
@@ -23,8 +36,8 @@
   $: homeSelected = pickTeamId != null && pickTeamId === homeTeamId;
   $: final = game.meta.final;
   $: winnerTeamId = final ? (game.homeScore > game.awayScore ? game.homeTeam.id : game.awayScore > game.homeScore ? game.awayTeam.id : null) : null;
-  $: pickWon = final && pick?.pickedTeamId && winnerTeamId === pick.pickedTeamId;
-  $: pickLost = final && pick?.pickedTeamId && winnerTeamId && winnerTeamId !== pick.pickedTeamId;
+  $: pickWon = final && pick?.won === true;
+  $: pickLost = final && pick?.won === false;
   $: incomplete = pick && !(pick.pickedTeamId && pick.confidence != null);
   let localConfidence = '';
   let showPicker = false;
@@ -216,7 +229,7 @@
   </div>
   {/if}
   {#if final && pick}
-  <div class="result-line {pickWon ? 'won' : 'lost'}">{pickWon ? 'Won +' + (pick.points ?? pick.confidence ?? 0) : 'Lost ' + (pick.points ?? 0)}</div>
+  <div class="result-line {pickWon ? 'won' : pickLost ? 'lost' : ''}">{pickWon ? 'Won +' + (pick.points ?? pick.confidence ?? 0) : pickLost ? 'Lost ' + Math.abs(pick.points ?? pick.confidence ?? 0) : ''}</div>
   {/if}
 </div>
 
