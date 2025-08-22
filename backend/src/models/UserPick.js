@@ -49,6 +49,27 @@ export class UserPick {
     return rows.map(r => new UserPick(r));
   }
 
+  // Ensure the partial unique index for confidence includes user_id (production resilience)
+  static async ensureConfidenceIndex() {
+    try {
+      const { rows } = await pool.query(`SELECT indexdef FROM pg_indexes WHERE tablename='user_picks' AND indexname='ux_user_picks_conf_per_week'`);
+      if (rows.length === 0) return; // will be created by schema init path
+      const def = rows[0].indexdef;
+      // If user_id missing from index definition, recreate with correct column list
+      // Expected order: (user_id, group_id, week, season, season_type, confidence_level)
+      if (!/\(user_id, group_id, week, season, season_type, confidence_level\)/.test(def)) {
+        console.log('[user_picks] Recreating malformed confidence unique index to include user_id');
+        await pool.query('BEGIN');
+        await pool.query('DROP INDEX IF EXISTS ux_user_picks_conf_per_week');
+        await pool.query(`CREATE UNIQUE INDEX ux_user_picks_conf_per_week ON user_picks(user_id, group_id, week, season, season_type, confidence_level) WHERE confidence_level IS NOT NULL`);
+        await pool.query('COMMIT');
+      }
+    } catch (e) {
+      console.warn('[user_picks] ensureConfidenceIndex failed:', e.message);
+      try { await pool.query('ROLLBACK'); } catch(_) {}
+    }
+  }
+
   static async clearPending({ userId, groupId, season, seasonType, week, gameIds }) {
     if (!gameIds || gameIds.length === 0) return;
     const params = [userId, groupId, season, seasonType, week];

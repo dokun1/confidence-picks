@@ -46,7 +46,9 @@ function deriveGamePickMeta(gameJson, pick) {
 
 router.get('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
-    const { identifier } = req.params;
+  const { identifier } = req.params;
+  // Runtime safeguard: ensure confidence unique index is correct shape
+  UserPick.ensureConfidenceIndex().catch(()=>{});
     const season = parseInt(req.query.season) || new Date().getFullYear();
     const seasonType = parseInt(req.query.seasonType) || 2;
   const weekRaw = req.query.week;
@@ -99,7 +101,8 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
 
 router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => {
   try {
-    const { identifier } = req.params;
+  const { identifier } = req.params;
+  UserPick.ensureConfidenceIndex().catch(()=>{});
     const season = parseInt(req.query.season) || new Date().getFullYear();
     const seasonType = parseInt(req.query.seasonType) || 2;
     const group = await ensureMembership(identifier, req.user.id);
@@ -114,7 +117,8 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
 
 router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
-    const { identifier } = req.params;
+  const { identifier } = req.params;
+  UserPick.ensureConfidenceIndex().catch(()=>{});
     const { season, seasonType, week, picks, clearedGameIds } = req.body;
     if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) {
       return res.status(400).json({ error: 'Missing fields' });
