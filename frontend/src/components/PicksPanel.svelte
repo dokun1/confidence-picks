@@ -65,6 +65,7 @@
 
   async function fetchPicks() {
     const data = await getPicks(groupIdentifier, { season, seasonType, week });
+  console.debug('[PicksPanel] fetchPicks response', { groupIdentifier, season, seasonType, week, gameCount: data.games.length, available: data.availableConfidences, total: data.totalGames, weekPoints: data.weekPoints });
   games = data.games;
   applyWeekSpecificFilters();
     availableConfidences = data.availableConfidences;
@@ -85,29 +86,10 @@
   function applyWeekSpecificFilters() {
     // Apply persistent week-specific filtering rules every time we set games.
     if (week === 0 && Array.isArray(games)) {
-      // Previous static cutoff removed all games once date passed; switch to dynamic filter:
-      // Hide only games already started or final; if that would remove them all, show all.
-      const before = games.length;
-      const now = Date.now();
-      const filtered = games.filter(g => {
-        if (!g || !g.status) return true;
-        if (g.status === 'FINAL') return false;
-        if (g.status === 'IN_PROGRESS') return false;
-        // If status suggests scheduled but start time already passed, allow (user may have missed lock) so keep it
-        if (g.status === 'SCHEDULED') return true;
-        // Fallback: compare start time
-        const startTs = Date.parse(g.gameDate);
-        if (!Number.isNaN(startTs) && startTs < now) return false; // treat as started
-        return true;
-      });
-      if (filtered.length > 0 && filtered.length < before) {
-        games = filtered;
-        console.debug('[week0 filter] removed', before - filtered.length, 'games; remaining', filtered.length);
-      } else {
-        console.debug('[week0 filter] skipped (would remove all or none)');
-      }
-      // Keep derived totalGames in sync for internal display logic if desired
-      // (weekGameCount reactive already uses games.length)
+      // Show ALL preseason week 4 games (including in-progress & final) but rely on meta.locked to prevent edits.
+      // Just log a summary for diagnostics; do not filter.
+      const statusCounts = games.reduce((acc,g)=>{acc[g.status]=(acc[g.status]||0)+1;return acc;},{});
+      console.debug('[week0 filter] no filtering applied; status counts', statusCounts);
     }
   }
 
@@ -118,6 +100,7 @@
   function toggleWinner(game, teamId) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
+  console.debug('[PicksPanel] toggleWinner start', { gameId: game.id, teamId, before: draft[game.id] });
     const gState = draft[game.id] || {};
     const teamNum = Number(teamId);
     if (Number(gState.pickedTeamId) === teamNum) {
@@ -133,11 +116,13 @@
     // force reactivity
     draft = { ...draft };
     recalcCanSave();
+  console.debug('[PicksPanel] toggleWinner end', { gameId: game.id, after: draft[game.id] });
   }
 
   function assignConfidence(game, value) {
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
+  console.debug('[PicksPanel] assignConfidence start', { gameId: game.id, incoming: value, before: draft[game.id] });
     if (Number.isNaN(value)) value = null;
     // Normalize numeric value (binding may supply string)
     if (typeof value === 'string' && value !== '') value = parseInt(value, 10);
@@ -170,6 +155,7 @@
     draft = { ...draft };
     recalcCanSave();
     console.debug('assignConfidence -> game', game.id, 'value', value, 'draft', draft);
+  console.debug('[PicksPanel] assignConfidence end', { gameId: game.id, after: draft[game.id] });
     if (overriddenGameId != null) {
       // trigger auto-scroll highlight
       focusGameId = overriddenGameId;
@@ -185,7 +171,9 @@
         .filter(([_, val]) => val.pickedTeamId && val.confidence != null)
         .map(([gameId, val]) => ({ gameId: parseInt(gameId), pickedTeamId: val.pickedTeamId, confidence: val.confidence }));
       const clearedGameIds = Array.from(clearedPicks);
+    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft });
       const data = await savePicks(groupIdentifier, { season, seasonType, week, picks: picksPayload, clearedGameIds });
+  console.debug('[PicksPanel] doSave response', { games: data.games.map(g => ({ id:g.id, pick:g.pick ? { conf:g.pick.confidence, team:g.pick.pickedTeamId } : null })), availableConfidences: data.availableConfidences });
   games = data.games; applyWeekSpecificFilters();
   availableConfidences = data.availableConfidences; totalGames = data.totalGames; weekPoints = data.weekPoints;
       original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };
@@ -343,7 +331,7 @@
     <div class="space-y-sm mt-lg">
       <h3 class="text-sm font-semibold tracking-wide uppercase opacity-70">Unsorted / Incomplete</h3>
     {#each unsortedGames as game (game.id)}
-  <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => handleClearPick(game)} />
+      <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => { if (!game.meta.locked) handleClearPick(game); }} />
       {/each}
       {#if hasIncomplete()}
         <div class="text-xs text-amber-600 dark:text-amber-400 mt-sm">Finish selecting a confidence and winner for highlighted games to enable saving.</div>

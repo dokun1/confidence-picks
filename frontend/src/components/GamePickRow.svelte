@@ -138,7 +138,7 @@
     </div>
   </div>
   <div class="matchup" role="radiogroup" aria-label="Select winner">
-    <div class="team away-team clickable {awaySelected ? 'selected' : ''} {final && winnerTeamId===game.awayTeam.id ? 'winner' : ''} {pickLost && awaySelected ? 'lost' : ''}"
+  <div class="team away-team clickable {awaySelected ? 'selected' : ''} {final && winnerTeamId===game.awayTeam.id ? 'winner' : ''} {pickLost && awaySelected ? 'lost' : ''}"
       style={teamStyle(game.awayTeam)}
       role="radio" aria-checked={awaySelected} tabindex="0"
       on:keydown={(e)=>onTeamKey(e, game.awayTeam.id)}
@@ -155,7 +155,7 @@
           <span class="team-full">{game.awayTeam.name}</span>
         </div>
       </div>
-      <span class="team-score">{game.awayScore}</span>
+      <span class="team-score {statusLabel === 'in progress' ? 'neutral' : ''}">{game.awayScore}</span>
     </div>
     <div class="vs">@</div>
     <div class="team home-team clickable {homeSelected ? 'selected' : ''} {final && winnerTeamId===game.homeTeam.id ? 'winner' : ''} {pickLost && homeSelected ? 'lost' : ''}"
@@ -175,10 +175,15 @@
           <span class="team-full">{game.homeTeam.name}</span>
         </div>
       </div>
-      <span class="team-score">{game.homeScore}</span>
+  <span class="team-score {statusLabel === 'in progress' ? 'neutral' : ''}">{game.homeScore}</span>
     </div>
     <div class="confidence-wrapper {game.meta.locked ? 'locked-state' : ''}">
-      {#if !game.meta.locked}
+      {#if final}
+        <!-- Final game: always show a confidence result number (0 if no pick) with win/loss coloring -->
+        <div class="final-confidence {pickWon ? 'won' : pickLost ? 'lost' : 'no-pick'}" title={pickWon ? `Won ${(pick?.points ?? pick?.confidence ?? 0)}` : pickLost ? `Lost ${(pick?.points ?? pick?.confidence ?? 0)}` : 'No pick'}>
+          {pick?.points ?? pick?.confidence ?? 0}
+        </div>
+      {:else if !game.meta.locked}
         <button type="button" class="conf-button" aria-haspopup="listbox" aria-expanded={showPicker} on:click|stopPropagation={() => showPicker = !showPicker} title={localConfidence ? `Confidence ${localConfidence}` : 'Select confidence'}>
           <span class="conf-value">{localConfidence || '—'}</span>
           <span class="conf-arrows" aria-hidden="true">▲▼</span>
@@ -191,7 +196,7 @@
           </div>
         {/if}
       {:else}
-        <div class="locked" title="Locked">{pick?.confidence ?? '—'}</div>
+        <div class="locked {statusLabel === 'in progress' && pick?.confidence == null ? 'neutral' : ''}" title="Locked">{pick?.confidence ?? (statusLabel === 'in progress' ? 0 : '—')}</div>
       {/if}
     </div>
   </div>
@@ -251,6 +256,7 @@
   .team-abbr { font-weight:600; font-size:.9rem; }
   .team-full { font-size:.55rem; opacity:.85; text-transform:uppercase; letter-spacing:.5px; }
   .team-score { font-size:1.2rem; font-weight:700; min-width:2ch; text-align:right; text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 4px #000; color:#cfe8ff; }
+  .team-score.neutral { color:#94a3b8; text-shadow:none; }
   .vs { display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.75rem; padding:.25rem .6rem; color:var(--color-text-tertiary,#6c757d); background:var(--color-surface-tertiary,#e9ecef); }
   .confidence-wrapper { display:flex; align-items:center; justify-content:center; padding:.45rem .4rem; background:var(--color-surface-tertiary,#e5e7eb); border-top-right-radius:8px; border-bottom-right-radius:8px; position:relative; }
   .confidence-wrapper.locked-state { opacity:.8; }
@@ -269,6 +275,11 @@
   :global(.dark) .conf-option.active { background:#1d4ed8; border-color:#1d4ed8; }
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
   .locked { font-size:.75rem; font-weight:600; text-align:center; padding:.3rem .4rem; border-radius:6px; background:var(--color-surface-tertiary,#e5e7eb); }
+  .locked.neutral { background:#6b7280; color:#fff; }
+  .final-confidence { display:flex; align-items:center; justify-content:center; font-weight:700; font-size:1.25rem; line-height:1; padding:.55rem .65rem; border-radius:10px; min-width:2.8ch; font-variant-numeric:tabular-nums; box-shadow:0 2px 4px rgba(0,0,0,.25); }
+  .final-confidence.won { background:linear-gradient(135deg,#15803d,#16a34a); color:#fff; }
+  .final-confidence.lost { background:linear-gradient(135deg,#b91c1c,#dc2626); color:#fff; }
+  .final-confidence.no-pick { background:linear-gradient(135deg,#6b7280,#9ca3af); color:#fff; opacity:.9; }
   .result-line { margin-top:.4rem; font-size:.6rem; font-weight:600; letter-spacing:.5px; padding:.25rem .5rem; border-radius:4px; text-transform:uppercase; width:max-content; }
   .result-line.won { background:#16a34a22; color:#15803d; }
   .result-line.lost { background:#dc262622; color:#b91c1c; }
@@ -291,6 +302,11 @@
   :global(.dark) .game-status.not-started { background:#4b5563; }
   :global(.dark) .vs { background:#374151; color:#9ca3af; }
   :global(.dark) .locked { background:#374151; color:#e5e7eb; }
+  :global(.dark) .team-score.neutral { color:#9ca3af; }
+  :global(.dark) .locked.neutral { background:#4b5563; color:#f1f5f9; }
+  :global(.dark) .final-confidence.won { background:linear-gradient(135deg,#166534,#16a34a); }
+  :global(.dark) .final-confidence.lost { background:linear-gradient(135deg,#7f1d1d,#b91c1c); }
+  :global(.dark) .final-confidence.no-pick { background:linear-gradient(135deg,#4b5563,#6b7280); }
   @media (max-width:950px){
     .matchup { 
       display:grid; 
