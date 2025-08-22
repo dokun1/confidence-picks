@@ -180,8 +180,8 @@
     <div class="confidence-wrapper {game.meta.locked ? 'locked-state' : ''}">
       {#if final}
         <!-- Final game: always show a confidence result number (0 if no pick) with win/loss coloring -->
-        <div class="final-confidence {pickWon ? 'won' : pickLost ? 'lost' : 'no-pick'}" title={pickWon ? `Won ${pick?.confidence ?? 0}` : pickLost ? `Lost ${pick?.confidence ?? 0}` : 'No pick'}>
-          {pick?.confidence ?? 0}
+        <div class="final-confidence {pickWon ? 'won' : pickLost ? 'lost' : 'no-pick'}" title={pickWon ? `Won ${(pick?.points ?? pick?.confidence ?? 0)}` : pickLost ? `Lost ${(pick?.points ?? pick?.confidence ?? 0)}` : 'No pick'}>
+          {pick?.points ?? pick?.confidence ?? 0}
         </div>
       {:else if !game.meta.locked}
         <button type="button" class="conf-button" aria-haspopup="listbox" aria-expanded={showPicker} on:click|stopPropagation={() => showPicker = !showPicker} title={localConfidence ? `Confidence ${localConfidence}` : 'Select confidence'}>
