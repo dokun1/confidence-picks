@@ -59,10 +59,14 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     const group = await ensureMembership(identifier, req.user.id);
     console.log('[picks][GET] group', { groupId: group.id });
 
-    // Get games and user picks
-    const games = await GameService.getGamesForWeek(season, seasonType, week, false);
+  // Map regular season week 0 to preseason week 4 (display preseason finale inside week 0 slot)
+  let fetchSeasonType = seasonType;
+  let fetchWeek = week;
+  if (seasonType === 2 && week === 0) { fetchSeasonType = 1; fetchWeek = 4; console.log('[picks][GET] mapped week0 -> preseason week4'); }
+  // Get games and user picks (using mapped values)
+  const games = await GameService.getGamesForWeek(season, fetchSeasonType, fetchWeek, false);
     console.log('[picks][GET] games', games.length, games.map(g=>({ id:g.id, status:g.status, date:g.gameDate })));
-    const picks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  const picks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
     console.log('[picks][GET] existing picks', picks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
     const pickMap = new Map(picks.map(p => [p.gameId, p]));
 
@@ -131,7 +135,11 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     const group = await ensureMembership(identifier, req.user.id);
     console.log('[picks][POST] group', { groupId: group.id });
 
-    const games = await GameService.getGamesForWeek(season, seasonType, week, false);
+  // Week 0 mapping logic (same as GET)
+  let fetchSeasonType = seasonType;
+  let fetchWeek = week;
+  if (seasonType === 2 && week === 0) { fetchSeasonType = 1; fetchWeek = 4; console.log('[picks][POST] mapped week0 -> preseason week4'); }
+  const games = await GameService.getGamesForWeek(season, fetchSeasonType, fetchWeek, false);
     console.log('[picks][POST] games', games.length);
     const gameById = new Map(games.map(g => [g.id, g]));
 
@@ -171,7 +179,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     }
 
     // Load existing picks for this user/week to detect implicit overrides
-  const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
   console.log('[picks][POST] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
 
     // Detect confidence overrides: if payload assigns confidence X to game A but some other existing game B already
@@ -194,7 +202,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
 
     // Perform explicit clears (full clear: winner+confidence) first
   if (cleared.length > 0) {
-      await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType, week, gameIds: cleared });
+  await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, gameIds: cleared });
     }
 
     // Then clear JUST the confidence for implicit overrides (retain picked_team_id so user can reassign)
@@ -212,12 +220,12 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   // Filter out any picks that were explicitly cleared (implicit clears keep winner so payload may still include other picks)
   const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
   if (effectivePicks.length > 0) {
-      await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType, week, picks: effectivePicks });
+  await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, picks: effectivePicks });
     }
   console.log('[picks][POST] upsert done');
 
     // Return updated week state
-  const updatedPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType, week });
+  const updatedPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
   console.log('[picks][POST] updated picks', updatedPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
     const pickMap = new Map(updatedPicks.map(p => [p.gameId, p]));
 
