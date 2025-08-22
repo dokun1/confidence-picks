@@ -89,8 +89,9 @@ export class UserPick {
 
   static async updateResults({ gameId, winningTeamId }) {
     // Set won/points for all picks for a final game
+    // Correct picks get +confidence points, incorrect picks get -confidence points
     await pool.query(`UPDATE user_picks
-      SET won = (picked_team_id = $2), points = CASE WHEN picked_team_id = $2 THEN confidence_level ELSE 0 END, updated_at=NOW()
+      SET won = (picked_team_id = $2), points = CASE WHEN picked_team_id = $2 THEN confidence_level ELSE -confidence_level END, updated_at=NOW()
       WHERE game_id = $1`, [gameId, winningTeamId]);
   }
 }

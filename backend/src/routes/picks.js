@@ -60,11 +60,27 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     console.log('[picks][GET] group', { groupId: group.id });
 
   // Map regular season week 0 to preseason week 4 (display preseason finale inside week 0 slot)
+  // Exception for 2025: treat preseason week 4 as regular season week 0 for testing
   let fetchSeasonType = seasonType;
   let fetchWeek = week;
-  if (seasonType === 2 && week === 0) { fetchSeasonType = 1; fetchWeek = 4; console.log('[picks][GET] mapped week0 -> preseason week4'); }
+  let espnSeasonType = seasonType;
+  let espnWeek = week;
+  
+  if (seasonType === 2 && week === 0) {
+    if (season === 2025) {
+      // For 2025, fetch from ESPN as preseason week 4 but store/query as regular season week 0
+      espnSeasonType = 1;
+      espnWeek = 4;
+      console.log('[picks][GET] 2025 exception: fetching ESPN preseason week 4 as regular season week 0');
+    } else {
+      // For other years, use the normal mapping
+      fetchSeasonType = 1; 
+      fetchWeek = 4; 
+      console.log('[picks][GET] mapped week0 -> preseason week4'); 
+    }
+  }
   // Get games and user picks (using mapped values)
-  const games = await GameService.getGamesForWeek(season, fetchSeasonType, fetchWeek, false);
+  const games = await GameService.getGamesForWeek(season, espnSeasonType || fetchSeasonType, espnWeek || fetchWeek, false);
     console.log('[picks][GET] games', games.length, games.map(g=>({ id:g.id, status:g.status, date:g.gameDate })));
   const picks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
     console.log('[picks][GET] existing picks', picks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
@@ -136,10 +152,26 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     console.log('[picks][POST] group', { groupId: group.id });
 
   // Week 0 mapping logic (same as GET)
+  // Exception for 2025: treat preseason week 4 as regular season week 0 for testing
   let fetchSeasonType = seasonType;
   let fetchWeek = week;
-  if (seasonType === 2 && week === 0) { fetchSeasonType = 1; fetchWeek = 4; console.log('[picks][POST] mapped week0 -> preseason week4'); }
-  const games = await GameService.getGamesForWeek(season, fetchSeasonType, fetchWeek, false);
+  let espnSeasonType = seasonType;
+  let espnWeek = week;
+  
+  if (seasonType === 2 && week === 0) {
+    if (season === 2025) {
+      // For 2025, fetch from ESPN as preseason week 4 but store/query as regular season week 0
+      espnSeasonType = 1;
+      espnWeek = 4;
+      console.log('[picks][POST] 2025 exception: fetching ESPN preseason week 4 as regular season week 0');
+    } else {
+      // For other years, use the normal mapping
+      fetchSeasonType = 1; 
+      fetchWeek = 4; 
+      console.log('[picks][POST] mapped week0 -> preseason week4'); 
+    }
+  }
+  const games = await GameService.getGamesForWeek(season, espnSeasonType || fetchSeasonType, espnWeek || fetchWeek, false);
     console.log('[picks][POST] games', games.length);
     const gameById = new Map(games.map(g => [g.id, g]));
 
@@ -208,7 +240,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     // Then clear JUST the confidence for implicit overrides (retain picked_team_id so user can reassign)
   if (implicitConfidenceClears.size > 0) {
       const icIds = [...implicitConfidenceClears];
-      const params = [req.user.id, group.id, season, seasonType, week];
+      const params = [req.user.id, group.id, season, fetchSeasonType, fetchWeek];
       const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
       params.push(...icIds);
       await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
