@@ -84,6 +84,50 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     console.log('[picks][GET] games', games.length, games.map(g=>({ id:g.id, status:g.status, date:g.gameDate })));
   const picks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
     console.log('[picks][GET] existing picks', picks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+    
+    // Compute points on-demand for FINAL games that don't have stored scores
+    const calculatedPicks = [];
+    for (const pick of picks) {
+      const game = games.find(g => g.id === pick.gameId);
+      if (pick.points == null && game && game.status === 'FINAL' && pick.confidence != null && pick.pickedTeamId) {
+        const winnerTeamId = (game.homeScore > game.awayScore) ? game.homeTeam.id : game.awayTeam.id;
+        pick.points = (winnerTeamId === pick.pickedTeamId) ? pick.confidence : -pick.confidence;
+        pick.won = (winnerTeamId === pick.pickedTeamId);
+        console.log(`[picks][GET] computed on-demand score for game ${game.id}: pick team ${pick.pickedTeamId}, winner ${winnerTeamId}, result: ${pick.won ? 'WON' : 'LOST'} ${pick.points}`);
+        
+        // Track this game for group-wide database persistence
+        calculatedPicks.push({
+          gameId: pick.gameId,
+          winnerTeamId: winnerTeamId
+        });
+      }
+    }
+    
+    // Persist calculated scores to database for ALL users in the group
+    if (calculatedPicks.length > 0) {
+      try {
+        for (const calc of calculatedPicks) {
+          // Update ALL users' picks for this game in this group
+          const { rowCount } = await pool.query(`
+            UPDATE user_picks 
+            SET won = (picked_team_id = $1), 
+                points = CASE 
+                  WHEN picked_team_id = $1 THEN confidence_level 
+                  ELSE -confidence_level 
+                END,
+                updated_at = NOW()
+            WHERE group_id = $2 AND game_id = $3 AND picked_team_id IS NOT NULL AND points IS NULL
+          `, [calc.winnerTeamId, group.id, calc.gameId]);
+          
+          console.log(`[picks][GET] updated ${rowCount} user picks for game ${calc.gameId} (winner: team ${calc.winnerTeamId}) across all group members`);
+        }
+        console.log(`[picks][GET] persisted scores for ${calculatedPicks.length} games across all group members`);
+      } catch (error) {
+        console.error('[picks][GET] failed to persist calculated scores:', error);
+        // Continue anyway - on-demand calculation still works
+      }
+    }
+    
     const pickMap = new Map(picks.map(p => [p.gameId, p]));
 
     const totalGames = games.length;
