@@ -276,3 +276,28 @@ BEGIN
     ALTER TABLE games ADD COLUMN status_detail VARCHAR(80) NULL;
   END IF;
 END $$;
+
+-- Fix duplicate confidence constraint issue (remove incorrect constraint that lacks group_id)
+DO $$
+BEGIN
+  -- Drop the incorrect constraint that was missing group_id in the unique key
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conrelid='user_picks'::regclass 
+    AND conname='user_picks_user_id_week_season_season_type_confidence_level_key'
+  ) THEN
+    ALTER TABLE user_picks DROP CONSTRAINT user_picks_user_id_week_season_season_type_confidence_level_key;
+    RAISE NOTICE 'Dropped incorrect confidence constraint that was missing group_id';
+  END IF;
+  
+  -- Ensure the correct unique index exists (already defined above, but this is a safety check)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes 
+    WHERE tablename='user_picks' AND indexname='ux_user_picks_conf_per_week'
+  ) THEN
+    CREATE UNIQUE INDEX ux_user_picks_conf_per_week 
+    ON user_picks(user_id, group_id, week, season, season_type, confidence_level) 
+    WHERE confidence_level IS NOT NULL;
+    RAISE NOTICE 'Created correct confidence unique index with group_id';
+  END IF;
+END $$;
