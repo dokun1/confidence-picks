@@ -1,7 +1,9 @@
 <script>
   import { onMount } from 'svelte';
   import Button from '../designsystem/components/Button.svelte';
-  import { getClosestWeek, getPicks, savePicks, clearPicks, getScoreboard } from '../lib/picksService.js';
+  import { getClosestWeek, getPicks, getUserPicks, savePicks, clearPicks, getScoreboard } from '../lib/picksService.js';
+  import { getMembers } from '../lib/groupsService.js';
+  import AuthService from '../lib/authService.js';
   import GamePickRow from './GamePickRow.svelte';
   import InlineToast from '../designsystem/components/InlineToast.svelte';
 
@@ -35,6 +37,14 @@
   // Tracks games explicitly cleared so original server picks aren't used as fallback
   let clearedPicks = new Set();
 
+  // User selection functionality
+  let groupMembers = [];
+  let selectedUserId = null;
+  let currentUser = null;
+  let viewingOtherUser = false;
+  let targetUser = null;
+  let loadingMembers = false;
+
   const TOTAL_WEEKS = 18; // reg season (weeks 1..18) plus we expose week 0 (preseason final)
 
   function isDirty() { return JSON.stringify(draft) !== JSON.stringify(original); }
@@ -42,43 +52,116 @@
   function hasIncomplete() { return Object.values(draft).some(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)); }
   let canSaveValue = false;
   // Allow save if there is at least one complete pick OR there are cleared picks to persist (so user can remove picks)
-  function recalcCanSave() { canSaveValue = (completePicks().length > 0 || clearedPicks.size > 0) && !saving; }
+  function recalcCanSave() { canSaveValue = (completePicks().length > 0 || clearedPicks.size > 0) && !saving && !viewingOtherUser; }
   function incompleteCount() { return Object.values(draft).filter(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)).length; }
+
+  async function loadGroupMembers() {
+    if (loadingMembers) return;
+    loadingMembers = true;
+    try {
+      groupMembers = await getMembers(groupIdentifier);
+      
+      // Get current user and set as default
+      currentUser = AuthService.getUser();
+      if (currentUser && !selectedUserId) {
+        const currentMember = groupMembers.find(m => m.email === currentUser.email);
+        if (currentMember) {
+          selectedUserId = currentMember.id;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load group members:', e);
+      raiseError('Failed to load group members');
+    } finally {
+      loadingMembers = false;
+    }
+  }
+
+  async function handleUserChange() {
+    if (!selectedUserId) return;
+    
+    const isCurrentUser = currentUser && groupMembers.find(m => m.id === selectedUserId)?.email === currentUser.email;
+    viewingOtherUser = !isCurrentUser;
+    
+    // Clear previous state
+    games = [];
+    draft = {};
+    original = {};
+    clearedPicks.clear();
+    availableConfidences = [];
+    
+    await fetchPicks();
+  }
 
   async function initWeek() {
     loading = true; error='';
     try {
-    if (week == null) {
+      await loadGroupMembers();
+      
+      if (week == null) {
         try {
           const cw = await getClosestWeek(groupIdentifier, season, seasonType);
           week = cw.week;
         } catch (e) {
-          // fallback to week 1 if endpoint fails
-      if (week == null) week = 0; // allow week 0 fallback
+          // fallback to week 0 if endpoint fails
+          if (week == null) week = 0; // allow week 0 fallback
           raiseError(e.message);
         }
       }
-  // Fetch even for week 0 (previously skipped due to falsy check)
-  if (week !== null && week !== undefined) await fetchPicks();
+      // Fetch even for week 0 (previously skipped due to falsy check)
+      if (week !== null && week !== undefined) await fetchPicks();
     } catch (e) { error = e.message; } finally { loading=false; }
   }
 
   async function fetchPicks() {
-    const data = await getPicks(groupIdentifier, { season, seasonType, week });
-  console.debug('[PicksPanel] fetchPicks response', { groupIdentifier, season, seasonType, week, gameCount: data.games.length, available: data.availableConfidences, total: data.totalGames, weekPoints: data.weekPoints });
-  games = data.games;
-  applyWeekSpecificFilters();
-    availableConfidences = data.availableConfidences;
+    if (!selectedUserId) return;
+    
+    const isCurrentUser = currentUser && groupMembers.find(m => m.id === selectedUserId)?.email === currentUser.email;
+    
+    let data;
+    if (isCurrentUser) {
+      // Fetch current user's picks (editable)
+      data = await getPicks(groupIdentifier, { season, seasonType, week });
+      viewingOtherUser = false;
+      targetUser = null;
+    } else {
+      // Fetch other user's picks (read-only)
+      data = await getUserPicks(groupIdentifier, selectedUserId, { season, seasonType, week });
+      viewingOtherUser = true;
+      targetUser = data.targetUser;
+    }
+
+    console.debug('[PicksPanel] fetchPicks response', { 
+      groupIdentifier, 
+      season, 
+      seasonType, 
+      week, 
+      gameCount: data.games.length, 
+      available: data.availableConfidences, 
+      total: data.totalGames, 
+      weekPoints: data.weekPoints,
+      viewingOtherUser,
+      targetUser: targetUser?.name 
+    });
+
+    games = data.games;
+    applyWeekSpecificFilters();
+    availableConfidences = data.availableConfidences || [];
     console.log("totalGames: "+ totalGames);
     totalGames = data.totalGames;
     weekPoints = data.weekPoints;
+    
     original = {};
-    for (const g of games) {
-      if (g.pick && (g.pick.pickedTeamId != null || g.pick.confidence != null)) {
-        original[g.id] = { pickedTeamId: g.pick.pickedTeamId != null ? Number(g.pick.pickedTeamId) : null, confidence: g.pick.confidence };
+    if (!viewingOtherUser) {
+      // Only set up draft state for current user
+      for (const g of games) {
+        if (g.pick && (g.pick.pickedTeamId != null || g.pick.confidence != null)) {
+          original[g.id] = { pickedTeamId: g.pick.pickedTeamId != null ? Number(g.pick.pickedTeamId) : null, confidence: g.pick.confidence };
+        }
       }
+      draft = JSON.parse(JSON.stringify(original));
     }
-    draft = JSON.parse(JSON.stringify(original));
+    
     recalcCanSave();
     lastRefreshed = new Date();
   }
@@ -98,9 +181,13 @@
   }
 
   function toggleWinner(game, teamId) {
-    if (game.meta.locked) { raiseError('Game is locked'); return; }
-  clearedPicks.delete(game.id);
-  console.debug('[PicksPanel] toggleWinner start', { gameId: game.id, teamId, before: draft[game.id] });
+    if (game.meta.locked || viewingOtherUser) { 
+      if (viewingOtherUser) raiseError('Cannot edit other users\' picks'); 
+      else raiseError('Game is locked'); 
+      return; 
+    }
+    clearedPicks.delete(game.id);
+    console.debug('[PicksPanel] toggleWinner start', { gameId: game.id, teamId, before: draft[game.id] });
     const gState = draft[game.id] || {};
     const teamNum = Number(teamId);
     if (Number(gState.pickedTeamId) === teamNum) {
@@ -120,9 +207,13 @@
   }
 
   function assignConfidence(game, value) {
-    if (game.meta.locked) { raiseError('Game is locked'); return; }
-  clearedPicks.delete(game.id);
-  console.debug('[PicksPanel] assignConfidence start', { gameId: game.id, incoming: value, before: draft[game.id] });
+    if (game.meta.locked || viewingOtherUser) { 
+      if (viewingOtherUser) raiseError('Cannot edit other users\' picks'); 
+      else raiseError('Game is locked'); 
+      return; 
+    }
+    clearedPicks.delete(game.id);
+    console.debug('[PicksPanel] assignConfidence start', { gameId: game.id, incoming: value, before: draft[game.id] });
     if (Number.isNaN(value)) value = null;
     // Normalize numeric value (binding may supply string)
     if (typeof value === 'string' && value !== '') value = parseInt(value, 10);
@@ -149,13 +240,13 @@
       // nothing else
     }
     draft[game.id] = gState;
-  // If confidence cleared and no winner, remove entire draft entry; if winner exists keep as incomplete so it appears unsorted
-  if (value == null && gState.pickedTeamId == null) delete draft[game.id];
+    // If confidence cleared and no winner, remove entire draft entry; if winner exists keep as incomplete so it appears unsorted
+    if (value == null && gState.pickedTeamId == null) delete draft[game.id];
     // force reactivity
     draft = { ...draft };
     recalcCanSave();
     console.debug('assignConfidence -> game', game.id, 'value', value, 'draft', draft);
-  console.debug('[PicksPanel] assignConfidence end', { gameId: game.id, after: draft[game.id] });
+    console.debug('[PicksPanel] assignConfidence end', { gameId: game.id, after: draft[game.id] });
     if (overriddenGameId != null) {
       // trigger auto-scroll highlight
       focusGameId = overriddenGameId;
@@ -202,6 +293,10 @@
 
   // Reactive derived lists for rendering
   function handleClearPick(game) {
+    if (viewingOtherUser) {
+      raiseError('Cannot edit other users\' picks');
+      return;
+    }
     if (draft[game.id]) {
       delete draft[game.id];
       draft = { ...draft };
@@ -212,22 +307,38 @@
 
   $: sortedGames = games
     .filter(g => {
-      if (clearedPicks.has(g.id)) return false;
-      const d = draft[g.id];
-      const fallback = (!clearedPicks.has(g.id) && g.pick && (g.pick.pickedTeamId != null && g.pick.confidence != null))
-        ? { pickedTeamId: Number(g.pick.pickedTeamId), confidence: g.pick.confidence }
-        : null;
-      const eff = (d && d.pickedTeamId && d.confidence != null) ? d : fallback;
-      return eff && eff.pickedTeamId && eff.confidence != null;
+      if (viewingOtherUser) {
+        // For other users, show all games with picks (only visible games are returned by API)
+        return g.pick && g.pick.pickedTeamId != null && g.pick.confidence != null;
+      } else {
+        // For current user, use existing logic
+        if (clearedPicks.has(g.id)) return false;
+        const d = draft[g.id];
+        const fallback = (!clearedPicks.has(g.id) && g.pick && (g.pick.pickedTeamId != null && g.pick.confidence != null))
+          ? { pickedTeamId: Number(g.pick.pickedTeamId), confidence: g.pick.confidence }
+          : null;
+        const eff = (d && d.pickedTeamId && d.confidence != null) ? d : fallback;
+        return eff && eff.pickedTeamId && eff.confidence != null;
+      }
     })
     .sort((a,b) => {
-      const da = draft[a.id];
-      const db = draft[b.id];
-      const aConf = (da && da.confidence != null) ? da.confidence : (a.pick ? a.pick.confidence : 0);
-      const bConf = (db && db.confidence != null) ? db.confidence : (b.pick ? b.pick.confidence : 0);
-      return bConf - aConf;
+      if (viewingOtherUser) {
+        // For other users, sort by their actual picks
+        const aConf = a.pick ? a.pick.confidence : 0;
+        const bConf = b.pick ? b.pick.confidence : 0;
+        return bConf - aConf;
+      } else {
+        // For current user, use existing logic
+        const da = draft[a.id];
+        const db = draft[b.id];
+        const aConf = (da && da.confidence != null) ? da.confidence : (a.pick ? a.pick.confidence : 0);
+        const bConf = (db && db.confidence != null) ? db.confidence : (b.pick ? b.pick.confidence : 0);
+        return bConf - aConf;
+      }
     });
-  $: unsortedGames = games.filter(g => !sortedGames.includes(g));
+  $: unsortedGames = viewingOtherUser ? 
+    games.filter(g => !sortedGames.includes(g)) : 
+    games.filter(g => !sortedGames.includes(g));
   $: weekGameCount = games.length;
   $: console.debug('derived lists -> sorted', sortedGames.length, 'unsorted', unsortedGames.length);
 
@@ -268,9 +379,35 @@
 </script>
 
 <div class="space-y-lg">
-  <!-- Week selection & refresh (Save/Clear moved to sticky parent bar) -->
+  <!-- Week selection, user selection & refresh (Save/Clear moved to sticky parent bar) -->
   <div class="flex flex-wrap items-end gap-sm picks-controls-internal">
     <div>
+      <label for="user-select" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+        View picks for:
+      </label>
+      <select 
+        id="user-select" 
+        bind:value={selectedUserId} 
+        on:change={handleUserChange}
+        disabled={loadingMembers}
+        class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800 min-w-32" 
+        aria-label="Select user"
+      >
+        {#if loadingMembers}
+          <option>Loading...</option>
+        {:else}
+          {#each groupMembers as member (member.id)}
+            <option value={member.id}>
+              {member.name} {member.email === currentUser?.email ? '(You)' : ''}
+            </option>
+          {/each}
+        {/if}
+      </select>
+    </div>
+    <div>
+      <label for="week-select" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Week:
+      </label>
       <select id="week-select" bind:value={week} on:change={() => { week = Number(week); fetchPicks(); }} class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800" aria-label="Select week">
         <option value={0}>Week 0 (Preseason)</option>
         {#each Array(TOTAL_WEEKS) as _, i}
@@ -281,6 +418,20 @@
     <Button variant="tertiary" size="sm" on:click={fetchPicks}>Refresh</Button>
   </div>
 
+  {#if viewingOtherUser && targetUser}
+    <div class="p-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm">
+      <div class="flex items-center gap-xs">
+        <span class="text-blue-700 dark:text-blue-300">👀</span>
+        <span class="text-blue-700 dark:text-blue-300 font-medium">
+          Viewing {targetUser.name}'s picks
+        </span>
+      </div>
+      <div class="text-blue-600 dark:text-blue-400 text-xs mt-1">
+        You can only see picks for games that are in progress or final. You cannot edit other users' picks.
+      </div>
+    </div>
+  {/if}
+
   {#if error}
     <div class="p-sm bg-red-100 text-red-700 rounded text-sm">{error}</div>
   {/if}
@@ -288,7 +439,13 @@
     <InlineToast open={showErrorToast} message={error} variant="danger" onClose={() => showErrorToast=false} />
   </div>
 
-  <div class="text-md font-medium">Week Points: {weekPoints}</div>
+  <div class="text-md font-medium">
+    {#if viewingOtherUser && targetUser}
+      {targetUser.name}'s Week Points: {weekPoints}
+    {:else}
+      Week Points: {weekPoints}
+    {/if}
+  </div>
 
   {#if showScoreboard}
     {#if loadingScoreboard}
@@ -329,11 +486,17 @@
       {/if}
     </div>
     <div class="space-y-sm mt-lg">
-      <h3 class="text-sm font-semibold tracking-wide uppercase opacity-70">Unsorted / Incomplete</h3>
+      <h3 class="text-sm font-semibold tracking-wide uppercase opacity-70">
+        {#if viewingOtherUser}
+          {targetUser ? `${targetUser.name}'s ` : ''}Other Picks
+        {:else}
+          Unsorted / Incomplete
+        {/if}
+      </h3>
     {#each unsortedGames as game (game.id)}
-      <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => { if (!game.meta.locked) handleClearPick(game); }} />
+      <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => { if (!game.meta.locked && !viewingOtherUser) handleClearPick(game); }} />
       {/each}
-      {#if hasIncomplete()}
+      {#if hasIncomplete() && !viewingOtherUser}
         <div class="text-xs text-amber-600 dark:text-amber-400 mt-sm">Finish selecting a confidence and winner for highlighted games to enable saving.</div>
       {/if}
     </div>

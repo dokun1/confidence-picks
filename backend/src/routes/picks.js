@@ -411,4 +411,148 @@ router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
   }
 });
 
+// Get another user's picks (read-only, only for in-progress/final games)
+router.get('/:identifier/users/:userId/picks', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, userId } = req.params;
+    const targetUserId = parseInt(userId);
+    const season = parseInt(req.query.season) || new Date().getFullYear();
+    const seasonType = parseInt(req.query.seasonType) || 2;
+    const weekRaw = req.query.week;
+    const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
+    if (Number.isNaN(week) || Number.isNaN(targetUserId)) {
+      return res.status(400).json({ error: 'week and userId required' });
+    }
+
+    console.log('[picks][GET user picks] request', { 
+      requesterId: req.user.id, 
+      targetUserId, 
+      identifier, 
+      season, 
+      seasonType, 
+      week 
+    });
+
+    const group = await ensureMembership(identifier, req.user.id);
+    
+    // Verify target user is also a member of this group
+    const targetMemberQuery = await pool.query(`
+      SELECT u.id, u.name, u.email, u.picture_url
+      FROM users u
+      JOIN group_memberships gm ON u.id = gm.user_id
+      WHERE gm.group_id = $1 AND u.id = $2
+    `, [group.id, targetUserId]);
+
+    if (targetMemberQuery.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found in this group' });
+    }
+
+    const targetUser = targetMemberQuery.rows[0];
+
+    // Map week 0 handling (same as regular picks endpoint)
+    let fetchSeasonType = seasonType;
+    let fetchWeek = week;
+    let espnSeasonType = seasonType;
+    let espnWeek = week;
+    
+    if (seasonType === 2 && week === 0) {
+      if (season === 2025) {
+        espnSeasonType = 1;
+        espnWeek = 4;
+        console.log('[picks][GET user picks] 2025 exception: fetching ESPN preseason week 4 as regular season week 0');
+      } else {
+        fetchSeasonType = 1; 
+        fetchWeek = 4; 
+        console.log('[picks][GET user picks] mapped week0 -> preseason week4'); 
+      }
+    }
+
+    // Get games and target user's picks
+    const games = await GameService.getGamesForWeek(season, espnSeasonType || fetchSeasonType, espnWeek || fetchWeek, false);
+    const picks = await UserPick.findForUserWeek({ 
+      userId: targetUserId, 
+      groupId: group.id, 
+      season, 
+      seasonType: fetchSeasonType, 
+      week: fetchWeek 
+    });
+
+    console.log('[picks][GET user picks] found', picks.length, 'picks for user', targetUserId);
+
+    // Compute on-demand scoring for final games
+    let weekPoints = 0;
+    for (const pick of picks) {
+      const game = games.find(g => g.id === pick.gameId);
+      if (pick.points == null && game && game.status === 'FINAL' && pick.confidence != null && pick.pickedTeamId) {
+        const winnerTeamId = (game.homeScore > game.awayScore) ? game.homeTeam.id : game.awayTeam.id;
+        pick.points = (winnerTeamId === pick.pickedTeamId) ? pick.confidence : -pick.confidence;
+        pick.won = (winnerTeamId === pick.pickedTeamId);
+        console.log(`[picks][GET user picks] computed score for game ${game.id}: ${pick.won ? 'WON' : 'LOST'} ${pick.points}`);
+      }
+      if (pick.points != null) {
+        weekPoints += pick.points;
+      }
+    }
+
+    // Filter games to only show picks for in-progress or final games
+    const picksMap = new Map(picks.map(p => [p.gameId, p]));
+    const visibleGames = [];
+    const availableConfidences = [];
+
+    for (const game of games) {
+      // Only show games that are in-progress or final
+      const isVisible = game.status === 'IN_PROGRESS' || game.status === 'FINAL';
+      
+      if (isVisible) {
+        const pick = picksMap.get(game.id);
+        const gameMeta = deriveGamePickMeta(game, pick);
+        
+        visibleGames.push({
+          id: game.id,
+          homeTeam: game.homeTeam,
+          awayTeam: game.awayTeam,
+          gameDate: game.gameDate,
+          status: game.status,
+          homeScore: game.homeScore || 0,
+          awayScore: game.awayScore || 0,
+          week: game.week,
+          pick: pick ? {
+            pickedTeamId: pick.pickedTeamId,
+            confidence: pick.confidence,
+            points: pick.points,
+            won: pick.won
+          } : null,
+          meta: {
+            ...gameMeta,
+            locked: true, // Always locked for other users' picks
+            canEdit: false
+          }
+        });
+      }
+    }
+
+    console.log('[picks][GET user picks] returning', visibleGames.length, 'visible games out of', games.length, 'total');
+
+    res.json({
+      games: visibleGames,
+      availableConfidences, // Empty for other users
+      totalGames: games.length, // Total games for the week
+      weekPoints,
+      targetUser: {
+        id: targetUser.id,
+        name: targetUser.name,
+        email: targetUser.email,
+        pictureUrl: targetUser.picture_url
+      },
+      viewMode: 'other-user' // Flag to indicate this is viewing another user
+    });
+
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    console.error('GET user picks error', e);
+    res.status(500).json({ error: 'Failed to load user picks' });
+  }
+});
+
 export default router;

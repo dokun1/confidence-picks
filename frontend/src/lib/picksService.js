@@ -42,6 +42,16 @@ export async function getPicks(groupIdentifier, { season, seasonType, week }) {
   return res.json();
 }
 
+export async function getUserPicks(groupIdentifier, userId, { season, seasonType, week }) {
+  const params = new URLSearchParams({ season, seasonType, week });
+  const res = await authFetch(`${apiBase()}/${groupIdentifier}/users/${userId}/picks?${params}`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load user picks');
+  }
+  return res.json();
+}
+
 export async function savePicks(groupIdentifier, body) {
   const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks`, { method: 'POST', body: JSON.stringify(body) });
   if (!res.ok) {
