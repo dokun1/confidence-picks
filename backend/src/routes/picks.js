@@ -340,7 +340,8 @@ router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
         const home = typeof r.home_team === 'string' ? JSON.parse(r.home_team) : r.home_team;
         const away = typeof r.away_team === 'string' ? JSON.parse(r.away_team) : r.away_team;
         const winnerTeamId = (r.home_score > r.away_score) ? home.id : away.id;
-        r.points = (winnerTeamId === r.picked_team_id) ? r.confidence_level : 0;
+        // Use correct scoring: +confidence for wins, -confidence for losses
+        r.points = (winnerTeamId === r.picked_team_id) ? r.confidence_level : -r.confidence_level;
       }
     }
 
