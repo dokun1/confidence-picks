@@ -488,7 +488,7 @@
               {clearingState ? 'Clearing…' : 'Clear All'}
             </button>
           </div>
-          <div class="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+          <div class="picks-container bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
             <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks groupIdentifier={group.identifier} />
           </div>
         </div>
@@ -510,4 +510,14 @@
 <style>
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  
+  @media (max-width: 950px) {
+    .picks-container {
+      background: transparent !important;
+      border: none !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+    }
+  }
 </style>
