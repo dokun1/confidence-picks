@@ -15,9 +15,9 @@
 
   // Size-specific classes
   const sizeClasses = {
-    sm: 'px-xs py-xxxs text-sm rounded-sm',
-    md: 'px-md py-xs text-base rounded-base',
-    lg: 'px-lg py-sm text-lg rounded-md'
+    sm: 'px-xs py-xxxs text-sm rounded-sm h-10',
+    md: 'px-md py-xs text-base rounded-base h-10',
+    lg: 'px-lg py-sm text-lg rounded-md h-10'
   };
 
   // Variant-specific classes
