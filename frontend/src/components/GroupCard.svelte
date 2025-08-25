@@ -73,7 +73,7 @@
         Edit
       </Button>
       <Button 
-        variant="danger" 
+        variant="destructive" 
         size="sm"
         on:click={onDelete}
       >
