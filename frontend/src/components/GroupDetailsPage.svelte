@@ -499,39 +499,50 @@
         <div class="space-y-lg">
           <!-- Sticky subheader with actions -->
           <div class="sticky top-[2.75rem] z-20 mb-lg bg-neutral-0/95 dark:bg-secondary-900/95 backdrop-blur supports-backdrop-blur:backdrop-blur-sm border-b border-secondary-200 dark:border-secondary-700 py-sm px-xs">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-sm">
-              <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)] flex-1">Make Your Picks</h2>
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-sm">
+              <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)]">Make Your Picks</h2>
               
-              <div class="flex items-center gap-sm">
+              <!-- Mobile: Stacked buttons, Desktop: Horizontal buttons -->
+              <div class="flex flex-col md:flex-row gap-sm md:items-center">
                 <!-- Multi-group save buttons -->
                 {#if hasMultipleGroups}
-                  <div class="flex">
+                  <!-- Treat multi-group save as one item that stacks internally on desktop only -->
+                  <div class="flex w-full md:w-auto">
                     <!-- Main save button -->
-                    <button class="inline-flex items-center px-lg py-sm rounded-r-none border-r-0 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                    <button class="inline-flex items-center px-lg py-sm rounded-r-none border-r-0 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10 flex-1 md:flex-initial justify-center"
                       disabled={!canSave || savingState}
                       on:click={() => picksPanelRef?.savePicksAction()}>
                       {savingState ? 'Saving…' : 'Save Picks'}
                     </button>
                     
                     <!-- Dropdown trigger button -->
-                    <button class="inline-flex items-center px-sm py-sm rounded-l-none border-l border-primary-400 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                    <button class="inline-flex items-center px-sm py-sm rounded-l-none border-l border-primary-400 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10 justify-center"
                       disabled={!canSave || savingState}
                       on:click={() => picksPanelRef?.toggleGroupSelector()}>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="transform {showGroupSelector ? 'rotate-180' : ''}">
+                      <svg width="16" height="16" viewBox="0 0 12 12" fill="none" class="transform {showGroupSelector ? 'rotate-180' : ''}">
                         <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </button>
                   </div>
                 {:else}
                   <!-- Single group save button -->
-                  <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                  <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10 w-full md:w-auto justify-center"
                     disabled={!canSave || savingState}
                     on:click={() => picksPanelRef?.savePicksAction()}>
                     {savingState ? 'Saving…' : 'Save Picks'}
                   </button>
                 {/if}
                 
-                <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-red-600 text-white disabled:opacity-50 h-10"
+                <!-- How to play button -->
+                <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-secondary-100 text-secondary-700 hover:bg-secondary-200 dark:bg-secondary-700 dark:text-secondary-200 dark:hover:bg-secondary-600 h-10 w-full md:w-auto justify-center gap-xs"
+                  on:click={() => navigateTo('/about')}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>
+                  </svg>
+                  How To Play
+                </button>
+                
+                <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-red-600 text-white disabled:opacity-50 h-10 w-full md:w-auto justify-center"
                   on:click={() => { if (!clearingState && hasSortedPicks) confirm('Clear all picks? This cannot be undone.') && picksPanelRef?.clearAllAction(); }}
                   disabled={clearingState || !hasSortedPicks}>
                   {clearingState ? 'Clearing…' : 'Clear All'}
