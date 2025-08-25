@@ -82,17 +82,6 @@
     >
       Join Group
     </Button>
-    <Button 
-      variant="secondary" 
-      size="sm"
-      on:click={onRefresh}
-      disabled={isLoading}
-    >
-      <svg class="w-4 h-4 mr-xs" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 14.652v4.992h4.992M19.207 15.6a8.25 8.25 0 01-14.64 2.474m-.774-9.574a8.25 8.25 0 0114.64-2.474" />
-      </svg>
-      Refresh
-    </Button>
   </div>
   {/if}
   
