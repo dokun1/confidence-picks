@@ -120,21 +120,42 @@
       inviteCreating = true;
       const invite = await createLinkInvite(group.identifier, {});
       lastInviteUrl = invite.joinUrl;
-      const message = `Join my Confidence Picks group "${group.name}"\n${invite.joinUrl}`;
+      
       if (navigator.share) {
         try {
-          await navigator.share({ title: `Join ${group.name}`, text: message, url: invite.joinUrl });
+          // For native share, only use the URL to avoid duplication when copying
+          // Apps like Messages will auto-generate previews from the URL
+          await navigator.share({ 
+            title: `Join my Confidence Picks group "${group.name}"`, 
+            url: invite.joinUrl 
+          });
         } catch (e) {
           if (e.name !== 'AbortError') console.warn('Share aborted/failed', e);
         }
       } else {
-        await navigator.clipboard.writeText(message);
+        // For clipboard fallback, just copy the URL
+        await navigator.clipboard.writeText(invite.joinUrl);
         showCopyToast = false; requestAnimationFrame(()=> showCopyToast = true);
       }
     } catch(e) {
       inviteError = e.message || 'Failed to create invite';
     } finally {
       inviteCreating = false;
+    }
+  }
+
+  async function copyInviteLink() {
+    inviteError = null;
+    try {
+      if (!lastInviteUrl) {
+        const invite = await createLinkInvite(group.identifier, {});
+        lastInviteUrl = invite.joinUrl;
+      }
+      await navigator.clipboard.writeText(lastInviteUrl);
+      showCopyToast = false; 
+      requestAnimationFrame(()=> showCopyToast = true);
+    } catch(e) {
+      inviteError = e.message || 'Failed to copy invite link';
     }
   }
 
@@ -344,7 +365,7 @@
                     Edit Group
                   </Button>
                   <Button variant="secondary" size="sm" class="w-full" disabled={inviteCreating} on:click={shareInvite}>
-                    {inviteCreating ? 'Preparing…' : 'Invite / Share'}
+                    {inviteCreating ? 'Preparing…' : 'Share Invite'}
                   </Button>
                 {/if}
                 {#if !group.isOwner}
