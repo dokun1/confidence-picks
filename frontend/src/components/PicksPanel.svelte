@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Button from '../designsystem/components/Button.svelte';
   import { getClosestWeek, getPicks, savePicks, clearPicks, getScoreboard } from '../lib/picksService.js';
+  import { getMyGroups } from '../lib/groupsService.js';
   import GamePickRow from './GamePickRow.svelte';
   import InlineToast from '../designsystem/components/InlineToast.svelte';
 
@@ -35,6 +36,11 @@
   // Tracks games explicitly cleared so original server picks aren't used as fallback
   let clearedPicks = new Set();
 
+  // Multi-group save functionality
+  let userGroups = [];
+  let selectedGroups = new Set();
+  let loadingGroups = false;
+
   const TOTAL_WEEKS = 18; // regular season weeks 1-18
 
   function isDirty() { return JSON.stringify(draft) !== JSON.stringify(original); }
@@ -48,6 +54,9 @@
   async function initWeek() {
     loading = true; error='';
     try {
+      // Load user's groups for multi-group save feature
+      await loadUserGroups();
+      
     if (week == null) {
         try {
           const cw = await getClosestWeek(groupIdentifier, season, seasonType);
@@ -61,6 +70,21 @@
   // Fetch even for week 0 (previously skipped due to falsy check)
   if (week !== null && week !== undefined) await fetchPicks();
     } catch (e) { error = e.message; } finally { loading=false; }
+  }
+
+  async function loadUserGroups() {
+    if (loadingGroups) return;
+    loadingGroups = true;
+    try {
+      userGroups = await getMyGroups();
+      // Initialize with current group selected
+      selectedGroups = new Set([groupIdentifier]);
+    } catch (e) {
+      console.warn('Failed to load user groups:', e);
+      userGroups = [];
+    } finally {
+      loadingGroups = false;
+    }
   }
 
   async function fetchPicks() {
@@ -166,17 +190,54 @@
         .filter(([_, val]) => val.pickedTeamId && val.confidence != null)
         .map(([gameId, val]) => ({ gameId: parseInt(gameId), pickedTeamId: val.pickedTeamId, confidence: val.confidence }));
       const clearedGameIds = Array.from(clearedPicks);
-    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft });
-      const data = await savePicks(groupIdentifier, { season, seasonType, week, picks: picksPayload, clearedGameIds });
-  console.debug('[PicksPanel] doSave response', { games: data.games.map(g => ({ id:g.id, pick:g.pick ? { conf:g.pick.confidence, team:g.pick.pickedTeamId } : null })), availableConfidences: data.availableConfidences });
-  games = data.games; applyWeekSpecificFilters();
-  availableConfidences = data.availableConfidences; totalGames = data.totalGames; weekPoints = data.weekPoints;
-      original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };
-      draft = JSON.parse(JSON.stringify(original));
-      clearedPicks.clear();
-      recalcCanSave();
-      lastRefreshed = new Date();
-    } catch(e) { error = e.message; } finally { saving=false; recalcCanSave(); }
+    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft, selectedGroups: Array.from(selectedGroups) });
+      
+      // If only one group or no groups selected, save to current group only
+      const groupsToSave = selectedGroups.size === 0 ? [groupIdentifier] : Array.from(selectedGroups);
+      
+      let lastResult = null;
+      
+      // Save to each selected group
+      for (const groupId of groupsToSave) {
+        try {
+          const result = await savePicks(groupId, { season, seasonType, week, picks: picksPayload, clearedGameIds });
+          // Use the result from the current group for UI updates
+          if (groupId === groupIdentifier) {
+            lastResult = result;
+          }
+        } catch (e) {
+          // If saving to current group fails, throw error. For other groups, just log warning
+          if (groupId === groupIdentifier) {
+            throw e;
+          } else {
+            console.warn(`Failed to save picks to group ${groupId}:`, e);
+            const groupName = userGroups.find(g => g.identifier === groupId)?.name || groupId;
+            raiseError(`Warning: Failed to save to ${groupName}`);
+          }
+        }
+      }
+
+      // Update UI with current group's data
+      if (lastResult) {
+        console.debug('[PicksPanel] doSave response', { games: lastResult.games.map(g => ({ id:g.id, pick:g.pick ? { conf:g.pick.confidence, team:g.pick.pickedTeamId } : null })), availableConfidences: lastResult.availableConfidences });
+        games = lastResult.games; applyWeekSpecificFilters();
+        availableConfidences = lastResult.availableConfidences; totalGames = lastResult.totalGames; weekPoints = lastResult.weekPoints;
+        original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };
+        draft = JSON.parse(JSON.stringify(original));
+        clearedPicks.clear();
+        recalcCanSave();
+        lastRefreshed = new Date();
+      }
+      
+      // Close group selector after successful save
+      showGroupSelector = false;
+      
+    } catch(e) { 
+      error = e.message; 
+    } finally { 
+      saving=false; 
+      recalcCanSave(); 
+    }
   }
 
   async function doClear() {
@@ -252,14 +313,38 @@
   export let savingState = false;
   export let clearingState = false;
   export let hasSortedPicks = false; // exposed to parent for Clear All enable logic
+  export let hasMultipleGroups = false; // exposed to parent for multi-group UI
+  export let showGroupSelector = false; // exposed to parent for dropdown visibility
   $: canSave = canSaveValue;
   $: savingState = saving;
   $: clearingState = clearing;
   $: hasSortedPicks = sortedGames.length > 0;
+  $: hasMultipleGroups = userGroups && userGroups.length > 1;
 
   // Expose imperative actions for parent sticky bar
   export function savePicksAction() { if (canSaveValue && !saving) doSave(); }
   export function clearAllAction() { if (!clearing) doClear(); }
+  export function toggleGroupSelector() { 
+    if (hasMultipleGroups) {
+      showGroupSelector = !showGroupSelector; 
+    }
+  }
+  export function selectAllGroups() {
+    if (userGroups) {
+      userGroups.forEach(group => selectedGroups.add(group.identifier));
+      selectedGroups = selectedGroups; // Trigger reactivity
+    }
+  }
+  export function deselectAllGroups() {
+    selectedGroups.clear();
+    selectedGroups = selectedGroups; // Trigger reactivity
+  }
+  export function getSelectedGroupsInfo() {
+    return {
+      count: selectedGroups.size,
+      names: userGroups ? userGroups.filter(g => selectedGroups.has(g.identifier)).map(g => g.name) : []
+    };
+  }
 </script>
 
 <div class="space-y-lg">
@@ -330,6 +415,78 @@
       {#if hasIncomplete()}
         <div class="text-xs text-amber-600 dark:text-amber-400 mt-sm">Finish selecting a confidence and winner for highlighted games to enable saving.</div>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Group selector dropdown (positioned relative to parent save button) -->
+  {#if showGroupSelector && userGroups && userGroups.length > 1}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fixed inset-0 z-40" on:click={() => showGroupSelector = false}></div>
+    <div class="fixed top-20 right-4 w-80 bg-white dark:bg-secondary-800 border border-gray-200 dark:border-secondary-700 rounded-lg shadow-lg z-50">
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="p-4" on:click|stopPropagation>
+        <h3 class="text-sm font-medium text-gray-900 dark:text-neutral-0 mb-3">Save picks to groups:</h3>
+        
+        <!-- Group checkboxes -->
+        <div class="space-y-3 mb-4 max-h-48 overflow-y-auto">
+          {#each userGroups as group}
+            <label class="flex items-center space-x-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={selectedGroups.has(group.identifier)}
+                on:change={(e) => {
+                  if (e.target.checked) {
+                    selectedGroups.add(group.identifier);
+                  } else {
+                    selectedGroups.delete(group.identifier);
+                  }
+                  selectedGroups = selectedGroups; // Trigger reactivity
+                }}
+                class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-2"
+              />
+              <span class="text-sm text-gray-700 dark:text-neutral-200">{group.name}</span>
+              {#if group.identifier === groupIdentifier}
+                <span class="text-xs text-blue-600 dark:text-blue-400">(current)</span>
+              {/if}
+            </label>
+          {/each}
+        </div>
+        
+        <!-- Action buttons -->
+        <div class="flex flex-col space-y-2">
+          <Button 
+            variant="primary" 
+            size="md" 
+            disabled={!canSave || saving || selectedGroups.size === 0}
+            on:click={savePicksAction}
+            class="w-full flex h-10"
+          >
+            {saving ? 'Saving…' : `Save to ${selectedGroups.size} group${selectedGroups.size === 1 ? '' : 's'}`}
+          </Button>
+          
+          <Button 
+            variant="secondary" 
+            size="md" 
+            disabled={saving}
+            on:click={selectAllGroups}
+            class="w-full flex h-10"
+          >
+            Select All
+          </Button>
+          
+          <Button 
+            variant="destructive" 
+            size="md" 
+            disabled={saving}
+            on:click={deselectAllGroups}
+            class="w-full flex h-10"
+          >
+            Deselect All
+          </Button>
+        </div>
+      </div>
     </div>
   {/if}
 </div>

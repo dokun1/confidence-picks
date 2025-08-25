@@ -111,6 +111,8 @@
   let savingState = false;
   let clearingState = false;
   let hasSortedPicks = false;
+  let hasMultipleGroups = false;
+  let showGroupSelector = false;
 
   async function shareInvite() {
     inviteError = null;
@@ -475,21 +477,49 @@
       {:else if activeTab === 'picks'}
         <div class="space-y-lg">
           <!-- Sticky subheader with actions -->
-          <div class="sticky top-[2.75rem] z-20 mb-lg bg-neutral-0/95 dark:bg-secondary-900/95 backdrop-blur supports-backdrop-blur:backdrop-blur-sm border-b border-secondary-200 dark:border-secondary-700 py-sm px-xs flex items-center gap-sm">
-            <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)] flex-1">Make Your Picks</h2>
-            <button class="inline-flex items-center px-sm py-xxs rounded text-sm font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100"
-              disabled={!canSave || savingState}
-              on:click={() => picksPanelRef?.savePicksAction()}>
-              {savingState ? 'Saving…' : 'Save Picks'}
-            </button>
-            <button class="inline-flex items-center px-sm py-xxs rounded text-sm font-medium bg-red-600 text-white disabled:opacity-50"
-              on:click={() => { if (!clearingState && hasSortedPicks) confirm('Clear all picks? This cannot be undone.') && picksPanelRef?.clearAllAction(); }}
-              disabled={clearingState || !hasSortedPicks}>
-              {clearingState ? 'Clearing…' : 'Clear All'}
-            </button>
+          <div class="sticky top-[2.75rem] z-20 mb-lg bg-neutral-0/95 dark:bg-secondary-900/95 backdrop-blur supports-backdrop-blur:backdrop-blur-sm border-b border-secondary-200 dark:border-secondary-700 py-sm px-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-sm">
+              <h2 class="text-lg font-heading font-semibold text-[var(--color-text-primary)] flex-1">Make Your Picks</h2>
+              
+              <div class="flex items-center gap-sm">
+                <!-- Multi-group save buttons -->
+                {#if hasMultipleGroups}
+                  <div class="flex">
+                    <!-- Main save button -->
+                    <button class="inline-flex items-center px-lg py-sm rounded-r-none border-r-0 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                      disabled={!canSave || savingState}
+                      on:click={() => picksPanelRef?.savePicksAction()}>
+                      {savingState ? 'Saving…' : 'Save Picks'}
+                    </button>
+                    
+                    <!-- Dropdown trigger button -->
+                    <button class="inline-flex items-center px-sm py-sm rounded-l-none border-l border-primary-400 text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                      disabled={!canSave || savingState}
+                      on:click={() => picksPanelRef?.toggleGroupSelector()}>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="transform {showGroupSelector ? 'rotate-180' : ''}">
+                        <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                {:else}
+                  <!-- Single group save button -->
+                  <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-primary-500 text-neutral-0 disabled:bg-primary-300 disabled:text-primary-100 h-10"
+                    disabled={!canSave || savingState}
+                    on:click={() => picksPanelRef?.savePicksAction()}>
+                    {savingState ? 'Saving…' : 'Save Picks'}
+                  </button>
+                {/if}
+                
+                <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-red-600 text-white disabled:opacity-50 h-10"
+                  on:click={() => { if (!clearingState && hasSortedPicks) confirm('Clear all picks? This cannot be undone.') && picksPanelRef?.clearAllAction(); }}
+                  disabled={clearingState || !hasSortedPicks}>
+                  {clearingState ? 'Clearing…' : 'Clear All'}
+                </button>
+              </div>
+            </div>
           </div>
           <div class="picks-container bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks groupIdentifier={group.identifier} />
+            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks bind:hasMultipleGroups bind:showGroupSelector groupIdentifier={group.identifier} />
           </div>
         </div>
       {/if}
