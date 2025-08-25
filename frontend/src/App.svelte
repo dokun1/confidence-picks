@@ -240,47 +240,73 @@
             About Confidence Picks
           </h1>
           <p class="text-lg text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-            Learn more about how confidence picks work and what makes this app special.
+            A strategic way to predict NFL games where your confidence matters as much as your picks.
           </p>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-lg">
           <div class="space-y-md">
             <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
-              How It Works
+              How Confidence Picks Work
             </h2>
             <div class="space-y-sm text-[var(--color-text-secondary)]">
               <p>
-                Confidence picks is a unique way to predict NFL games. Instead of just picking winners, 
-                you rank your picks by confidence level from 1 to the number of games that week.
+                Confidence picks transforms NFL game predictions into a strategic game of risk and reward. 
+                Each week, you'll rank your picks by confidence level from 1 to the total number of games.
               </p>
               <p>
-                Your highest confidence pick (worth the most points) should be the game you're most 
-                certain about, while your lowest confidence pick is the game you're least sure about.
+                <strong>Scoring:</strong> When you pick correctly, you earn points equal to your confidence level. 
+                When you pick incorrectly, you <strong>lose</strong> points equal to your confidence level.
               </p>
               <p>
-                When you're right, you earn the points equal to your confidence level. When you're wrong, 
-                you get zero points for that pick.
+                <strong>Strategy:</strong> Assign your highest confidence (most points) to games you're most certain about, 
+                and your lowest confidence to games where you're less sure. Choose wisely—wrong picks hurt!
+              </p>
+              <p>
+                <strong>Example:</strong> If you assign 15 confidence to a game and pick correctly, you earn +15 points. 
+                Pick incorrectly, and you lose -15 points.
               </p>
             </div>
           </div>
 
           <div class="space-y-md">
             <h2 class="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
-              Group Competition
+              Playing in Groups
             </h2>
             <div class="space-y-sm text-[var(--color-text-secondary)]">
               <p>
-                Create or join groups with friends, family, or coworkers to compete throughout the season.
+                <strong>Create or Join:</strong> Start your own group or join existing ones using group identifiers. 
+                Perfect for friends, family, coworkers, or online communities.
               </p>
               <p>
-                Each group has its own leaderboard, message board for friendly banter, and unique 
-                settings that the group owner can customize.
+                <strong>Weekly Competition:</strong> Make your picks each week before games start. 
+                All group members compete on the same games with the same point values.
               </p>
               <p>
-                Track your progress week by week and see how you stack up against the competition!
+                <strong>Live Scoring:</strong> Watch your points change in real-time as games conclude. 
+                The leaderboard updates automatically to show current standings.
+              </p>
+              <p>
+                <strong>Season-Long Battle:</strong> Points accumulate throughout the season. 
+                Consistency and smart confidence allocation are key to winning your group.
+              </p>
+              <p>
+                <strong>Social Features:</strong> Use group messaging to discuss picks, celebrate wins, 
+                and engage in friendly trash talk with fellow competitors.
               </p>
             </div>
+          </div>
+        </div>
+
+        <div class="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-base p-lg">
+          <h3 class="text-lg font-heading font-semibold text-warning-900 dark:text-warning-100 mb-sm">
+            🎯 Pro Tips for Success
+          </h3>
+          <div class="space-y-sm text-warning-800 dark:text-warning-200">
+            <p><strong>• Research matchups:</strong> Use injury reports, weather, and team trends to inform your confidence levels.</p>
+            <p><strong>• Manage risk:</strong> Don't put high confidence on upset-prone games, even if you think the underdog will win.</p>
+            <p><strong>• Submit early:</strong> Get your picks in before kickoff—late changes aren't allowed once games start.</p>
+            <p><strong>• Stay consistent:</strong> One bad week won't ruin your season, but missing weeks will.</p>
           </div>
         </div>
 
@@ -289,7 +315,7 @@
             Ready to Get Started?
           </h3>
           <p class="text-primary-800 dark:text-primary-200 mb-md">
-            Join a group or create your own to start making confidence picks with friends!
+            Join a group or create your own to start making strategic confidence picks with friends!
           </p>
           <button
             class="px-md py-xs bg-primary-500 text-neutral-0 rounded-base text-sm font-medium hover:bg-primary-600 transition-colors duration-fast"
