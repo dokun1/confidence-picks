@@ -15,12 +15,7 @@ function getApplePrivateKey() {
   // Priority 1: Environment variable (for CI/production)
   if (process.env.APPLE_PRIVATE_KEY) {
     // Replace \n with actual newlines
-    const key = process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
-    console.log('🍎 Using private key from env variable');
-    console.log('🍎 Key starts with:', key.substring(0, 50));
-    console.log('🍎 Key ends with:', key.substring(key.length - 50));
-    console.log('🍎 Key has newlines:', key.includes('\n'));
-    return key;
+    return process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
   }
   
   // Priority 2: File path (for local development)
@@ -28,11 +23,7 @@ function getApplePrivateKey() {
     const keyPath = path.resolve(__dirname, '..', process.env.APPLE_PRIVATE_KEY_PATH.replace('./src/', ''));
     
     if (fs.existsSync(keyPath)) {
-      const key = fs.readFileSync(keyPath, 'utf8');
-      console.log('🍎 Using private key from file');
-      console.log('🍎 Key starts with:', key.substring(0, 50));
-      console.log('🍎 Key ends with:', key.substring(key.length - 50));
-      return key;
+      return fs.readFileSync(keyPath, 'utf8');
     }
   }
   
@@ -73,29 +64,18 @@ const hasAppleConfig = process.env.APPLE_CLIENT_ID &&
                       !process.env.APPLE_CLIENT_ID.startsWith('REPLACE_WITH_');
 
 if (hasAppleConfig && applePrivateKey) {
-  console.log('🍎 Configuring Apple Strategy with:');
-  console.log('🍎 - clientID:', process.env.APPLE_CLIENT_ID);
-  console.log('🍎 - teamID:', process.env.APPLE_TEAM_ID);
-  console.log('🍎 - keyID:', process.env.APPLE_KEY_ID);
-  console.log('🍎 - callbackURL:', process.env.NODE_ENV === 'production'
-    ? 'https://api.confidence-picks.com/auth/apple/callback'
-    : 'http://localhost:3001/auth/apple/callback');
-  console.log('🍎 - privateKey length:', applePrivateKey.length);
-  console.log('🍎 - privateKey type:', typeof applePrivateKey);
-  
-  // Test JWT signing directly to validate the key
+  // Test JWT signing to validate the key
   try {
     const testPayload = { test: 'data', iat: Math.floor(Date.now() / 1000) };
-    const testToken = jwt.sign(testPayload, applePrivateKey, { 
+    jwt.sign(testPayload, applePrivateKey, { 
       algorithm: 'ES256',
       keyid: process.env.APPLE_KEY_ID,
       issuer: process.env.APPLE_TEAM_ID,
       audience: 'https://appleid.apple.com'
     });
-    console.log('🍎 ✅ JWT signing test successful - token length:', testToken.length);
+    console.log('✅ Apple Sign In configured and private key validated');
   } catch (jwtError) {
-    console.error('🍎 ❌ JWT signing test failed:', jwtError.message);
-    console.error('🍎 ❌ This indicates the private key format is invalid');
+    console.error('❌ Apple private key validation failed:', jwtError.message);
   }
 
   passport.use(new AppleStrategy({
@@ -109,19 +89,11 @@ if (hasAppleConfig && applePrivateKey) {
     scope: ['email', 'name'],
     passReqToCallback: true // Enable request to be passed to callback
   }, async (req, accessToken, refreshToken, idToken, profile, done) => {
-    console.log('🍎 APPLE STRATEGY CALLED - Entry Point');
-    console.log('🍎 Apple Strategy - accessToken exists:', !!accessToken);
-    console.log('🍎 Apple Strategy - refreshToken exists:', !!refreshToken);
-    console.log('🍎 Apple Strategy - idToken exists:', !!idToken);
-    
     try {
-      console.log('🍎 Apple Strategy - Raw Profile:', JSON.stringify(profile, null, 2));
-      
       // Decode the ID token to get email and other info
       let decodedToken = null;
       if (idToken) {
         decodedToken = jwt.decode(idToken, { json: true });
-        console.log('🍎 Apple Strategy - Decoded ID Token:', JSON.stringify(decodedToken, null, 2));
       }
       
       // Extract email from ID token or profile
@@ -139,13 +111,11 @@ if (hasAppleConfig && applePrivateKey) {
           const parsedUserData = typeof userData === 'string' ? JSON.parse(userData) : userData;
           firstName = firstName || parsedUserData.name?.firstName;
           lastName = lastName || parsedUserData.name?.lastName;
-          console.log('🍎 Found user data in request:', JSON.stringify(parsedUserData, null, 2));
         } catch (e) {
-          console.log('🍎 Could not parse user data from request:', e.message);
+          console.log('Could not parse user data from request:', e.message);
         }
       }
       
-      // Apple provides user info differently
       const appleData = {
         appleId: appleId,
         email: email,
@@ -153,24 +123,13 @@ if (hasAppleConfig && applePrivateKey) {
         lastName: lastName
       };
       
-      console.log('🍎 Apple Strategy - Processed Data:', JSON.stringify(appleData, null, 2));
-      
       const user = await User.createOrUpdateFromApple(appleData);
-      console.log('🍎 Apple Strategy - User Created:', JSON.stringify({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        appleId: user.appleId
-      }, null, 2));
-      
       return done(null, user);
     } catch (error) {
-      console.error('❌ Apple Strategy Error:', error);
-      console.error('❌ Error Stack:', error.stack);
+      console.error('Apple authentication error:', error);
       return done(error, null);
     }
   }));
-  
   console.log('✅ Apple Sign In strategy configured');
 } else {
   console.log('⚠️ Apple Sign In strategy not configured - missing keys or environment variables');
