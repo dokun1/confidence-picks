@@ -43,16 +43,30 @@ router.get('/apple', (req, res, next) => {
 });
 
 router.post('/apple/callback', (req, res, next) => {
-  if (!isAppleConfigured()) {
+  console.log('🍎 Apple callback route hit - body:', JSON.stringify(req.body, null, 2));
+  console.log('🍎 Apple callback route hit - headers:', JSON.stringify(req.headers, null, 2));
+  
+  const appleConfigured = isAppleConfigured();
+  console.log('🍎 Apple configured status:', appleConfigured);
+  
+  if (!appleConfigured) {
+    console.log('❌ Apple not configured');
     const frontendURL = process.env.NODE_ENV === 'production' 
       ? 'https://www.confidence-picks.com'
       : 'http://localhost:5173';
     return res.redirect(`${frontendURL}/login?error=apple_not_configured`);
   }
-  passport.authenticate('apple', { session: false })(req, res, next);
+  
+  console.log('🍎 About to call passport.authenticate');
+  passport.authenticate('apple', { 
+    session: false,
+    failureRedirect: process.env.NODE_ENV === 'production' 
+      ? 'https://www.confidence-picks.com/login?error=apple_auth_failed'
+      : 'http://localhost:5173/login?error=apple_auth_failed'
+  })(req, res, next);
 }, async (req, res) => {
   try {
-    console.log('🍎 Apple callback - req.user:', req.user);
+    console.log('🍎 Apple callback handler reached - req.user:', req.user);
     
     if (!req.user) {
       console.error('❌ No user found in Apple callback');

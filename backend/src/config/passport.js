@@ -73,7 +73,13 @@ if (hasAppleConfig && applePrivateKey) {
       : 'http://localhost:3001/auth/apple/callback',
     scope: ['email', 'name']
   }, async (accessToken, refreshToken, profile, done) => {
+    console.log('🍎 APPLE STRATEGY CALLED - Entry Point');
+    console.log('🍎 Apple Strategy - accessToken exists:', !!accessToken);
+    console.log('🍎 Apple Strategy - refreshToken exists:', !!refreshToken);
+    
     try {
+      console.log('🍎 Apple Strategy - Raw Profile:', JSON.stringify(profile, null, 2));
+      
       // Apple provides user info differently
       const appleData = {
         appleId: profile.id,
@@ -82,10 +88,20 @@ if (hasAppleConfig && applePrivateKey) {
         lastName: profile.name?.lastName
       };
       
+      console.log('🍎 Apple Strategy - Processed Data:', JSON.stringify(appleData, null, 2));
+      
       const user = await User.createOrUpdateFromApple(appleData);
+      console.log('🍎 Apple Strategy - User Created:', JSON.stringify({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        appleId: user.appleId
+      }, null, 2));
+      
       return done(null, user);
     } catch (error) {
-      console.error('Apple Strategy Error:', error);
+      console.error('❌ Apple Strategy Error:', error);
+      console.error('❌ Error Stack:', error.stack);
       return done(error, null);
     }
   }));
