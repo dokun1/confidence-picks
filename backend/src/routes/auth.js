@@ -52,6 +52,16 @@ router.post('/apple/callback', (req, res, next) => {
   passport.authenticate('apple', { session: false })(req, res, next);
 }, async (req, res) => {
   try {
+    console.log('🍎 Apple callback - req.user:', req.user);
+    
+    if (!req.user) {
+      console.error('❌ No user found in Apple callback');
+      const frontendURL = process.env.NODE_ENV === 'production' 
+        ? 'https://www.confidence-picks.com'
+        : 'http://localhost:5173';
+      return res.redirect(`${frontendURL}/login?error=apple_user_creation_failed`);
+    }
+    
     const { accessToken, refreshToken } = await AuthService.createTokens(req.user);
     
     const frontendURL = process.env.NODE_ENV === 'production' 
@@ -60,7 +70,7 @@ router.post('/apple/callback', (req, res, next) => {
     
     res.redirect(`${frontendURL}/auth/callback?token=${accessToken}&refresh=${refreshToken}`);
   } catch (error) {
-    console.error('Apple callback error:', error);
+    console.error('❌ Apple callback error:', error);
     const frontendURL = process.env.NODE_ENV === 'production' 
       ? 'https://www.confidence-picks.com'
       : 'http://localhost:5173';
