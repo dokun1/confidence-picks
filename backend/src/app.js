@@ -22,7 +22,8 @@ app.use(cors({
         'http://localhost:4173',      // Vite preview
         'https://www.confidence-picks.com', // Production
         'https://confidence-picks.com', // Production
-        'https://confidence-picks-frontend.vercel.app' // Vercel domain
+        'https://confidence-picks-frontend.vercel.app', // Vercel domain
+        'https://appleid.apple.com'   // Apple Sign In
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
