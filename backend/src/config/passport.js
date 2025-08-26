@@ -107,21 +107,48 @@ if (hasAppleConfig && applePrivateKey) {
       ? 'https://api.confidence-picks.com/auth/apple/callback'
       : 'http://localhost:3001/auth/apple/callback',
     scope: ['email', 'name'],
-    passReqToCallback: false
-  }, async (accessToken, refreshToken, profile, done) => {
+    passReqToCallback: true // Enable request to be passed to callback
+  }, async (req, accessToken, refreshToken, idToken, profile, done) => {
     console.log('🍎 APPLE STRATEGY CALLED - Entry Point');
     console.log('🍎 Apple Strategy - accessToken exists:', !!accessToken);
     console.log('🍎 Apple Strategy - refreshToken exists:', !!refreshToken);
+    console.log('🍎 Apple Strategy - idToken exists:', !!idToken);
     
     try {
       console.log('🍎 Apple Strategy - Raw Profile:', JSON.stringify(profile, null, 2));
       
+      // Decode the ID token to get email and other info
+      let decodedToken = null;
+      if (idToken) {
+        decodedToken = jwt.decode(idToken, { json: true });
+        console.log('🍎 Apple Strategy - Decoded ID Token:', JSON.stringify(decodedToken, null, 2));
+      }
+      
+      // Extract email from ID token or profile
+      const email = decodedToken?.email || profile.email;
+      const appleId = decodedToken?.sub || profile.id;
+      
+      // Get name from profile or request (first time only)
+      let firstName = profile.name?.firstName;
+      let lastName = profile.name?.lastName;
+      
+      // Check if this is the first auth and user data is in request
+      if (req.query?.user) {
+        try {
+          const userData = JSON.parse(req.query.user);
+          firstName = firstName || userData.firstName;
+          lastName = lastName || userData.lastName;
+        } catch (e) {
+          console.log('🍎 Could not parse user data from request');
+        }
+      }
+      
       // Apple provides user info differently
       const appleData = {
-        appleId: profile.id,
-        email: profile.email,
-        firstName: profile.name?.firstName,
-        lastName: profile.name?.lastName
+        appleId: appleId,
+        email: email,
+        firstName: firstName,
+        lastName: lastName
       };
       
       console.log('🍎 Apple Strategy - Processed Data:', JSON.stringify(appleData, null, 2));
