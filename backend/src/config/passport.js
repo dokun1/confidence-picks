@@ -132,14 +132,16 @@ if (hasAppleConfig && applePrivateKey) {
       let firstName = profile.name?.firstName;
       let lastName = profile.name?.lastName;
       
-      // Check if this is the first auth and user data is in request
-      if (req.query?.user) {
+      // Check if this is the first auth and user data is in request body or query
+      const userData = req.body?.user || req.query?.user;
+      if (userData) {
         try {
-          const userData = JSON.parse(req.query.user);
-          firstName = firstName || userData.firstName;
-          lastName = lastName || userData.lastName;
+          const parsedUserData = typeof userData === 'string' ? JSON.parse(userData) : userData;
+          firstName = firstName || parsedUserData.name?.firstName;
+          lastName = lastName || parsedUserData.name?.lastName;
+          console.log('🍎 Found user data in request:', JSON.stringify(parsedUserData, null, 2));
         } catch (e) {
-          console.log('🍎 Could not parse user data from request');
+          console.log('🍎 Could not parse user data from request:', e.message);
         }
       }
       
