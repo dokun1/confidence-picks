@@ -96,6 +96,113 @@ export class User {
     });
   }
 
+  // Find user by Apple ID
+  static async findByAppleId(appleId) {
+    const query = 'SELECT * FROM users WHERE apple_id = $1';
+    const result = await pool.query(query, [appleId]);
+    
+    if (result.rows.length === 0) return null;
+    
+    const row = result.rows[0];
+    return new User({
+      id: row.id,
+      googleId: row.google_id,
+      appleId: row.apple_id,
+      email: row.email,
+      name: row.name,
+      pictureUrl: row.picture_url,
+      provider: row.provider,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastLogin: row.last_login
+    });
+  }
+
+  // Create or update user from Apple Sign In
+  static async createOrUpdateFromApple(appleData) {
+    const { appleId, email, firstName, lastName } = appleData;
+    const name = firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || 'Apple User';
+    
+    // First try to find by Apple ID
+    let existingUser = await User.findByAppleId(appleId);
+    
+    if (existingUser) {
+      // Update last login
+      const query = `
+        UPDATE users 
+        SET last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE apple_id = $1
+        RETURNING *
+      `;
+      const result = await pool.query(query, [appleId]);
+      
+      return new User({
+        id: result.rows[0].id,
+        googleId: result.rows[0].google_id,
+        appleId: result.rows[0].apple_id,
+        email: result.rows[0].email,
+        name: result.rows[0].name,
+        pictureUrl: result.rows[0].picture_url,
+        provider: result.rows[0].provider,
+        createdAt: result.rows[0].created_at,
+        updatedAt: result.rows[0].updated_at,
+        lastLogin: result.rows[0].last_login
+      });
+    }
+
+    // If email provided, check for existing user by email
+    if (email) {
+      existingUser = await User.findByEmail(email);
+      
+      if (existingUser) {
+        // Link Apple ID to existing account
+        const query = `
+          UPDATE users 
+          SET apple_id = $1, provider = 'apple', last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE email = $2
+          RETURNING *
+        `;
+        const result = await pool.query(query, [appleId, email]);
+        
+        return new User({
+          id: result.rows[0].id,
+          googleId: result.rows[0].google_id,
+          appleId: result.rows[0].apple_id,
+          email: result.rows[0].email,
+          name: result.rows[0].name,
+          pictureUrl: result.rows[0].picture_url,
+          provider: result.rows[0].provider,
+          createdAt: result.rows[0].created_at,
+          updatedAt: result.rows[0].updated_at,
+          lastLogin: result.rows[0].last_login
+        });
+      }
+    }
+
+    // Create new user
+    const query = `
+      INSERT INTO users (apple_id, email, name, provider, created_at, updated_at, last_login)
+      VALUES ($1, $2, $3, 'apple', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING *
+    `;
+    
+    const values = [appleId, email, name];
+    const result = await pool.query(query, values);
+    
+    return new User({
+      id: result.rows[0].id,
+      googleId: result.rows[0].google_id,
+      appleId: result.rows[0].apple_id,
+      email: result.rows[0].email,
+      name: result.rows[0].name,
+      pictureUrl: result.rows[0].picture_url,
+      provider: result.rows[0].provider,
+      createdAt: result.rows[0].created_at,
+      updatedAt: result.rows[0].updated_at,
+      lastLogin: result.rows[0].last_login
+    });
+  }
+
   // Save refresh token
   async saveRefreshToken(refreshToken, expiresAt) {
     const query = `

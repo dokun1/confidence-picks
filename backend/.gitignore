@@ -1,1 +1,10 @@
 .vercel
+
+# Apple Sign In Private Key
+src/config/AuthKey_*.p8
+src/config/test-apple-key.p8
+
+# Environment files (if not already ignored)
+.env
+.env.local
+.env.test
