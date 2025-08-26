@@ -1,6 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as AppleStrategy } from 'passport-apple';
+import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -81,13 +82,27 @@ if (hasAppleConfig && applePrivateKey) {
     : 'http://localhost:3001/auth/apple/callback');
   console.log('🍎 - privateKey length:', applePrivateKey.length);
   console.log('🍎 - privateKey type:', typeof applePrivateKey);
-  console.log('🍎 - privateKey is string:', typeof applePrivateKey === 'string');
+  
+  // Test JWT signing directly to validate the key
+  try {
+    const testPayload = { test: 'data', iat: Math.floor(Date.now() / 1000) };
+    const testToken = jwt.sign(testPayload, applePrivateKey, { 
+      algorithm: 'ES256',
+      keyid: process.env.APPLE_KEY_ID,
+      issuer: process.env.APPLE_TEAM_ID,
+      audience: 'https://appleid.apple.com'
+    });
+    console.log('🍎 ✅ JWT signing test successful - token length:', testToken.length);
+  } catch (jwtError) {
+    console.error('🍎 ❌ JWT signing test failed:', jwtError.message);
+    console.error('🍎 ❌ This indicates the private key format is invalid');
+  }
 
   passport.use(new AppleStrategy({
     clientID: process.env.APPLE_CLIENT_ID,
     teamID: process.env.APPLE_TEAM_ID,
     keyID: process.env.APPLE_KEY_ID,
-    privateKey: applePrivateKey.trim(), // Ensure no extra whitespace
+    privateKey: applePrivateKey, // Use key exactly as loaded
     callbackURL: process.env.NODE_ENV === 'production'
       ? 'https://api.confidence-picks.com/auth/apple/callback'
       : 'http://localhost:3001/auth/apple/callback',
