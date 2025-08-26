@@ -30,6 +30,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Add this for Apple Sign In form data
 app.use(cookieParser());
 
 app.use(session({

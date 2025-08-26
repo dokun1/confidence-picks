@@ -123,6 +123,9 @@ export class User {
     const { appleId, email, firstName, lastName } = appleData;
     const name = firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || 'Apple User';
     
+    // If no email provided, generate a fallback email based on Apple ID
+    const userEmail = email || `apple_${appleId}@confidence-picks.local`;
+    
     // First try to find by Apple ID
     let existingUser = await User.findByAppleId(appleId);
     
@@ -186,7 +189,7 @@ export class User {
       RETURNING *
     `;
     
-    const values = [appleId, email, name];
+    const values = [appleId, userEmail, name];
     const result = await pool.query(query, values);
     
     return new User({
