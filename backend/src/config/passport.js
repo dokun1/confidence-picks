@@ -102,7 +102,7 @@ if (hasAppleConfig && applePrivateKey) {
     clientID: process.env.APPLE_CLIENT_ID,
     teamID: process.env.APPLE_TEAM_ID,
     keyID: process.env.APPLE_KEY_ID,
-    privateKey: applePrivateKey, // Use key exactly as loaded
+    privateKeyString: applePrivateKey, // Use privateKeyString instead of privateKey!
     callbackURL: process.env.NODE_ENV === 'production'
       ? 'https://api.confidence-picks.com/auth/apple/callback'
       : 'http://localhost:3001/auth/apple/callback',
