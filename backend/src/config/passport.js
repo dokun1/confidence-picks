@@ -63,6 +63,15 @@ const hasAppleConfig = process.env.APPLE_CLIENT_ID &&
                       !process.env.APPLE_CLIENT_ID.startsWith('REPLACE_WITH_');
 
 if (hasAppleConfig && applePrivateKey) {
+  console.log('🍎 Configuring Apple Strategy with:');
+  console.log('🍎 - clientID:', process.env.APPLE_CLIENT_ID);
+  console.log('🍎 - teamID:', process.env.APPLE_TEAM_ID);
+  console.log('🍎 - keyID:', process.env.APPLE_KEY_ID);
+  console.log('🍎 - callbackURL:', process.env.NODE_ENV === 'production'
+    ? 'https://api.confidence-picks.com/auth/apple/callback'
+    : 'http://localhost:3001/auth/apple/callback');
+  console.log('🍎 - privateKey length:', applePrivateKey.length);
+
   passport.use(new AppleStrategy({
     clientID: process.env.APPLE_CLIENT_ID,
     teamID: process.env.APPLE_TEAM_ID,
@@ -71,7 +80,8 @@ if (hasAppleConfig && applePrivateKey) {
     callbackURL: process.env.NODE_ENV === 'production'
       ? 'https://api.confidence-picks.com/auth/apple/callback'
       : 'http://localhost:3001/auth/apple/callback',
-    scope: ['email', 'name']
+    scope: ['email', 'name'],
+    passReqToCallback: false
   }, async (accessToken, refreshToken, profile, done) => {
     console.log('🍎 APPLE STRATEGY CALLED - Entry Point');
     console.log('🍎 Apple Strategy - accessToken exists:', !!accessToken);

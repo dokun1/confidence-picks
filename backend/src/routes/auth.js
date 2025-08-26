@@ -59,10 +59,30 @@ router.post('/apple/callback', (req, res, next) => {
   
   console.log('🍎 About to call passport.authenticate');
   passport.authenticate('apple', { 
-    session: false,
-    failureRedirect: process.env.NODE_ENV === 'production' 
-      ? 'https://www.confidence-picks.com/login?error=apple_auth_failed'
-      : 'http://localhost:5173/login?error=apple_auth_failed'
+    session: false
+  }, (err, user, info) => {
+    console.log('🍎 Passport authenticate callback - err:', err);
+    console.log('🍎 Passport authenticate callback - user:', user);
+    console.log('🍎 Passport authenticate callback - info:', info);
+    
+    if (err) {
+      console.error('❌ Apple authentication error:', err);
+      const frontendURL = process.env.NODE_ENV === 'production' 
+        ? 'https://www.confidence-picks.com'
+        : 'http://localhost:5173';
+      return res.redirect(`${frontendURL}/login?error=apple_token_failed`);
+    }
+    
+    if (!user) {
+      console.error('❌ No user returned from Apple auth');
+      const frontendURL = process.env.NODE_ENV === 'production' 
+        ? 'https://www.confidence-picks.com'
+        : 'http://localhost:5173';
+      return res.redirect(`${frontendURL}/login?error=apple_no_user`);
+    }
+    
+    req.user = user;
+    next();
   })(req, res, next);
 }, async (req, res) => {
   try {
