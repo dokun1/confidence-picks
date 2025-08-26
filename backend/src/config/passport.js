@@ -14,7 +14,12 @@ function getApplePrivateKey() {
   // Priority 1: Environment variable (for CI/production)
   if (process.env.APPLE_PRIVATE_KEY) {
     // Replace \n with actual newlines
-    return process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    const key = process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    console.log('🍎 Using private key from env variable');
+    console.log('🍎 Key starts with:', key.substring(0, 50));
+    console.log('🍎 Key ends with:', key.substring(key.length - 50));
+    console.log('🍎 Key has newlines:', key.includes('\n'));
+    return key;
   }
   
   // Priority 2: File path (for local development)
@@ -22,7 +27,11 @@ function getApplePrivateKey() {
     const keyPath = path.resolve(__dirname, '..', process.env.APPLE_PRIVATE_KEY_PATH.replace('./src/', ''));
     
     if (fs.existsSync(keyPath)) {
-      return fs.readFileSync(keyPath, 'utf8');
+      const key = fs.readFileSync(keyPath, 'utf8');
+      console.log('🍎 Using private key from file');
+      console.log('🍎 Key starts with:', key.substring(0, 50));
+      console.log('🍎 Key ends with:', key.substring(key.length - 50));
+      return key;
     }
   }
   
@@ -71,12 +80,14 @@ if (hasAppleConfig && applePrivateKey) {
     ? 'https://api.confidence-picks.com/auth/apple/callback'
     : 'http://localhost:3001/auth/apple/callback');
   console.log('🍎 - privateKey length:', applePrivateKey.length);
+  console.log('🍎 - privateKey type:', typeof applePrivateKey);
+  console.log('🍎 - privateKey is string:', typeof applePrivateKey === 'string');
 
   passport.use(new AppleStrategy({
     clientID: process.env.APPLE_CLIENT_ID,
     teamID: process.env.APPLE_TEAM_ID,
     keyID: process.env.APPLE_KEY_ID,
-    privateKey: applePrivateKey,
+    privateKey: applePrivateKey.trim(), // Ensure no extra whitespace
     callbackURL: process.env.NODE_ENV === 'production'
       ? 'https://api.confidence-picks.com/auth/apple/callback'
       : 'http://localhost:3001/auth/apple/callback',
