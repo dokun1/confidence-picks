@@ -285,7 +285,7 @@ export class Group {
       LIMIT $2 OFFSET $3
     `;
     const result = await pool.query(query, [groupId, limit, offset]);
-    return result.rows.reverse();
+    return result.rows;
   }
 
   // Post message to group
