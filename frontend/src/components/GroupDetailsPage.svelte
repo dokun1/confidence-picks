@@ -63,7 +63,7 @@
     isPostingMessage = true;
     try {
       const posted = await apiPostMessage(groupId, newMessage.trim());
-      messages = [...messages, posted];
+      messages = [posted, ...messages];
       newMessage = '';
     } catch (err) {
       error = err.message;
