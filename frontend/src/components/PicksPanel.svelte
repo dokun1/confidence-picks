@@ -315,11 +315,13 @@
   export let hasSortedPicks = false; // exposed to parent for Clear All enable logic
   export let hasMultipleGroups = false; // exposed to parent for multi-group UI
   export let showGroupSelector = false; // exposed to parent for dropdown visibility
+  export let currentWeek = null; // exposed to parent for clear dialog message
   $: canSave = canSaveValue;
   $: savingState = saving;
   $: clearingState = clearing;
   $: hasSortedPicks = sortedGames.length > 0;
   $: hasMultipleGroups = userGroups && userGroups.length > 1;
+  $: currentWeek = week;
 
   // Expose imperative actions for parent sticky bar
   export function savePicksAction() { if (canSaveValue && !saving) doSave(); }
