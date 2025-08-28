@@ -249,4 +249,43 @@ export class User {
       lastLogin: row.last_login
     });
   }
+
+  // Update user name
+  static async updateName(userId, name) {
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      throw new Error('Name is required and must be a non-empty string');
+    }
+
+    const trimmedName = name.trim();
+    if (trimmedName.length > 100) {
+      throw new Error('Name must be 100 characters or less');
+    }
+
+    const query = `
+      UPDATE users 
+      SET name = $1, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $2 
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [trimmedName, userId]);
+    
+    if (result.rows.length === 0) {
+      throw new Error('User not found');
+    }
+    
+    const row = result.rows[0];
+    return new User({
+      id: row.id,
+      googleId: row.google_id,
+      appleId: row.apple_id,
+      email: row.email,
+      name: row.name,
+      pictureUrl: row.picture_url,
+      provider: row.provider,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastLogin: row.last_login
+    });
+  }
 }

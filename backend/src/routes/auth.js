@@ -1,6 +1,7 @@
 import express from 'express';
 import passport, { isAppleConfigured } from '../config/passport.js';
 import { AuthService } from '../services/AuthService.js';
+import { User } from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -139,6 +140,36 @@ router.get('/me', authenticateToken, (req, res) => {
     pictureUrl: req.user.pictureUrl,
     provider: req.user.provider
   });
+});
+
+// Update current user profile
+router.put('/me', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    const updatedUser = await User.updateName(req.user.id, name);
+    
+    res.json({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      pictureUrl: updatedUser.pictureUrl,
+      provider: updatedUser.provider
+    });
+  } catch (error) {
+    if (error.message === 'User not found') {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message.includes('Name is required') || error.message.includes('must be')) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
 });
 
 export default router;
