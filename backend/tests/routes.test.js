@@ -218,4 +218,33 @@ describe('API Routes', () => {
       throw error;
     }
   });
+
+  test('should handle user profile update without auth', async () => {
+    try {
+      console.log('🧪 Testing user profile update endpoint...');
+      
+      // Test PUT /auth/me without authentication - should require auth
+      const response = await fetch(`${baseURL}/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: 'Test User'
+        })
+      });
+      
+      const data = await response.json();
+      
+      // Should require authentication (401 or 403)
+      assert.ok(response.status === 401 || response.status === 403, `Should require authentication, got ${response.status}`);
+      assert.ok(data && typeof data === 'object', 'Should return JSON object');
+      assert.ok(data.error, 'Should return an error message');
+      
+      console.log('✅ User profile update test passed');
+    } catch (error) {
+      console.error('❌ User profile update test failed:', error);
+      throw error;
+    }
+  });
 });
