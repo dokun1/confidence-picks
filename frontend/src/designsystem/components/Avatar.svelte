@@ -33,11 +33,13 @@
     const variants = new Set();
     variants.add(base);
     if (/=s\d+-c$/.test(base)) {
-      variants.add(base.replace(/=s\d+-c$/, '=s64-c'));
-      variants.add(base.replace(/=s\d+-c$/, '=s128-c'));
+      // Google profile images: use actualSize for consistent sizing
+      variants.add(base.replace(/=s\d+-c$/, `=s${actualSize}-c`));
+      variants.add(base.replace(/=s\d+-c$/, `=s${actualSize * 2}-c`)); // 2x for retina
       variants.add(base.replace(/=s\d+-c$/, ''));
     } else if (!/[?&]sz=/.test(base)) {
-      variants.add(base + (base.includes('?') ? '&' : '?') + 'sz=128');
+      // Other images (Apple, etc.): use actualSize for consistent sizing
+      variants.add(base + (base.includes('?') ? '&' : '?') + `sz=${actualSize * 2}`); // 2x for retina
     }
     sources = Array.from(variants);
     index = 0;

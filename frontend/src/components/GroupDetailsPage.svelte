@@ -339,7 +339,7 @@
                   {#each leaderboardUsers as u, i}
                     <li class="flex items-center gap-sm py-sm">
                       <div class="w-6 text-right pr-1 text-sm font-medium tabular-nums">{i+1}</div>
-                      <Avatar name={u.name} pictureUrl={u.pictureUrl} variant="sm" />
+                      <Avatar name={u.name} pictureUrl={u.pictureUrl} variant="md" />
                       <div class="flex-1 truncate text-sm">{u.name}</div>
                       <div class="text-sm font-semibold tabular-nums">{u.totalPoints}</div>
                     </li>
