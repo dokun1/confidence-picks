@@ -33,16 +33,16 @@
 				}
 			}
 				if (user?.pictureUrl) {
-					// Generate candidate image URLs (Google profile variants)
+					// Generate candidate image URLs with sizes matching display: 64px (mobile) and 80px (desktop)
 					const base = user.pictureUrl;
 					const variants = new Set();
 					variants.add(base);
 					if (/=s\d+-c$/.test(base)) {
-						variants.add(base.replace(/=s\d+-c$/, '=s128-c'));
-						variants.add(base.replace(/=s\d+-c$/, '=s256-c'));
+						variants.add(base.replace(/=s\d+-c$/, '=s80-c')); // desktop size
+						variants.add(base.replace(/=s\d+-c$/, '=s160-c')); // 2x for retina
 						variants.add(base.replace(/=s\d+-c$/, '')); // no size param
 					} else if (!/[?&]sz=/.test(base)) {
-						variants.add(base + (base.includes('?') ? '&' : '?') + 'sz=256');
+						variants.add(base + (base.includes('?') ? '&' : '?') + 'sz=160'); // 2x for retina
 					}
 					imgSources = Array.from(variants);
 					currentSrcIndex = 0;
