@@ -181,6 +181,29 @@ class AuthService {
     
     return null;
   }
+
+  static async updateUserName(name) {
+    const apiBase = this.getApiBaseUrl();
+    try {
+      const response = await this.makeAuthenticatedRequest(`${apiBase}/auth/me`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      
+      if (response.ok) {
+        const user = await response.json();
+        this.setUser(user);
+        return user;
+      } else {
+        const error = await response.json().catch(() => ({ error: 'Failed to update name' }));
+        throw new Error(error.error || 'Failed to update name');
+      }
+    } catch (error) {
+      console.error('Failed to update user name:', error);
+      throw error;
+    }
+  }
 }
 
 export default AuthService;

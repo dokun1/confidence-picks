@@ -3,6 +3,7 @@
 	import AuthService from '../lib/authService.js';
 	import { auth, setAuthUser } from '../lib/authStore.js';
 	import { navigateTo } from '../lib/router.js';
+	import TextField from '../designsystem/components/TextField.svelte';
 
 	let loading = true;
 	let error = null;
@@ -11,12 +12,57 @@
 			let imgSources = [];
 			let currentSrcIndex = 0;
 
+	// Name editing state
+	let editingName = false;
+	let newName = '';
+	let savingName = false;
+	let nameError = '';
+
 	// Derive from store reactively
 	$: storeUser = $auth.user;
 
 	function initials(name) {
 		if (!name) return '?';
 		return name.split(/\s+/).slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
+	}
+
+	function startEditingName() {
+		editingName = true;
+		newName = user.name || '';
+		nameError = '';
+	}
+
+	function cancelEditingName() {
+		editingName = false;
+		newName = '';
+		nameError = '';
+	}
+
+	async function saveNewName() {
+		if (!newName || newName.trim().length === 0) {
+			nameError = 'Name cannot be empty';
+			return;
+		}
+
+		if (newName.trim() === user.name) {
+			cancelEditingName();
+			return;
+		}
+
+		savingName = true;
+		nameError = '';
+
+		try {
+			const updatedUser = await AuthService.updateUserName(newName.trim());
+			user = updatedUser;
+			setAuthUser(updatedUser);
+			editingName = false;
+			newName = '';
+		} catch (err) {
+			nameError = err.message || 'Failed to update name';
+		} finally {
+			savingName = false;
+		}
 	}
 
 	async function loadUser() {
@@ -111,7 +157,49 @@
 					<div class="space-y-sm text-sm">
 						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-xs">
 							<span class="text-[var(--color-text-secondary)]">Name</span>
-							<span class="font-medium text-[var(--color-text-primary)]">{user.name || '—'}</span>
+							{#if editingName}
+								<div class="flex flex-col gap-xs sm:flex-row sm:items-center">
+									<div class="min-w-0 flex-1">
+										<TextField
+											bind:value={newName}
+											placeholder="Enter your name"
+											size="sm"
+											validationState={nameError ? 'error' : 'none'}
+											validationMessage={nameError}
+											disabled={savingName}
+										/>
+									</div>
+									<div class="flex gap-xs">
+										<button
+											class="px-xs py-xxxs bg-primary-500 text-neutral-0 rounded text-xs font-medium hover:bg-primary-600 transition-colors duration-fast disabled:opacity-50"
+											on:click={saveNewName}
+											disabled={savingName}
+										>
+											{savingName ? 'Saving...' : 'Save'}
+										</button>
+										<button
+											class="px-xs py-xxxs bg-secondary-100 text-secondary-900 border border-secondary-300 rounded text-xs font-medium hover:bg-secondary-200 transition-colors duration-fast dark:bg-secondary-700 dark:text-secondary-50 dark:border-secondary-500 dark:hover:bg-secondary-600"
+											on:click={cancelEditingName}
+											disabled={savingName}
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							{:else}
+								<div class="flex items-center gap-xs">
+									<span class="font-medium text-[var(--color-text-primary)]">{user.name || '—'}</span>
+									<button
+										class="text-primary-500 hover:text-primary-600 transition-colors duration-fast"
+										on:click={startEditingName}
+										title="Edit name"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+										</svg>
+									</button>
+								</div>
+							{/if}
 						</div>
 						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-xs">
 							<span class="text-[var(--color-text-secondary)]">Email</span>
