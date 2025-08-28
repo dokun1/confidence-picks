@@ -113,6 +113,7 @@
   let hasSortedPicks = false;
   let hasMultipleGroups = false;
   let showGroupSelector = false;
+  let currentWeek = null;
 
   async function shareInvite() {
     inviteError = null;
@@ -543,7 +544,7 @@
                 </button>
                 
                 <button class="inline-flex items-center px-lg py-sm rounded text-base font-medium bg-red-600 text-white disabled:opacity-50 h-10 w-full md:w-auto justify-center"
-                  on:click={() => { if (!clearingState && hasSortedPicks) confirm('Clear all picks? This cannot be undone.') && picksPanelRef?.clearAllAction(); }}
+                  on:click={() => { if (!clearingState && hasSortedPicks) confirm(`Clear all picks for Week ${currentWeek}? This cannot be undone.`) && picksPanelRef?.clearAllAction(); }}
                   disabled={clearingState || !hasSortedPicks}>
                   {clearingState ? 'Clearing…' : 'Clear All'}
                 </button>
@@ -551,7 +552,7 @@
             </div>
           </div>
           <div class="picks-container bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks bind:hasMultipleGroups bind:showGroupSelector groupIdentifier={group.identifier} />
+            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks bind:hasMultipleGroups bind:showGroupSelector bind:currentWeek groupIdentifier={group.identifier} />
           </div>
         </div>
       {/if}
