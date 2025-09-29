@@ -38,6 +38,25 @@
   $: winnerTeamId = final ? (game.homeScore > game.awayScore ? game.homeTeam.id : game.awayScore > game.homeScore ? game.awayTeam.id : null) : null;
   $: pickWon = final && pick?.won === true;
   $: pickLost = final && pick?.won === false;
+  $: isTie = final && winnerTeamId === null;
+  $: displayedFinalValue = (() => {
+    if (isTie && pick) {
+      return pick.confidence ?? pick.points ?? 0;
+    }
+    return pick?.points ?? pick?.confidence ?? 0;
+  })();
+  $: finalBadgeClass = (() => {
+    if (isTie && pick) return 'push';
+    if (pickWon) return 'won';
+    if (pickLost) return 'lost';
+    return 'no-pick';
+  })();
+  $: resultLabel = (() => {
+    if (isTie && pick) return 'Push - tie';
+    if (pickWon) return 'Won +' + (pick.points ?? pick.confidence ?? 0);
+    if (pickLost) return 'Lost ' + Math.abs(pick.points ?? pick.confidence ?? 0);
+    return '';
+  })();
   $: incomplete = pick && !(pick.pickedTeamId && pick.confidence != null);
   let localConfidence = '';
   let showPicker = false;
@@ -192,9 +211,9 @@
     </div>
     <div class="confidence-wrapper {game.meta.locked ? 'locked-state' : ''}">
       {#if final}
-        <!-- Final game: always show a confidence result number (0 if no pick) with win/loss coloring -->
-        <div class="final-confidence {pickWon ? 'won' : pickLost ? 'lost' : 'no-pick'}" title={pickWon ? `Won ${(pick?.points ?? pick?.confidence ?? 0)}` : pickLost ? `Lost ${(pick?.points ?? pick?.confidence ?? 0)}` : 'No pick'}>
-          {pick?.points ?? pick?.confidence ?? 0}
+        <!-- Final game: show result number (bet for push, score otherwise) with outcome-specific coloring -->
+        <div class="final-confidence {finalBadgeClass}" title={pickWon ? `Won ${(pick?.points ?? pick?.confidence ?? 0)}` : pickLost ? `Lost ${(pick?.points ?? pick?.confidence ?? 0)}` : isTie && pick ? 'Push - tie' : 'No pick'}>
+          {displayedFinalValue}
         </div>
       {:else if !game.meta.locked}
         <button type="button" class="conf-button" aria-haspopup="listbox" aria-expanded={showPicker} on:click|stopPropagation={() => showPicker = !showPicker} title={localConfidence ? `Confidence ${localConfidence}` : 'Select confidence'}>
@@ -229,7 +248,7 @@
   </div>
   {/if}
   {#if final && pick}
-  <div class="result-line {pickWon ? 'won' : pickLost ? 'lost' : ''}">{pickWon ? 'Won +' + (pick.points ?? pick.confidence ?? 0) : pickLost ? 'Lost ' + Math.abs(pick.points ?? pick.confidence ?? 0) : ''}</div>
+  <div class="result-line {pickWon ? 'won' : pickLost ? 'lost' : (isTie ? 'push' : '')}">{resultLabel}</div>
   {/if}
 </div>
 
@@ -293,9 +312,11 @@
   .final-confidence.won { background:linear-gradient(135deg,#15803d,#16a34a); color:#fff; }
   .final-confidence.lost { background:linear-gradient(135deg,#b91c1c,#dc2626); color:#fff; }
   .final-confidence.no-pick { background:linear-gradient(135deg,#6b7280,#9ca3af); color:#fff; opacity:.9; }
+  .final-confidence.push { background:linear-gradient(135deg,#facc15,#fbbf24); color:#78350f; }
   .result-line { margin-top:.4rem; font-size:.6rem; font-weight:600; letter-spacing:.5px; padding:.25rem .5rem; border-radius:4px; text-transform:uppercase; width:max-content; }
   .result-line.won { background:#16a34a22; color:#15803d; }
   .result-line.lost { background:#dc262622; color:#b91c1c; }
+  .result-line.push { background:#facc1540; color:#92400e; }
   .pick-check { position:absolute; top:4px; right:4px; background:#16a34a; color:#fff; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:.85rem; font-weight:700; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,.4), 0 2px 4px rgba(0,0,0,.3); z-index:5; }
   :global(.dark) .pick-check { background:#22c55e; box-shadow:0 0 0 2px rgba(0,0,0,.5); }
   .focus-pulse { animation: pulseBorder 1.2s ease-out 0s 2; }
@@ -320,6 +341,8 @@
   :global(.dark) .final-confidence.won { background:linear-gradient(135deg,#166534,#16a34a); }
   :global(.dark) .final-confidence.lost { background:linear-gradient(135deg,#7f1d1d,#b91c1c); }
   :global(.dark) .final-confidence.no-pick { background:linear-gradient(135deg,#4b5563,#6b7280); }
+  :global(.dark) .final-confidence.push { background:linear-gradient(135deg,#f59e0b,#d97706); color:#1f2937; }
+  :global(.dark) .result-line.push { background:#f59e0b33; color:#fffbeb; }
   @media (max-width:950px){
     .matchup { 
       display:grid; 

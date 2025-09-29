@@ -90,15 +90,34 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     for (const pick of picks) {
       const game = games.find(g => g.id === pick.gameId);
       if (pick.points == null && game && game.status === 'FINAL' && pick.confidence != null && pick.pickedTeamId) {
-        const winnerTeamId = (game.homeScore > game.awayScore) ? game.homeTeam.id : game.awayTeam.id;
-        pick.points = (winnerTeamId === pick.pickedTeamId) ? pick.confidence : -pick.confidence;
-        pick.won = (winnerTeamId === pick.pickedTeamId);
-        console.log(`[picks][GET] computed on-demand score for game ${game.id}: pick team ${pick.pickedTeamId}, winner ${winnerTeamId}, result: ${pick.won ? 'WON' : 'LOST'} ${pick.points}`);
+        let winnerTeamId = null;
+        let computedPoints = 0;
+        let wonValue = null;
+
+        if (game.homeScore > game.awayScore) {
+          winnerTeamId = game.homeTeam.id;
+          wonValue = winnerTeamId === pick.pickedTeamId;
+          computedPoints = wonValue ? pick.confidence : -pick.confidence;
+        } else if (game.awayScore > game.homeScore) {
+          winnerTeamId = game.awayTeam.id;
+          wonValue = winnerTeamId === pick.pickedTeamId;
+          computedPoints = wonValue ? pick.confidence : -pick.confidence;
+        } else {
+          // Tie: no winner, zero points regardless of pick
+          winnerTeamId = null;
+          wonValue = null;
+          computedPoints = 0;
+        }
+
+        pick.points = computedPoints;
+        pick.won = wonValue;
+        console.log(`[picks][GET] computed on-demand score for game ${game.id}: pick team ${pick.pickedTeamId}, winner ${winnerTeamId ?? 'TIE'}, result: ${wonValue === null ? 'TIE' : wonValue ? 'WON' : 'LOST'} ${pick.points}`);
         
         // Track this game for group-wide database persistence
         calculatedPicks.push({
           gameId: pick.gameId,
-          winnerTeamId: winnerTeamId
+          winnerTeamId,
+          isTie: winnerTeamId == null
         });
       }
     }
@@ -107,19 +126,24 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     if (calculatedPicks.length > 0) {
       try {
         for (const calc of calculatedPicks) {
+          const winnerParam = calc.winnerTeamId == null ? null : String(calc.winnerTeamId);
           // Update ALL users' picks for this game in this group
           const { rowCount } = await pool.query(`
             UPDATE user_picks 
-            SET won = (picked_team_id = $1), 
+            SET won = CASE 
+                  WHEN $1 IS NULL THEN NULL 
+                  ELSE (picked_team_id = $1)
+                END,
                 points = CASE 
+                  WHEN $1 IS NULL THEN 0
                   WHEN picked_team_id = $1 THEN confidence_level 
                   ELSE -confidence_level 
                 END,
                 updated_at = NOW()
             WHERE group_id = $2 AND game_id = $3 AND picked_team_id IS NOT NULL AND points IS NULL
-          `, [calc.winnerTeamId, group.id, calc.gameId]);
+          `, [winnerParam, group.id, calc.gameId]);
           
-          console.log(`[picks][GET] updated ${rowCount} user picks for game ${calc.gameId} (winner: team ${calc.winnerTeamId}) across all group members`);
+          console.log(`[picks][GET] updated ${rowCount} user picks for game ${calc.gameId} (${calc.isTie ? 'TIE' : `winner team ${calc.winnerTeamId}`}) across all group members`);
         }
         console.log(`[picks][GET] persisted scores for ${calculatedPicks.length} games across all group members`);
       } catch (error) {
@@ -380,12 +404,26 @@ router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
 
     // Compute points if not stored but game final
     for (const r of pickRows) {
-      if (r.points == null && r.status === 'FINAL' && r.confidence_level != null && r.picked_team_id) {
-        const home = typeof r.home_team === 'string' ? JSON.parse(r.home_team) : r.home_team;
-        const away = typeof r.away_team === 'string' ? JSON.parse(r.away_team) : r.away_team;
-        const winnerTeamId = (r.home_score > r.away_score) ? home.id : away.id;
+      if (r.status !== 'FINAL' || r.confidence_level == null || !r.picked_team_id) continue;
+
+      const home = typeof r.home_team === 'string' ? JSON.parse(r.home_team) : r.home_team;
+      const away = typeof r.away_team === 'string' ? JSON.parse(r.away_team) : r.away_team;
+
+      let winnerTeamId = null;
+      if (r.home_score > r.away_score) {
+        winnerTeamId = home.id;
+      } else if (r.away_score > r.home_score) {
+        winnerTeamId = away.id;
+      }
+
+      if (winnerTeamId === null) {
+        r.points = 0;
+        r.won = null;
+      } else if (r.points == null) {
         // Use correct scoring: +confidence for wins, -confidence for losses
-        r.points = (winnerTeamId === r.picked_team_id) ? r.confidence_level : -r.confidence_level;
+        const didWin = String(winnerTeamId) === String(r.picked_team_id);
+        r.points = didWin ? r.confidence_level : -r.confidence_level;
+        r.won = didWin;
       }
     }
 
