@@ -294,7 +294,7 @@
   .confidence-wrapper.locked-state { opacity:.8; }
   :global(.dark) .confidence-wrapper { background:#374151; }
   .conf-button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.25rem; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border:none; border-radius:10px; padding:.5rem .55rem .55rem; cursor:pointer; font-weight:700; font-size:1.35rem; line-height:1; min-width:2.8ch; position:relative; box-shadow:0 2px 4px rgba(0,0,0,.25); }
-  .conf-button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+  .conf-button:focus-visible { box-shadow:0 0 0 3px rgba(37,99,235,0.5); }
   .conf-value { font-variant-numeric:tabular-nums; }
   .conf-arrows { font-size:.55rem; letter-spacing:-1px; margin-top:2px; opacity:.85; font-weight:600; }
   .conf-popover { position:absolute; top:100%; right:0; margin-top:.4rem; background:var(--color-surface-primary,#ffffff); border:1px solid var(--color-surface-tertiary,#d1d5db); box-shadow:0 6px 18px -4px rgba(0,0,0,.25); border-radius:10px; padding:.4rem .45rem .5rem; display:grid; grid-template-columns:repeat(auto-fill,minmax(40px,1fr)); gap:.35rem; min-width:200px; z-index:30; }
