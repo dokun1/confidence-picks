@@ -468,10 +468,9 @@ router.get('/:identifier/picks/user/:userId', authenticateToken, async (req, res
 
     const group = await ensureMembership(identifier, req.user.id);
     
-    // Check if requester is owner/admin
-    if (group.userRole !== 'admin') {
-      return res.status(403).json({ error: 'Only group owners can view other users picks' });
-    }
+    // Any group member can view other users' picks (read-only)
+    // Only admins can edit (enforced in POST route)
+    const canEdit = group.userRole === 'admin';
     
     // Verify target user is a member of the group
     const { rows: memberCheck } = await pool.query(
@@ -575,11 +574,10 @@ router.get('/:identifier/picks/user/:userId', authenticateToken, async (req, res
     const payloadGames = games.map(g => {
       const j = normalizeGame(g);
       const pick = pickMap.get(g.id) || null;
-      // Owner override mode: Allow editing all games regardless of status
-      // This is safe because:
-      // 1. Only users with 'admin' role can access this endpoint (verified at line 464)
-      // 2. Owners have discretion to fix submission issues after games start/finish
-      // 3. This is the only authorized exception to the locked game rule
+      const baseMeta = deriveGamePickMeta(j, pick);
+      
+      // If user can edit (admin), unlock all games for override
+      // Otherwise, use normal lock status and set canEdit to false
       return {
         ...j,
         pick: pick ? {
@@ -589,10 +587,14 @@ router.get('/:identifier/picks/user/:userId', authenticateToken, async (req, res
           won: pick.won,
           points: pick.points
         } : null,
-        meta: {
-          ...deriveGamePickMeta(j, pick),
-          locked: false, // Unlock all games for owner override
+        meta: canEdit ? {
+          ...baseMeta,
+          locked: false,
           canEdit: true
+        } : {
+          ...baseMeta,
+          locked: true,  // Lock everything for read-only viewers
+          canEdit: false
         }
       };
     });
@@ -607,7 +609,8 @@ router.get('/:identifier/picks/user/:userId', authenticateToken, async (req, res
       totalGames,
       pickedCount: usedConfidences.length,
       weekPoints,
-      isOwnerOverride: true // Flag to indicate this is owner override mode
+      canEdit, // Flag to indicate whether viewer can edit these picks
+      isOwnerOverride: canEdit // Legacy flag for backwards compatibility
     });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
