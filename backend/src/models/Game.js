@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { getCurrentNFLSeason } from '../utils/nflSeasonUtils.js';
 
 export class Game {
   constructor(data) {
@@ -52,7 +53,7 @@ static fromESPNData(espnGame) {
 
     // Fix the season parsing - it's available in the competition
   const season = competition.season || espnGame.season || {};
-  const seasonYear = season.year || new Date().getFullYear();
+  const seasonYear = season.year || getCurrentNFLSeason();
   let seasonType = season.type || 2;
 
   // Map ONLY the final preseason week to regular season week 0 for picks/testing

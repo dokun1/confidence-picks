@@ -4,6 +4,7 @@ import { Group } from '../models/Group.js';
 import { GameService } from '../services/GameService.js';
 import { UserPick } from '../models/UserPick.js';
 import pool from '../config/database.js';
+import { getCurrentNFLSeason } from '../utils/nflSeasonUtils.js';
 
 const router = express.Router();
 
@@ -49,7 +50,7 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     const { identifier } = req.params;
     // Runtime safeguard: ensure confidence unique index is correct shape
     UserPick.ensureConfidenceIndex().catch(()=>{});
-    const season = parseInt(req.query.season) || new Date().getFullYear();
+    const season = parseInt(req.query.season) || getCurrentNFLSeason();
     const seasonType = parseInt(req.query.seasonType) || 2;
     const weekRaw = req.query.week;
     const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
@@ -195,7 +196,7 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
   try {
   const { identifier } = req.params;
   UserPick.ensureConfidenceIndex().catch(()=>{});
-    const season = parseInt(req.query.season) || new Date().getFullYear();
+    const season = parseInt(req.query.season) || getCurrentNFLSeason();
     const seasonType = parseInt(req.query.seasonType) || 2;
     const group = await ensureMembership(identifier, req.user.id);
     const week = await computeClosestWeek(season, seasonType);
@@ -388,7 +389,7 @@ router.post('/:identifier/picks/clear', authenticateToken, async (req, res) => {
 router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
-    const season = parseInt(req.query.season) || new Date().getFullYear();
+    const season = parseInt(req.query.season) || getCurrentNFLSeason();
     const seasonType = parseInt(req.query.seasonType) || 2;
     const group = await ensureMembership(identifier, req.user.id);
 

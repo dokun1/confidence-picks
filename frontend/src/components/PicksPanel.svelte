@@ -5,9 +5,10 @@
   import { getMyGroups } from '../lib/groupsService.js';
   import GamePickRow from './GamePickRow.svelte';
   import InlineToast from '../designsystem/components/InlineToast.svelte';
+  import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
 
   export let groupIdentifier;
-  let season = new Date().getFullYear();
+  let season = getCurrentNFLSeason();
   let seasonType = 2; // Regular
   let week = null;
 

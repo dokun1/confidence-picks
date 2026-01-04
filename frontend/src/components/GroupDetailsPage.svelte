@@ -95,8 +95,9 @@
   import { getScoreboard } from '../lib/picksService.js';
   import ConfirmDeleteModal from './ConfirmDeleteModal.svelte';
   import { leaveGroup } from '../lib/groupsService.js';
+  import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
 
-  const currentSeason = new Date().getFullYear();
+  const currentSeason = getCurrentNFLSeason();
   const currentSeasonType = 2; // Regular
   let leaderboardLoading = false;
   let leaderboardError = '';
