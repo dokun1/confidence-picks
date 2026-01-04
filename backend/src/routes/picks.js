@@ -450,4 +450,344 @@ router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
   }
 });
 
+// Get picks for a specific user in the group (owner only)
+router.get('/:identifier/picks/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, userId } = req.params;
+    UserPick.ensureConfidenceIndex().catch(()=>{});
+    const season = parseInt(req.query.season) || getCurrentNFLSeason();
+    const seasonType = parseInt(req.query.seasonType) || 2;
+    const weekRaw = req.query.week;
+    const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
+    if (Number.isNaN(week)) return res.status(400).json({ error: 'week required' });
+    
+    const targetUserId = parseInt(userId);
+    if (Number.isNaN(targetUserId)) return res.status(400).json({ error: 'Invalid userId' });
+    
+    console.log('[picks][GET user] request', { requesterId: req.user.id, targetUserId, identifier, season, seasonType, week });
+
+    const group = await ensureMembership(identifier, req.user.id);
+    
+    // Check if requester is owner/admin
+    if (group.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only group owners can view other users picks' });
+    }
+    
+    // Verify target user is a member of the group
+    const { rows: memberCheck } = await pool.query(
+      'SELECT 1 FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+      [group.id, targetUserId]
+    );
+    if (memberCheck.length === 0) {
+      return res.status(404).json({ error: 'User is not a member of this group' });
+    }
+
+    console.log('[picks][GET user] group', { groupId: group.id });
+
+    // Map regular season week 0 to preseason week 4
+    let fetchSeasonType = seasonType;
+    let fetchWeek = week;
+    let espnSeasonType = seasonType;
+    let espnWeek = week;
+    
+    if (seasonType === 2 && week === 0) {
+      if (season === 2025) {
+        espnSeasonType = 1;
+        espnWeek = 4;
+        console.log('[picks][GET user] 2025 exception: fetching ESPN preseason week 4 as regular season week 0');
+      } else {
+        fetchSeasonType = 1; 
+        fetchWeek = 4; 
+        console.log('[picks][GET user] mapped week0 -> preseason week4'); 
+      }
+    }
+    
+    const games = await GameService.getGamesForWeek(season, espnSeasonType || fetchSeasonType, espnWeek || fetchWeek, false);
+    console.log('[picks][GET user] games', games.length);
+    
+    const picks = await UserPick.findForUserWeek({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+    console.log('[picks][GET user] existing picks', picks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+    
+    // Compute points on-demand for FINAL games
+    const calculatedPicks = [];
+    for (const pick of picks) {
+      const game = games.find(g => g.id === pick.gameId);
+      if (pick.points == null && game && game.status === 'FINAL' && pick.confidence != null && pick.pickedTeamId) {
+        let winnerTeamId = null;
+        let computedPoints = 0;
+        let wonValue = null;
+
+        if (game.homeScore > game.awayScore) {
+          winnerTeamId = game.homeTeam.id;
+          wonValue = winnerTeamId === pick.pickedTeamId;
+          computedPoints = wonValue ? pick.confidence : -pick.confidence;
+        } else if (game.awayScore > game.homeScore) {
+          winnerTeamId = game.awayTeam.id;
+          wonValue = winnerTeamId === pick.pickedTeamId;
+          computedPoints = wonValue ? pick.confidence : -pick.confidence;
+        } else {
+          winnerTeamId = null;
+          wonValue = null;
+          computedPoints = 0;
+        }
+
+        pick.points = computedPoints;
+        pick.won = wonValue;
+        
+        calculatedPicks.push({
+          gameId: pick.gameId,
+          winnerTeamId,
+          isTie: winnerTeamId == null
+        });
+      }
+    }
+    
+    // Persist calculated scores
+    if (calculatedPicks.length > 0) {
+      try {
+        for (const calc of calculatedPicks) {
+          const winnerParam = calc.winnerTeamId == null ? null : String(calc.winnerTeamId);
+          const { rowCount } = await pool.query(`
+            UPDATE user_picks 
+            SET won = CASE 
+                  WHEN $1 IS NULL THEN NULL 
+                  ELSE (picked_team_id = $1)
+                END,
+                points = CASE 
+                  WHEN $1 IS NULL THEN 0
+                  WHEN picked_team_id = $1 THEN confidence_level 
+                  ELSE -confidence_level 
+                END,
+                updated_at = NOW()
+            WHERE group_id = $2 AND game_id = $3 AND picked_team_id IS NOT NULL AND points IS NULL
+          `, [winnerParam, group.id, calc.gameId]);
+          
+          console.log(`[picks][GET user] updated ${rowCount} user picks for game ${calc.gameId}`);
+        }
+      } catch (error) {
+        console.error('[picks][GET user] failed to persist calculated scores:', error);
+      }
+    }
+    
+    const pickMap = new Map(picks.map(p => [p.gameId, p]));
+    const totalGames = games.length;
+
+    const payloadGames = games.map(g => {
+      const j = normalizeGame(g);
+      const pick = pickMap.get(g.id) || null;
+      // For owner override, we allow editing all games (unlock them in meta)
+      return {
+        ...j,
+        pick: pick ? {
+          gameId: pick.gameId,
+          pickedTeamId: pick.pickedTeamId,
+          confidence: pick.confidence,
+          won: pick.won,
+          points: pick.points
+        } : null,
+        meta: {
+          ...deriveGamePickMeta(j, pick),
+          locked: false, // Owner can override any game
+          canEdit: true
+        }
+      };
+    });
+
+    const usedConfidences = picks.filter(p => p.confidence != null).map(p => p.confidence);
+    const availableConfidences = Array.from({ length: totalGames }, (_, i) => i + 1).filter(n => !usedConfidences.includes(n));
+    const weekPoints = picks.reduce((sum, p) => sum + (p.points || 0), 0);
+
+    res.json({
+      games: payloadGames,
+      availableConfidences,
+      totalGames,
+      pickedCount: usedConfidences.length,
+      weekPoints,
+      isOwnerOverride: true // Flag to indicate this is owner override mode
+    });
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    console.error('GET user picks error', e);
+    res.status(500).json({ error: 'Failed to load user picks' });
+  }
+});
+
+// Submit picks on behalf of another user (owner only)
+router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, userId } = req.params;
+    UserPick.ensureConfidenceIndex().catch(()=>{});
+    const { season, seasonType, week, picks, clearedGameIds } = req.body;
+    
+    const targetUserId = parseInt(userId);
+    if (Number.isNaN(targetUserId)) return res.status(400).json({ error: 'Invalid userId' });
+    
+    console.log('[picks][POST user] incoming', { requesterId: req.user.id, targetUserId, identifier, season, seasonType, week, picksCount: picks?.length, clearedGameIds });
+    
+    if (!season || !seasonType || (week === undefined || week === null || Number.isNaN(parseInt(week))) || !Array.isArray(picks)) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+    
+    const group = await ensureMembership(identifier, req.user.id);
+    
+    // Check if requester is owner/admin
+    if (group.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only group owners can submit picks for other users' });
+    }
+    
+    // Verify target user is a member of the group
+    const { rows: memberCheck } = await pool.query(
+      'SELECT 1 FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+      [group.id, targetUserId]
+    );
+    if (memberCheck.length === 0) {
+      return res.status(404).json({ error: 'User is not a member of this group' });
+    }
+    
+    console.log('[picks][POST user] group', { groupId: group.id });
+
+    // Week 0 mapping logic
+    let fetchSeasonType = seasonType;
+    let fetchWeek = week;
+    let espnSeasonType = seasonType;
+    let espnWeek = week;
+    
+    if (seasonType === 2 && week === 0) {
+      if (season === 2025) {
+        espnSeasonType = 1;
+        espnWeek = 4;
+        console.log('[picks][POST user] 2025 exception: fetching ESPN preseason week 4 as regular season week 0');
+      } else {
+        fetchSeasonType = 1; 
+        fetchWeek = 4; 
+        console.log('[picks][POST user] mapped week0 -> preseason week4'); 
+      }
+    }
+    
+    const games = await GameService.getGamesForWeek(season, espnSeasonType || fetchSeasonType, espnWeek || fetchWeek, false);
+    console.log('[picks][POST user] games', games.length);
+    const gameById = new Map(games.map(g => [g.id, g]));
+
+    const cleared = Array.isArray(clearedGameIds) ? clearedGameIds.map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n)) : [];
+
+    // Validate picks (but allow locked games for owner)
+    const totalGames = games.length;
+    const seenConf = new Set();
+    for (const p of picks) {
+      const game = gameById.get(p.gameId);
+      if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
+      if (cleared.includes(p.gameId)) continue;
+      
+      // Owner can override locked games - no status check needed
+      
+      if (p.confidence != null) {
+        if (p.confidence < 1 || p.confidence > totalGames) return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId });
+        if (seenConf.has(p.confidence)) return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence });
+        seenConf.add(p.confidence);
+        if (!p.pickedTeamId) return res.status(400).json({ error: 'Winner required when confidence set', gameId: p.gameId });
+      }
+      if (p.pickedTeamId != null) {
+        const validTeam = [game.homeTeam.id, game.awayTeam.id].map(String).includes(String(p.pickedTeamId));
+        if (!validTeam) {
+          console.warn('Invalid team for game validation failed', { gameId: p.gameId, pickedTeamId: p.pickedTeamId, homeTeamId: game.homeTeam.id, awayTeamId: game.awayTeam.id });
+          return res.status(400).json({ error: 'Invalid team for game', gameId: p.gameId });
+        }
+      }
+    }
+    console.log('[picks][POST user] validation complete');
+
+    // Owner can clear locked games
+    for (const gid of cleared) {
+      const game = gameById.get(gid);
+      if (!game) return res.status(400).json({ error: 'Invalid clearedGameId', gameId: gid });
+    }
+
+    // Load existing picks for target user
+    const existingPicks = await UserPick.findForUserWeek({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+    console.log('[picks][POST user] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+
+    // Detect confidence overrides
+    const payloadGameIds = new Set(picks.map(p => p.gameId));
+    const implicitConfidenceClears = new Set();
+    for (const p of picks) {
+      if (p.confidence == null) continue;
+      const conflict = existingPicks.find(ep => ep.confidence === p.confidence && ep.gameId !== p.gameId);
+      if (conflict && !payloadGameIds.has(conflict.gameId) && !cleared.includes(conflict.gameId)) {
+        // Owner can override even locked games
+        implicitConfidenceClears.add(conflict.gameId);
+      }
+    }
+    console.log('[picks][POST user] implicit clears', [...implicitConfidenceClears]);
+
+    // Perform explicit clears first
+    if (cleared.length > 0) {
+      await UserPick.clearPending({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, gameIds: cleared });
+    }
+
+    // Clear confidence for implicit overrides
+    if (implicitConfidenceClears.size > 0) {
+      const icIds = [...implicitConfidenceClears];
+      const params = [targetUserId, group.id, season, fetchSeasonType, fetchWeek];
+      const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
+      params.push(...icIds);
+      await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
+        WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5 AND game_id IN (${inClause})` , params);
+    }
+    console.log('[picks][POST user] performed clears', { explicit: cleared, implicit:[...implicitConfidenceClears] });
+
+    const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
+    if (effectivePicks.length > 0) {
+      await UserPick.bulkUpsert({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, picks: effectivePicks });
+    }
+    console.log('[picks][POST user] upsert done');
+
+    // Return updated week state
+    const updatedPicks = await UserPick.findForUserWeek({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+    console.log('[picks][POST user] updated picks', updatedPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+    const pickMap = new Map(updatedPicks.map(p => [p.gameId, p]));
+
+    const payloadGames = games.map(g => {
+      const j = normalizeGame(g);
+      const pick = pickMap.get(g.id) || null;
+      return {
+        ...j,
+        pick: pick ? {
+          gameId: pick.gameId,
+          pickedTeamId: pick.pickedTeamId,
+          confidence: pick.confidence,
+          won: pick.won,
+          points: pick.points
+        } : null,
+        meta: {
+          ...deriveGamePickMeta(j, pick),
+          locked: false, // Owner can override any game
+          canEdit: true
+        }
+      };
+    });
+
+    const usedConfidences = updatedPicks.filter(p => p.confidence != null).map(p => p.confidence);
+    const availableConfidences = Array.from({ length: games.length }, (_, i) => i + 1).filter(n => !usedConfidences.includes(n));
+    const weekPoints = updatedPicks.reduce((sum, p) => sum + (p.points || 0), 0);
+
+    const responseBody = { 
+      games: payloadGames, 
+      availableConfidences, 
+      totalGames: games.length, 
+      pickedCount: usedConfidences.length, 
+      weekPoints,
+      isOwnerOverride: true 
+    };
+    console.log('[picks][POST user] response');
+    res.json(responseBody);
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    if (e.code === '23505') return res.status(400).json({ error: 'Duplicate confidence (constraint)' });
+    console.error('POST user picks error', e);
+    res.status(500).json({ error: 'Failed to save picks' });
+  }
+});
+
 export default router;

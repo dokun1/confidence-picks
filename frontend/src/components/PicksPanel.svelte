@@ -1,13 +1,15 @@
 <script>
   import { onMount } from 'svelte';
   import Button from '../designsystem/components/Button.svelte';
-  import { getClosestWeek, getPicks, savePicks, clearPicks, getScoreboard } from '../lib/picksService.js';
-  import { getMyGroups } from '../lib/groupsService.js';
+  import { getClosestWeek, getPicks, savePicks, clearPicks, getScoreboard, getUserPicks, saveUserPicks } from '../lib/picksService.js';
+  import { getMyGroups, getMembers } from '../lib/groupsService.js';
   import GamePickRow from './GamePickRow.svelte';
   import InlineToast from '../designsystem/components/InlineToast.svelte';
   import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
+  import { auth } from '../lib/authStore.js';
 
   export let groupIdentifier;
+  export let isOwner = false; // Whether current user is group owner
   let season = getCurrentNFLSeason();
   let seasonType = 2; // Regular
   let week = null;
@@ -42,6 +44,15 @@
   let selectedGroups = new Set();
   let loadingGroups = false;
 
+  // Owner override functionality
+  let groupMembers = [];
+  let loadingMembers = false;
+  let selectedUserId = null; // null means current user, number means override mode
+  let showUserSelector = false;
+  let showOwnerConfirmDialog = false; // For self-override confirmation
+  let pendingSaveAction = null; // Store save action when waiting for confirmation
+  let currentUser = null;
+
   const TOTAL_WEEKS = 18; // regular season weeks 1-18
 
   function isDirty() { return JSON.stringify(draft) !== JSON.stringify(original); }
@@ -57,6 +68,18 @@
     try {
       // Load user's groups for multi-group save feature
       await loadUserGroups();
+      
+      // Load group members if owner
+      if (isOwner) {
+        await loadGroupMembers();
+      }
+      
+      // Get current user info
+      auth.subscribe(authState => {
+        if (authState.user) {
+          currentUser = authState.user;
+        }
+      });
       
     if (week == null) {
         try {
@@ -88,7 +111,41 @@
     }
   }
 
+  async function loadGroupMembers() {
+    if (loadingMembers) return;
+    loadingMembers = true;
+    try {
+      groupMembers = await getMembers(groupIdentifier);
+    } catch (e) {
+      console.warn('Failed to load group members:', e);
+      groupMembers = [];
+    } finally {
+      loadingMembers = false;
+    }
+  }
+
   async function fetchPicks() {
+    // If in override mode, fetch picks for selected user
+    if (selectedUserId !== null) {
+      const data = await getUserPicks(groupIdentifier, selectedUserId, { season, seasonType, week });
+      games = data.games;
+      applyWeekSpecificFilters();
+      availableConfidences = data.availableConfidences;
+      totalGames = data.totalGames;
+      weekPoints = data.weekPoints;
+      original = {};
+      for (const g of games) {
+        if (g.pick && (g.pick.pickedTeamId != null || g.pick.confidence != null)) {
+          original[g.id] = { pickedTeamId: g.pick.pickedTeamId != null ? Number(g.pick.pickedTeamId) : null, confidence: g.pick.confidence };
+        }
+      }
+      draft = JSON.parse(JSON.stringify(original));
+      recalcCanSave();
+      lastRefreshed = new Date();
+      return;
+    }
+    
+    // Normal mode - fetch current user's picks
     const data = await getPicks(groupIdentifier, { season, seasonType, week });
   console.debug('[PicksPanel] fetchPicks response', { groupIdentifier, season, seasonType, week, gameCount: data.games.length, available: data.availableConfidences, total: data.totalGames, weekPoints: data.weekPoints });
   games = data.games;
@@ -185,15 +242,63 @@
   }
 
   async function doSave() {
+    // Check if owner is saving their own picks in override mode (needs confirmation)
+    if (isOwner && selectedUserId === currentUser?.id && hasLockedGames()) {
+      // Show confirmation dialog
+      pendingSaveAction = () => doSaveInternal();
+      showOwnerConfirmDialog = true;
+      return;
+    }
+    
+    await doSaveInternal();
+  }
+  
+  function hasLockedGames() {
+    // Check if any of the picks being saved are for locked games
+    return Object.entries(draft).some(([gameId, val]) => {
+      if (!val.pickedTeamId || val.confidence == null) return false;
+      const game = games.find(g => g.id === parseInt(gameId));
+      return game && game.status !== 'SCHEDULED';
+    });
+  }
+  
+  async function confirmOwnerOverride() {
+    showOwnerConfirmDialog = false;
+    if (pendingSaveAction) {
+      await pendingSaveAction();
+      pendingSaveAction = null;
+    }
+  }
+  
+  function cancelOwnerOverride() {
+    showOwnerConfirmDialog = false;
+    pendingSaveAction = null;
+  }
+
+  async function doSaveInternal() {
     saving = true; error=''; recalcCanSave();
     try {
       const picksPayload = Object.entries(draft)
         .filter(([_, val]) => val.pickedTeamId && val.confidence != null)
         .map(([gameId, val]) => ({ gameId: parseInt(gameId), pickedTeamId: val.pickedTeamId, confidence: val.confidence }));
       const clearedGameIds = Array.from(clearedPicks);
-    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft, selectedGroups: Array.from(selectedGroups) });
+    console.debug('[PicksPanel] doSave start', { week, season, seasonType, picksPayload, clearedGameIds, draft, selectedGroups: Array.from(selectedGroups), selectedUserId });
       
-      // If only one group or no groups selected, save to current group only
+      // If in override mode, save for the selected user
+      if (selectedUserId !== null) {
+        const result = await saveUserPicks(groupIdentifier, selectedUserId, { season, seasonType, week, picks: picksPayload, clearedGameIds });
+        console.debug('[PicksPanel] doSave override response');
+        games = result.games; applyWeekSpecificFilters();
+        availableConfidences = result.availableConfidences; totalGames = result.totalGames; weekPoints = result.weekPoints;
+        original = {}; for (const g of games) if (g.pick) original[g.id] = { pickedTeamId: g.pick.pickedTeamId, confidence: g.pick.confidence };
+        draft = JSON.parse(JSON.stringify(original));
+        clearedPicks.clear();
+        recalcCanSave();
+        lastRefreshed = new Date();
+        return;
+      }
+      
+      // Normal mode - save to selected groups
       const groupsToSave = selectedGroups.size === 0 ? [groupIdentifier] : Array.from(selectedGroups);
       
       let lastResult = null;
@@ -239,6 +344,19 @@
       saving=false; 
       recalcCanSave(); 
     }
+  }
+
+  async function changeSelectedUser(userId) {
+    // userId can be null (current user) or a number (other user)
+    selectedUserId = userId;
+    showUserSelector = false;
+    
+    // Clear current draft and fetch picks for selected user
+    draft = {};
+    original = {};
+    clearedPicks.clear();
+    
+    await fetchPicks();
   }
 
   async function doClear() {
@@ -360,8 +478,74 @@
         {/each}
       </select>
     </div>
+    
+    <!-- Owner: User Selector -->
+    {#if isOwner && groupMembers.length > 0}
+      <div class="relative">
+        <button 
+          on:click={() => showUserSelector = !showUserSelector}
+          class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800 hover:bg-secondary-100 dark:hover:bg-secondary-700 transition-colors flex items-center gap-xs"
+          aria-label="Select user to edit picks"
+        >
+          {#if selectedUserId === null}
+            <span>Your Picks</span>
+          {:else}
+            <span>Editing: {groupMembers.find(m => m.id === selectedUserId)?.name || 'User'}</span>
+          {/if}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </button>
+        
+        {#if showUserSelector}
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div class="fixed inset-0 z-40" on:click={() => showUserSelector = false}></div>
+          <div class="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-secondary-800 border border-gray-200 dark:border-secondary-700 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div on:click|stopPropagation>
+              <div class="p-2 border-b border-gray-200 dark:border-secondary-700">
+                <button
+                  on:click={() => changeSelectedUser(null)}
+                  class="w-full text-left px-3 py-2 rounded hover:bg-secondary-100 dark:hover:bg-secondary-700 transition-colors {selectedUserId === null ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 font-medium' : ''}"
+                >
+                  Your Picks
+                </button>
+              </div>
+              <div class="p-2">
+                <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 px-3 py-1 uppercase tracking-wide">
+                  Edit Other Users
+                </div>
+                {#each groupMembers as member}
+                  <button
+                    on:click={() => changeSelectedUser(member.id)}
+                    class="w-full text-left px-3 py-2 rounded hover:bg-secondary-100 dark:hover:bg-secondary-700 transition-colors {selectedUserId === member.id ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 font-medium' : ''}"
+                  >
+                    {member.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
+    
     <Button variant="tertiary" size="sm" on:click={fetchPicks}>Refresh</Button>
   </div>
+  
+  <!-- Owner Override Warning -->
+  {#if selectedUserId !== null}
+    <div class="p-sm bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100 rounded text-sm flex items-start gap-sm">
+      <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+      </svg>
+      <div>
+        <strong>Owner Override Mode:</strong> You are editing picks for <strong>{groupMembers.find(m => m.id === selectedUserId)?.name || 'another user'}</strong>. You can override picks even after games have started or finished.
+      </div>
+    </div>
+  {/if}
 
   {#if error}
     <div class="p-sm bg-red-100 text-red-700 rounded text-sm">{error}</div>
@@ -488,6 +672,41 @@
           >
             Deselect All
           </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Owner Self-Override Confirmation Dialog -->
+  {#if showOwnerConfirmDialog}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" on:click={cancelOwnerOverride}>
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="bg-white dark:bg-secondary-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6" on:click|stopPropagation>
+        <div class="flex items-start gap-4 mb-4">
+          <div class="flex-shrink-0">
+            <svg class="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-neutral-0 mb-2">
+              Confirm Owner Override
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+              You are about to override your own picks after games have been locked or completed. This action should only be used to correct submission issues. Are you sure you want to proceed?
+            </p>
+            <div class="flex gap-3 justify-end">
+              <Button variant="tertiary" size="md" on:click={cancelOwnerOverride}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="md" on:click={confirmOwnerOverride}>
+                Confirm Override
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
