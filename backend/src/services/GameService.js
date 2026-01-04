@@ -1,5 +1,26 @@
 import { Game } from '../models/Game.js';
 import { ESPNService } from './ESPNService.js';
+import { MockESPNService } from '../mocks/MockESPNService.js';
+
+/**
+ * Get the appropriate ESPN service (real or mock)
+ */
+function getESPNService() {
+  const useMock = process.env.USE_MOCK_ESPN === 'true' || MockESPNService.isEnabled();
+  
+  if (useMock) {
+    // Ensure mock service is configured
+    if (!MockESPNService.mockGames) {
+      console.log('[GameService] Auto-configuring MockESPNService');
+      MockESPNService.configure();
+    }
+    console.log('[GameService] Using MockESPNService');
+    return MockESPNService;
+  }
+  
+  console.log('[GameService] Using real ESPNService');
+  return ESPNService;
+}
 
 export class GameService {
   // Get game with caching logic
@@ -88,7 +109,8 @@ export class GameService {
       }
 
       // Fetch fresh data from ESPN (forceRefresh or refresh needed)
-      const espnGames = await ESPNService.fetchGames(year, espnSeasonType, espnWeek);
+      const service = getESPNService();
+      const espnGames = await service.fetchGames(year, espnSeasonType, espnWeek);
       for (const espnGame of espnGames) {
         const espnId = espnGame.id;
         let cachedGame = await Game.findByESPNId(espnId);
