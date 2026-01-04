@@ -553,7 +553,7 @@
             </div>
           </div>
           <div class="picks-container bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks bind:hasMultipleGroups bind:showGroupSelector bind:currentWeek groupIdentifier={group.identifier} />
+            <PicksPanel bind:this={picksPanelRef} bind:canSave bind:savingState bind:clearingState bind:hasSortedPicks bind:hasMultipleGroups bind:showGroupSelector bind:currentWeek groupIdentifier={group.identifier} isOwner={group.isOwner} />
           </div>
         </div>
       {/if}

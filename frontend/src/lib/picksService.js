@@ -66,3 +66,22 @@ export async function getScoreboard(groupIdentifier, { season, seasonType }) {
   if (!res.ok) { const data = await res.json().catch(()=>({})); throw new Error(data.error || 'Failed to load scoreboard'); }
   return res.json();
 }
+
+export async function getUserPicks(groupIdentifier, userId, { season, seasonType, week }) {
+  const params = new URLSearchParams({ season, seasonType, week });
+  const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks/user/${userId}?${params}`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load user picks');
+  }
+  return res.json();
+}
+
+export async function saveUserPicks(groupIdentifier, userId, body) {
+  const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks/user/${userId}`, { method: 'POST', body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error || 'Failed to save user picks');
+  }
+  return res.json();
+}
