@@ -44,14 +44,16 @@
   let selectedGroups = new Set();
   let loadingGroups = false;
 
-  // Owner override functionality
+  // User viewing functionality (all users can view, only owners can edit)
   let groupMembers = [];
   let loadingMembers = false;
-  let selectedUserId = null; // null means current user, number means override mode
+  let selectedUserId = null; // null means current user, number means viewing another user
   let showUserSelector = false;
   let showOwnerConfirmDialog = false; // For self-override confirmation
   let pendingSaveAction = null; // Store save action when waiting for confirmation
   let currentUser = null;
+  let canEditSelectedUser = false; // Whether the current user can edit the selected user's picks
+  let viewingOtherUser = false; // Reactive: are we viewing someone else's picks?
 
   const TOTAL_WEEKS = 18; // regular season weeks 1-18
 
@@ -60,7 +62,12 @@
   function hasIncomplete() { return Object.values(draft).some(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)); }
   let canSaveValue = false;
   // Allow save if there is at least one complete pick OR there are cleared picks to persist (so user can remove picks)
-  function recalcCanSave() { canSaveValue = (completePicks().length > 0 || clearedPicks.size > 0) && !saving; }
+  // AND the user has permission to edit (own picks or owner viewing someone else)
+  function recalcCanSave() { 
+    const hasChanges = (completePicks().length > 0 || clearedPicks.size > 0);
+    const canEdit = !viewingOtherUser || canEditSelectedUser;
+    canSaveValue = hasChanges && canEdit && !saving; 
+  }
   function incompleteCount() { return Object.values(draft).filter(p => (p.pickedTeamId && p.confidence == null) || (!p.pickedTeamId && p.confidence != null)).length; }
 
   async function initWeek() {
@@ -69,10 +76,8 @@
       // Load user's groups for multi-group save feature
       await loadUserGroups();
       
-      // Load group members if owner
-      if (isOwner) {
-        await loadGroupMembers();
-      }
+      // Load group members for all users (anyone can view others' picks)
+      await loadGroupMembers();
       
       // Get current user info from auth store
       const unsubscribe = auth.subscribe(authState => {
@@ -129,7 +134,7 @@
   }
 
   async function fetchPicks() {
-    // If in override mode, fetch picks for selected user
+    // If viewing another user's picks
     if (selectedUserId !== null) {
       const data = await getUserPicks(groupIdentifier, selectedUserId, { season, seasonType, week });
       games = data.games;
@@ -137,6 +142,8 @@
       availableConfidences = data.availableConfidences;
       totalGames = data.totalGames;
       weekPoints = data.weekPoints;
+      canEditSelectedUser = data.canEdit === true; // Track if we can edit
+      viewingOtherUser = true;
       original = {};
       for (const g of games) {
         if (g.pick && (g.pick.pickedTeamId != null || g.pick.confidence != null)) {
@@ -150,6 +157,8 @@
     }
     
     // Normal mode - fetch current user's picks
+    viewingOtherUser = false;
+    canEditSelectedUser = true; // User can always edit their own picks
     const data = await getPicks(groupIdentifier, { season, seasonType, week });
   console.debug('[PicksPanel] fetchPicks response', { groupIdentifier, season, seasonType, week, gameCount: data.games.length, available: data.availableConfidences, total: data.totalGames, weekPoints: data.weekPoints });
   games = data.games;
@@ -179,6 +188,7 @@
   }
 
   function toggleWinner(game, teamId) {
+    if (viewingOtherUser && !canEditSelectedUser) { raiseError('View only - you cannot edit this user\'s picks'); return; }
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
   console.debug('[PicksPanel] toggleWinner start', { gameId: game.id, teamId, before: draft[game.id] });
@@ -201,6 +211,7 @@
   }
 
   function assignConfidence(game, value) {
+    if (viewingOtherUser && !canEditSelectedUser) { raiseError('View only - you cannot edit this user\'s picks'); return; }
     if (game.meta.locked) { raiseError('Game is locked'); return; }
   clearedPicks.delete(game.id);
   console.debug('[PicksPanel] assignConfidence start', { gameId: game.id, incoming: value, before: draft[game.id] });
@@ -384,6 +395,7 @@
 
   // Reactive derived lists for rendering
   function handleClearPick(game) {
+    if (viewingOtherUser && !canEditSelectedUser) { raiseError('View only - you cannot edit this user\'s picks'); return; }
     if (draft[game.id]) {
       delete draft[game.id];
       draft = { ...draft };
@@ -486,18 +498,20 @@
       </select>
     </div>
     
-    <!-- Owner: User Selector -->
-    {#if isOwner && groupMembers.length > 0}
+    <!-- User Selector (all users can view, owners can edit) -->
+    {#if groupMembers.length > 0}
       <div class="relative">
         <button 
           on:click={() => showUserSelector = !showUserSelector}
           class="px-sm py-xs border rounded bg-neutral-0 dark:bg-secondary-800 hover:bg-secondary-100 dark:hover:bg-secondary-700 transition-colors flex items-center gap-xs"
-          aria-label="Select user to edit picks"
+          aria-label="Select user to view picks"
         >
           {#if selectedUserId === null}
             <span>Your Picks</span>
-          {:else}
+          {:else if canEditSelectedUser}
             <span>Editing: {groupMembers.find(m => m.id === selectedUserId)?.name || 'User'}</span>
+          {:else}
+            <span>Viewing: {groupMembers.find(m => m.id === selectedUserId)?.name || 'User'}</span>
           {/if}
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -522,7 +536,7 @@
               </div>
               <div class="p-2">
                 <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 px-3 py-1 uppercase tracking-wide">
-                  Edit Other Users
+                  {isOwner ? 'Edit Other Users' : 'View Other Users'}
                 </div>
                 {#each groupMembers as member}
                   <button
@@ -542,16 +556,28 @@
     <Button variant="tertiary" size="sm" on:click={fetchPicks}>Refresh</Button>
   </div>
   
-  <!-- Owner Override Warning -->
+  <!-- Viewing/Editing Other User Banner -->
   {#if selectedUserId !== null}
-    <div class="p-sm bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100 rounded text-sm flex items-start gap-sm">
-      <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-      </svg>
-      <div>
-        <strong>Owner Override Mode:</strong> You are editing picks for <strong>{groupMembers.find(m => m.id === selectedUserId)?.name || 'another user'}</strong>. You can override picks even after games have started or finished.
+    {#if canEditSelectedUser}
+      <div class="p-sm bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100 rounded text-sm flex items-start gap-sm">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <div>
+          <strong>Owner Override Mode:</strong> You are editing picks for <strong>{groupMembers.find(m => m.id === selectedUserId)?.name || 'another user'}</strong>. You can override picks even after games have started or finished.
+        </div>
       </div>
-    </div>
+    {:else}
+      <div class="p-sm bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 rounded text-sm flex items-start gap-sm">
+        <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+        </svg>
+        <div>
+          <strong>View Only:</strong> You are viewing picks for <strong>{groupMembers.find(m => m.id === selectedUserId)?.name || 'another user'}</strong>. You cannot make changes to their picks.
+        </div>
+      </div>
+    {/if}
   {/if}
 
   {#if error}
