@@ -197,23 +197,3 @@ export class MockESPNService {
     console.log('[MockESPNService] Updated game', gameId);
   }
 }
-
-/**
- * Helper to get the appropriate ESPN service based on configuration
- * @returns {ESPNService|MockESPNService} The service to use
- */
-export function getESPNService() {
-  const useMock = process.env.USE_MOCK_ESPN === 'true' || MockESPNService.isEnabled();
-  
-  if (useMock) {
-    // Ensure mock service is configured
-    if (!MockESPNService.mockGames) {
-      MockESPNService.configure();
-    }
-    return MockESPNService;
-  }
-  
-  // Return real service (imported dynamically to avoid circular deps)
-  const { ESPNService } = require('../services/ESPNService.js');
-  return ESPNService;
-}
