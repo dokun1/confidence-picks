@@ -7,13 +7,13 @@
  * @module mocks
  */
 
-export { MockESPNService, getESPNService } from './MockESPNService.js';
-export { 
+import { MockESPNService } from './MockESPNService.js';
+import { 
   NFL_TEAMS, 
   generateMockWeek, 
   getProgressiveScore 
 } from './espnGameData.js';
-export { 
+import { 
   DEFAULT_MOCK_CONFIG,
   GAME_SCHEDULE,
   SCORE_PROGRESSION_CONFIG,
@@ -23,6 +23,21 @@ export {
   validateMockConfig,
   getScenarioConfig
 } from './mockConfig.js';
+
+export { 
+  MockESPNService,
+  NFL_TEAMS, 
+  generateMockWeek, 
+  getProgressiveScore,
+  DEFAULT_MOCK_CONFIG,
+  GAME_SCHEDULE,
+  SCORE_PROGRESSION_CONFIG,
+  ENVIRONMENT_CONFIGS,
+  CUSTOM_SCENARIOS,
+  getMockConfig,
+  validateMockConfig,
+  getScenarioConfig
+};
 
 /**
  * Quick setup function to enable mock data
@@ -52,9 +67,6 @@ export {
  * });
  */
 export function enableMockData(options = {}) {
-  const { MockESPNService } = require('./MockESPNService.js');
-  const { getMockConfig, getScenarioConfig } = require('./mockConfig.js');
-  
   let config;
   
   if (options.scenario) {
@@ -76,6 +88,5 @@ export function enableMockData(options = {}) {
  * Disable mock data and revert to real ESPN API
  */
 export function disableMockData() {
-  const { MockESPNService } = require('./MockESPNService.js');
   MockESPNService.setEnabled(false);
 }
