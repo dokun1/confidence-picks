@@ -74,12 +74,16 @@
         await loadGroupMembers();
       }
       
-      // Get current user info
-      auth.subscribe(authState => {
+      // Get current user info from auth store
+      const unsubscribe = auth.subscribe(authState => {
         if (authState.user) {
           currentUser = authState.user;
         }
       });
+      // Store unsubscribe for cleanup
+      if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', unsubscribe);
+      }
       
     if (week == null) {
         try {
@@ -255,9 +259,12 @@
   
   function hasLockedGames() {
     // Check if any of the picks being saved are for locked games
+    // Create game lookup map for O(n) complexity instead of O(n²)
+    const gameMap = new Map(games.map(g => [g.id, g]));
+    
     return Object.entries(draft).some(([gameId, val]) => {
       if (!val.pickedTeamId || val.confidence == null) return false;
-      const game = games.find(g => g.id === parseInt(gameId));
+      const game = gameMap.get(parseInt(gameId));
       return game && game.status !== 'SCHEDULED';
     });
   }
