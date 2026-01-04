@@ -163,7 +163,7 @@
         {statusLabel}
       {/if}
       </span>
-  {#if (!game.meta.locked && statusLabel === 'not started' || isOwnerOverride) && (pick?.pickedTeamId != null || pick?.confidence != null)}
+  {#if ((!game.meta.locked && statusLabel === 'not started') || isOwnerOverride) && (pick?.pickedTeamId != null || pick?.confidence != null)}
         <Button variant="destructive" size="sm" class="clear-inline" on:click={(e)=>{ e.stopPropagation(); clearConfidence(); }}>
           Clear
         </Button>
