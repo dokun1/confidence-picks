@@ -597,14 +597,14 @@
       {#if sortedGames.length > 0}
         <h3 class="mt-md text-sm font-semibold tracking-wide uppercase opacity-70">Sorted Picks</h3>
         {#each sortedGames as game (game.id)}
-          <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={true} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => handleClearPick(game)} />
+          <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={true} {focusGameId} cleared={clearedPicks.has(game.id)} isOwnerOverride={selectedUserId !== null} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => handleClearPick(game)} />
         {/each}
       {/if}
     </div>
     <div class="space-y-sm mt-lg">
       <h3 class="text-sm font-semibold tracking-wide uppercase opacity-70">Unsorted / Incomplete</h3>
     {#each unsortedGames as game (game.id)}
-      <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => { if (!game.meta.locked) handleClearPick(game); }} />
+      <GamePickRow {game} {draft} totalGames={weekGameCount} isSorted={false} {focusGameId} cleared={clearedPicks.has(game.id)} isOwnerOverride={selectedUserId !== null} on:toggleWinner={(e)=>toggleWinner(game,e.detail)} on:assignConfidence={(e)=>assignConfidence(game,e.detail)} on:clearPick={() => { if (!game.meta.locked) handleClearPick(game); }} />
       {/each}
       {#if hasIncomplete()}
         <div class="text-xs text-amber-600 dark:text-amber-400 mt-sm">Finish selecting a confidence and winner for highlighted games to enable saving.</div>

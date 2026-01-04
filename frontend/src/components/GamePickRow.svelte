@@ -7,6 +7,7 @@
   export let isSorted = false; // passed from parent to allow full range selection
   export let focusGameId = null; // when this game's id matches, auto focus/scroll
   export let cleared = false; // when true, ignore original server pick fallback
+  export let isOwnerOverride = false; // when true, allow editing even final games
 
   const dispatch = createEventDispatcher();
   $: pick = (() => {
@@ -162,7 +163,7 @@
         {statusLabel}
       {/if}
       </span>
-  {#if !game.meta.locked && statusLabel === 'not started' && (pick?.pickedTeamId != null || pick?.confidence != null)}
+  {#if ((!game.meta.locked && statusLabel === 'not started') || isOwnerOverride) && (pick?.pickedTeamId != null || pick?.confidence != null)}
         <Button variant="destructive" size="sm" class="clear-inline" on:click={(e)=>{ e.stopPropagation(); clearConfidence(); }}>
           Clear
         </Button>
@@ -210,7 +211,7 @@
   <span class="team-score {statusLabel === 'in progress' ? 'neutral' : ''}">{game.homeScore}</span>
     </div>
     <div class="confidence-wrapper {game.meta.locked ? 'locked-state' : ''}">
-      {#if final}
+      {#if final && !isOwnerOverride}
         <!-- Final game: show result number (bet for push, score otherwise) with outcome-specific coloring -->
         <div class="final-confidence {finalBadgeClass}" title={pickWon ? `Won ${(pick?.points ?? pick?.confidence ?? 0)}` : pickLost ? `Lost ${(pick?.points ?? pick?.confidence ?? 0)}` : isTie && pick ? 'Push - tie' : 'No pick'}>
           {displayedFinalValue}
