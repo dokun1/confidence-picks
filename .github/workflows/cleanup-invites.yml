@@ -1,10 +1,10 @@
 name: Prune Expired Group Invites
 
 on:
-  schedule:
-    # Every day at 03:15 UTC
-    - cron: '15 3 * * *'
-  workflow_dispatch:
+#  schedule:
+#    # Every day at 03:15 UTC
+#    - cron: '15 3 * * *'
+   workflow_dispatch:
 
 jobs:
   cleanup:
