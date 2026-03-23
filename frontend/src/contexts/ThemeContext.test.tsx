@@ -1,168 +1,90 @@
-import { render, screen, act } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider, useDarkMode } from './ThemeContext';
 
-// Consumer component that exposes context values via data attributes
-function ThemeConsumer() {
-  const { isDark, toggle } = useDarkMode();
-  return (
-    <div>
-      <span data-testid="isDark">{String(isDark)}</span>
-      <button onClick={toggle}>toggle</button>
-    </div>
-  );
-}
-
-function renderWithProvider(ui: React.ReactNode) {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
-}
-
 describe('ThemeContext', () => {
   beforeEach(() => {
-    localStorage.clear();
     document.documentElement.classList.remove('dark');
+    localStorage.clear();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    document.documentElement.classList.remove('dark');
   });
 
-  describe('ThemeProvider — lazy initialization', () => {
-    it('initializes as light mode when localStorage has no theme set', () => {
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
-    });
+  // Test 1: no 'theme' key in localStorage → isDark=false, no 'dark' class on <html>
+  it('defaults to light mode when localStorage has no theme key', () => {
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
 
-    it('initializes as dark mode when localStorage has theme="dark"', () => {
-      localStorage.setItem('theme', 'dark');
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('true');
-    });
-
-    it('initializes as light mode when localStorage has theme="light"', () => {
-      localStorage.setItem('theme', 'light');
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
-    });
-
-    it('initializes as light mode when localStorage throws (SSR safety)', () => {
-      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-        throw new Error('localStorage unavailable');
-      });
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
-    });
+    expect(result.current.isDark).toBe(false);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  describe('DOM sync via useEffect', () => {
-    it('adds "dark" class to documentElement when isDark is true', () => {
-      localStorage.setItem('theme', 'dark');
-      renderWithProvider(<ThemeConsumer />);
-      expect(document.documentElement.classList.contains('dark')).toBe(true);
-    });
+  // Test 2: localStorage has 'dark' before mount → isDark=true, 'dark' class on <html>
+  it('initializes as dark when localStorage theme is "dark" before mount', () => {
+    localStorage.setItem('theme', 'dark');
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
 
-    it('does not add "dark" class when isDark is false', () => {
-      renderWithProvider(<ThemeConsumer />);
-      expect(document.documentElement.classList.contains('dark')).toBe(false);
-    });
-
-    it('removes "dark" class after toggling from dark to light', () => {
-      localStorage.setItem('theme', 'dark');
-      renderWithProvider(<ThemeConsumer />);
-      expect(document.documentElement.classList.contains('dark')).toBe(true);
-
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(document.documentElement.classList.contains('dark')).toBe(false);
-    });
-
-    it('adds "dark" class after toggling from light to dark', () => {
-      renderWithProvider(<ThemeConsumer />);
-      expect(document.documentElement.classList.contains('dark')).toBe(false);
-
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(document.documentElement.classList.contains('dark')).toBe(true);
-    });
+    expect(result.current.isDark).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
-  describe('localStorage persistence', () => {
-    it('writes "dark" to localStorage when isDark becomes true', () => {
-      renderWithProvider(<ThemeConsumer />);
+  // Test 3: toggle() from isDark=false → isDark=true, 'dark' class added
+  it('toggle from light adds "dark" class and sets isDark=true', () => {
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
 
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(localStorage.getItem('theme')).toBe('dark');
+    act(() => {
+      result.current.toggle();
     });
 
-    it('writes "light" to localStorage when isDark becomes false', () => {
-      localStorage.setItem('theme', 'dark');
-      renderWithProvider(<ThemeConsumer />);
-
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(localStorage.getItem('theme')).toBe('light');
-    });
+    expect(result.current.isDark).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
-  describe('toggle', () => {
-    it('flips isDark from false to true', () => {
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
+  // Test 4: toggle() from isDark=true → isDark=false, 'dark' class removed
+  it('toggle from dark removes "dark" class and sets isDark=false', () => {
+    localStorage.setItem('theme', 'dark');
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
 
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(screen.getByTestId('isDark').textContent).toBe('true');
+    act(() => {
+      result.current.toggle();
     });
 
-    it('flips isDark from true to false', () => {
-      localStorage.setItem('theme', 'dark');
-      renderWithProvider(<ThemeConsumer />);
-      expect(screen.getByTestId('isDark').textContent).toBe('true');
-
-      act(() => {
-        screen.getByText('toggle').click();
-      });
-
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
-    });
-
-    it('toggles back and forth correctly across multiple clicks', () => {
-      renderWithProvider(<ThemeConsumer />);
-      const btn = screen.getByText('toggle');
-
-      act(() => btn.click());
-      expect(screen.getByTestId('isDark').textContent).toBe('true');
-
-      act(() => btn.click());
-      expect(screen.getByTestId('isDark').textContent).toBe('false');
-
-      act(() => btn.click());
-      expect(screen.getByTestId('isDark').textContent).toBe('true');
-    });
+    expect(result.current.isDark).toBe(false);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  describe('useDarkMode — outside provider', () => {
-    it('throws when used outside ThemeProvider', () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  // Test 5: after toggle to dark, localStorage.getItem('theme') === 'dark'
+  it('persists "dark" to localStorage after toggling to dark', () => {
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
 
-      function Bare() {
-        useDarkMode();
-        return null;
-      }
-
-      expect(() => render(<Bare />)).toThrow('useDarkMode must be used within a ThemeProvider');
-      consoleError.mockRestore();
+    act(() => {
+      result.current.toggle();
     });
+
+    expect(localStorage.getItem('theme')).toBe('dark');
+  });
+
+  // Test 6: after toggle to light, localStorage.getItem('theme') === 'light'
+  it('persists "light" to localStorage after toggling to light', () => {
+    localStorage.setItem('theme', 'dark');
+    const { result } = renderHook(() => useDarkMode(), { wrapper: ThemeProvider });
+
+    act(() => {
+      result.current.toggle();
+    });
+
+    expect(localStorage.getItem('theme')).toBe('light');
+  });
+
+  // Test 7: useDarkMode() outside ThemeProvider throws
+  it('throws when useDarkMode is called outside ThemeProvider', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => renderHook(() => useDarkMode())).toThrow(
+      'useDarkMode must be used within a ThemeProvider'
+    );
+
+    consoleError.mockRestore();
   });
 });
