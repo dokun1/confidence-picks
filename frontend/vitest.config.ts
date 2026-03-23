@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**'],
     coverage: {
       provider: 'v8',
       thresholds: {
@@ -21,6 +22,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/main.tsx',
         'src/test-setup.ts',
+        'src/test/**',
       ],
     },
   },
