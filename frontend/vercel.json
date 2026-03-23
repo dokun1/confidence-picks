@@ -3,7 +3,7 @@
   "outputDirectory": "dist", 
   "devCommand": "pnpm run dev",
   "installCommand": "pnpm install",
-  "framework": "svelte",
+  "framework": null,
   "redirects": [
     {
       "source": "/(.*)",
