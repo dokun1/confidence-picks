@@ -52,6 +52,11 @@ describe('GamesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetchOk(gamesPayload()));
+    // Default: source group is the user's only NFL group. Tests exercising
+    // the dropdown re-mock with multiple groups.
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'sunday-squad', name: 'Sunday Squad', poolType: 'nfl_weekly' },
+    ] as any);
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -173,13 +178,14 @@ describe('GamesPage', () => {
     expect(await screen.findByText('Server said no')).toBeInTheDocument();
   });
 
-  it('fans the same picks out to every NFL group when "Save to all" is checked', async () => {
-    // Three groups: two NFL (one explicit poolType, one legacy null) + one WC.
-    // Fan-out must call savePicks for both NFL identifiers and skip the WC one.
+  it('fans the same picks out to selected NFL groups via the dropdown', async () => {
+    // Three groups: source NFL + a legacy null-poolType NFL + a WC group. The
+    // dropdown only surfaces the two NFL groups; ticking the non-source one
+    // produces a 2-target fan-out.
     mockGetMyGroups.mockResolvedValue([
-      { id: 1, identifier: 'sunday-squad', poolType: 'nfl_weekly' },
-      { id: 2, identifier: 'office-pool', poolType: null }, // legacy pre-#86
-      { id: 3, identifier: 'wc-crew', poolType: 'world_cup_2026' },
+      { id: 1, identifier: 'sunday-squad', name: 'Sunday Squad', poolType: 'nfl_weekly' },
+      { id: 2, identifier: 'office-pool', name: 'Office Pool', poolType: null }, // legacy pre-#86
+      { id: 3, identifier: 'wc-crew', name: 'WC Crew', poolType: 'world_cup_2026' },
     ] as any);
     mockSavePicks.mockResolvedValue({ games: [] });
 
@@ -191,8 +197,9 @@ describe('GamesPage', () => {
     fireEvent.click(within(row10).getByRole('button', { name: /Confidence for BUF at NE/ }));
     fireEvent.click(within(row10).getByRole('option', { name: '1' }));
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my NFL groups' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Office Pool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to 2' }));
 
     await waitFor(() => expect(mockSavePicks).toHaveBeenCalledTimes(2));
     const calledIdentifiers = mockSavePicks.mock.calls.map((c) => c[0]).sort();

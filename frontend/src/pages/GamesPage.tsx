@@ -9,6 +9,7 @@ import AuthService from '../lib/authService.js';
 import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
 import { savePicks } from '../lib/picksService.js';
 import { getMyGroups } from '../lib/groupsService.js';
+import SaveTargetsDropdown, { type SaveTarget } from '../components/SaveTargetsDropdown';
 
 // Ported from GamesPage.svelte + GamePickRow.svelte (commit d6b2566^). The page
 // owns the year/season-type/week selector, fetches the public games endpoint,
@@ -186,11 +187,40 @@ export default function GamesPage() {
 
   const canSubmit = !!groupId && completePicks.length > 0 && !submitting && !pageState.loading;
 
-  // Opt-in "save these picks to every NFL group I'm in" toggle. Restores the
-  // heritage Svelte 'save for all groups' UX (PR #37, Aug 2025) that the React
-  // rewrite dropped. NFL pools include groups with poolType 'nfl_weekly' AND
-  // legacy groups created before #86 where poolType is null.
-  const [applyToAll, setApplyToAll] = useState(false);
+  // Multi-select "save to which NFL groups?" — restores the heritage Svelte PR
+  // #37 dropdown. NFL pools include explicit poolType='nfl_weekly' AND legacy
+  // poolType=null groups predating the #86 plumbing fix.
+  const [myGroups, setMyGroups] = useState<SaveTarget[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [selectedTargets, setSelectedTargets] = useState<Set<string>>(
+    () => new Set(groupId ? [groupId] : []),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!groupId) return;
+    setGroupsLoading(true);
+    getMyGroups()
+      .then((groups) => {
+        if (cancelled) return;
+        const nfl: SaveTarget[] = groups
+          .filter((g) => g.poolType !== 'world_cup_2026')
+          .map((g) => ({ identifier: g.identifier, name: g.name }));
+        if (!nfl.some((g) => g.identifier === groupId)) {
+          nfl.unshift({ identifier: groupId, name: groupId });
+        }
+        setMyGroups(nfl);
+      })
+      .catch(() => {
+        if (!cancelled) setMyGroups([{ identifier: groupId, name: groupId }]);
+      })
+      .finally(() => {
+        if (!cancelled) setGroupsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   async function submit() {
     if (!groupId) return;
@@ -219,20 +249,13 @@ export default function GamesPage() {
 
     setSubmitting(true);
     try {
-      if (!applyToAll) {
-        await savePicks(groupId, body);
+      const targets = Array.from(selectedTargets);
+      if (!targets.includes(groupId)) targets.push(groupId);
+      if (targets.length === 1) {
+        await savePicks(targets[0], body);
         setToast({ open: true, message: 'Picks saved', variant: 'success' });
         return;
       }
-
-      // Fan-out: every NFL group the user belongs to. Treat null poolType
-      // (legacy groups predating the WC migration) as NFL.
-      const groups = await getMyGroups();
-      const targets = groups
-        .filter((g) => g.poolType !== 'world_cup_2026')
-        .map((g) => g.identifier);
-      if (!targets.includes(groupId)) targets.push(groupId);
-
       const results = await Promise.allSettled(targets.map((id) => savePicks(id, body)));
       const ok = results.filter((r) => r.status === 'fulfilled').length;
       const fail = results.length - ok;
@@ -379,45 +402,58 @@ export default function GamesPage() {
         )}
       </div>
 
-      {/* Submit bar */}
+      {/* Spacer so the sticky bar never covers the last game row. */}
+      {pageState.games.length > 0 && <div className="h-20" aria-hidden="true" />}
+
+      {/* Sticky submit bar — pinned to the bottom of the viewport so submitting
+          doesn't require a long scroll on the games list. Renders even without
+          a groupId (button stays disabled) so the no-group hint copy stays
+          discoverable at the bottom. */}
       {pageState.games.length > 0 && (
-        <div className="mt-lg flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-xxs text-sm text-secondary sm:flex-row sm:items-center sm:gap-md">
-            <span>
-              {completePicks.length} of {totalGames} pick{totalGames === 1 ? '' : 's'} complete
-              {hasIncomplete && (
-                <span className="ml-sm text-warning-600 dark:text-warning-400">
-                  Finish selecting a winner and confidence for highlighted games.
-                </span>
+        <div className="sticky bottom-0 -mx-lg mt-lg border-t border-border bg-neutral-0/95 px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
+          <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-xxs text-sm text-secondary sm:flex-row sm:items-center sm:gap-md">
+              <span>
+                {completePicks.length} of {totalGames} pick{totalGames === 1 ? '' : 's'} complete
+                {hasIncomplete && (
+                  <span className="ml-sm text-warning-600 dark:text-warning-400">
+                    Finish selecting a winner and confidence for highlighted games.
+                  </span>
+                )}
+              </span>
+              {groupId && (
+                <SaveTargetsDropdown
+                  groups={myGroups}
+                  sourceIdentifier={groupId}
+                  selected={selectedTargets}
+                  onChange={setSelectedTargets}
+                  label="NFL"
+                  loading={groupsLoading}
+                  disabled={submitting}
+                />
               )}
-            </span>
-            <label className="flex items-center gap-xs">
-              <input
-                type="checkbox"
-                checked={applyToAll}
-                onChange={(e) => setApplyToAll(e.target.checked)}
-                aria-label="Save to all my NFL groups"
-                className="h-4 w-4"
+            </div>
+            <div className="relative inline-toast-anchor">
+              <InlineToast
+                open={toast.open}
+                message={toast.message}
+                variant={toast.variant}
+                onClose={() => setToast((t) => ({ ...t, open: false }))}
               />
-              Save to all my NFL groups
-            </label>
-          </div>
-          <div className="relative inline-toast-anchor">
-            <InlineToast
-              open={toast.open}
-              message={toast.message}
-              variant={toast.variant}
-              onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-            <Button
-              variant="primary"
-              size="md"
-              loading={submitting}
-              disabled={!canSubmit}
-              onClick={submit}
-            >
-              {submitting ? 'Saving…' : applyToAll ? 'Submit to All' : 'Submit Picks'}
-            </Button>
+              <Button
+                variant="primary"
+                size="md"
+                loading={submitting}
+                disabled={!canSubmit}
+                onClick={submit}
+              >
+                {submitting
+                  ? 'Saving…'
+                  : selectedTargets.size > 1
+                    ? `Submit to ${selectedTargets.size}`
+                    : 'Submit Picks'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
