@@ -28,6 +28,18 @@ async function addWorldCupColumns() {
     // Start transaction
     await pool.query('BEGIN');
 
+    // 0. Capture pre-migration row counts BEFORE any ALTER. A forward-only migration
+    //    must never drop or duplicate rows; these baselines are asserted against the
+    //    post-backfill counts below. Captured inside the transaction so they reflect
+    //    the exact rows the rest of the migration operates on.
+    console.log('0. Capturing pre-migration row counts...');
+    const preCounts = {};
+    for (const table of ['games', 'user_picks', 'groups']) {
+      const { rows } = await pool.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
+      preCounts[table] = rows[0].count;
+      console.log(`   - ${table}: ${preCounts[table]} rows`);
+    }
+
     // 1. games.league — which league a game belongs to. Default 'nfl' so existing
     //    NFL rows are correctly labeled the moment the column is added.
     console.log('1. Adding games.league (varchar default \'nfl\')...');
@@ -85,18 +97,50 @@ async function addWorldCupColumns() {
       );
     });
 
-    // ────────────────────────────────────────────────────────────────────────
-    // PLACEHOLDER: BACKFILL + ROW-COUNT VERIFICATION (next task)
-    //
-    // The next task inserts here, BEFORE COMMIT:
-    //   - Backfill existing NFL data: games.league='nfl', groups.pool_type='nfl_weekly'
-    //     (defaults already cover new/existing rows, but the backfill makes intent
-    //     explicit and covers any rows added with NULL); user_picks.picked_result
-    //     stays NULL for NFL picks.
-    //   - Capture pre-migration row counts (games, user_picks, groups) and assert
-    //     they match post-backfill counts so no rows were lost or duplicated.
-    //   - Throw on any mismatch so the catch below rolls the whole transaction back.
-    // ────────────────────────────────────────────────────────────────────────
+    // 6. Backfill existing rows defensively. Column defaults already cover new
+    //    inserts; these UPDATEs guarantee pre-existing rows that predate the default
+    //    (or were somehow added with NULL) are correct. user_picks.picked_result
+    //    intentionally stays NULL for existing NFL picks — no backfill there.
+    console.log('\n6. Backfilling existing rows...');
+
+    const gamesBackfill = await pool.query(`
+      UPDATE games SET league = 'nfl' WHERE league IS NULL
+    `);
+    console.log(`   ✅ games.league set to 'nfl' for ${gamesBackfill.rowCount} NULL row(s)`);
+
+    const groupsBackfill = await pool.query(`
+      UPDATE groups SET pool_type = 'nfl_weekly' WHERE pool_type IS NULL
+    `);
+    console.log(`   ✅ groups.pool_type set to 'nfl_weekly' for ${groupsBackfill.rowCount} NULL row(s)`);
+
+    console.log('   ℹ️  user_picks.picked_result left NULL for existing NFL picks (no backfill)');
+
+    // 7. Re-count and assert integrity. A forward-only migration must never drop or
+    //    duplicate rows. ALTER ADD COLUMN and the UPDATEs above cannot change row
+    //    counts, so any mismatch signals data corruption — throw to roll back rather
+    //    than commit a migration that lost or duplicated rows.
+    console.log('\n7. Verifying row counts unchanged...');
+    let integrityOk = true;
+    for (const table of ['games', 'user_picks', 'groups']) {
+      const { rows } = await pool.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
+      const postCount = rows[0].count;
+      const preCount = preCounts[table];
+      if (postCount === preCount) {
+        console.log(`   ✅ ${table}: ${postCount} rows (unchanged)`);
+      } else {
+        integrityOk = false;
+        console.error(
+          `   ❌ ${table}: row count changed from ${preCount} to ${postCount} ` +
+          `(delta ${postCount - preCount}) — migration must not drop or duplicate rows`
+        );
+      }
+    }
+
+    if (!integrityOk) {
+      throw new Error(
+        'Row-count integrity check failed: one or more tables changed row count during migration. Rolling back.'
+      );
+    }
 
     // Commit the transaction
     await pool.query('COMMIT');
