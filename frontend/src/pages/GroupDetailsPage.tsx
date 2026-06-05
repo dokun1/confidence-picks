@@ -40,7 +40,7 @@ const TABS: { key: TabKey; label: string }[] = [
 function GroupNotFound({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-4xl mx-auto px-lg py-lg">
+      <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg">
         <div className="text-center space-y-md">
           <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
             Group Not Found
@@ -118,7 +118,7 @@ export default function GroupDetailsPage() {
     // Spinner markup mirrors GroupsPage's loading state.
     return (
       <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-        <div className="max-w-6xl mx-auto px-lg py-lg">
+        <div className="max-w-6xl mx-auto px-sm py-lg sm:px-lg">
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
             <span className="ml-3 text-[var(--color-text-secondary)]">Loading group...</span>
@@ -145,7 +145,7 @@ export default function GroupDetailsPage() {
 
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-6xl mx-auto px-lg py-lg space-y-lg">
+      <div className="max-w-6xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
         {/* Header */}
         <div className="space-y-md">
           <button

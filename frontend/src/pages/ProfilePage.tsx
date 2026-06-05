@@ -32,7 +32,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-3xl mx-auto px-lg py-xl text-center text-[var(--color-text-secondary)]">
+      <div className="max-w-3xl mx-auto px-sm py-xl sm:px-lg text-center text-[var(--color-text-secondary)]">
         No user data.
       </div>
     );
@@ -75,7 +75,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-lg py-lg space-y-xl">
+    <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg space-y-xl">
       <header className="flex flex-col sm:flex-row items-center sm:items-end gap-md">
         <Avatar
           name={user.name}

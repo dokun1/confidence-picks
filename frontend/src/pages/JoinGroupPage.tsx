@@ -55,7 +55,7 @@ export default function JoinGroupPage() {
 
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-2xl mx-auto px-lg py-lg space-y-lg">
+      <div className="max-w-2xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
         <header className="space-y-sm">
           <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
             Join Group

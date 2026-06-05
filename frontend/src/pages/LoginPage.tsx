@@ -56,7 +56,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="mx-auto w-full max-w-md px-lg py-lg">
+      <div className="mx-auto w-full max-w-md px-sm py-lg sm:px-lg">
         <div className="space-y-lg text-center">
           {/* Logo */}
           <div className="space-y-md">

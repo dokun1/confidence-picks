@@ -321,7 +321,7 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-lg">
+    <div className="mx-auto max-w-4xl px-sm py-lg sm:p-lg">
       <h1 className="text-2xl font-bold text-secondary-900 dark:text-neutral-0">NFL Games</h1>
 
       {/* Selector controls */}
@@ -441,7 +441,7 @@ export default function GamesPage() {
           a groupId (button stays disabled) so the no-group hint copy stays
           discoverable at the bottom. */}
       {pageState.games.length > 0 && (
-        <div className="sticky bottom-0 -mx-lg mt-lg border-t border-border bg-neutral-0/95 px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
+        <div className="sticky bottom-0 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs text-sm text-secondary sm:flex-row sm:items-center sm:gap-md">
               <span>

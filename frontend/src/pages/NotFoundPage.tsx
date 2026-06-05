@@ -5,7 +5,7 @@ export default function NotFoundPage() {
   const navigate = useNavigate();
 
   return (
-    <div className='p-lg'>
+    <div className='px-sm py-lg sm:p-lg'>
       <h1 className='text-2xl font-bold'>Page not found</h1>
       <section className='mt-md space-y-md text-base text-gray-600'>
         <p>
