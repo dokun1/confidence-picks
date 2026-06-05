@@ -61,6 +61,8 @@ export async function createGroup(payload) {
     isPublic: true,
     maxMembers: 40
   };
+  // Only forward poolType when provided so existing NFL group creation is unchanged.
+  if (payload.poolType) body.poolType = payload.poolType;
   const res = await authFetch(`${apiBase()}`, {
     method: 'POST',
     body: JSON.stringify(body)
@@ -82,7 +84,9 @@ export async function getGroup(identifier) {
   if (res.status === 404) throw new Error('Group not found');
   if (res.status === 403) throw new Error('This group is private');
   if (!res.ok) throw new Error('Failed to load group');
-  return await res.json();
+  const data = await res.json();
+  // Map the backend snake_case pool_type onto a camelCase poolType property.
+  return { ...data, ...(data.pool_type != null ? { poolType: data.pool_type } : {}) };
 }
 
 export async function getMembers(identifier) {
