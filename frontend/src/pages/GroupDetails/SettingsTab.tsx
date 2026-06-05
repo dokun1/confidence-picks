@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import Avatar from '../../designsystem/components/Avatar';
+import Button from '../../designsystem/components/Button';
+import { createLinkInvite } from '../../lib/invitesService.js';
 import type { GroupDetail, GroupMember } from '../../lib/groupsService';
 
 export interface SettingsTabProps {
@@ -19,7 +22,30 @@ export interface SettingsTabProps {
  * sub-tasks can slot in without restructuring.
  */
 export default function SettingsTab(props: SettingsTabProps) {
-  const { members } = props;
+  const { members, identifier } = props;
+
+  const [joinUrl, setJoinUrl] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [creatingInvite, setCreatingInvite] = useState(false);
+
+  async function handleCreateInvite() {
+    setInviteError(null);
+    setCreatingInvite(true);
+    try {
+      const invite = await createLinkInvite(identifier);
+      setJoinUrl(invite.joinUrl);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to create invite');
+    } finally {
+      setCreatingInvite(false);
+    }
+  }
+
+  function handleCopy() {
+    if (joinUrl) {
+      navigator.clipboard.writeText(joinUrl);
+    }
+  }
 
   return (
     <div className='space-y-lg'>
@@ -53,7 +79,30 @@ export default function SettingsTab(props: SettingsTabProps) {
         )}
       </section>
 
-      {/* Invite link: createLinkInvite + copy-link UI — added by the next sub-task. */}
+      {/* Invite link */}
+      <section className='rounded-md border border-border bg-surface p-lg'>
+        <h2 className='text-lg font-semibold mb-lg'>Invite Link</h2>
+        <Button variant='secondary' onClick={handleCreateInvite} loading={creatingInvite} disabled={creatingInvite}>
+          {creatingInvite ? 'Preparing…' : 'Create Invite Link'}
+        </Button>
+        {joinUrl && (
+          <div className='mt-md flex items-center gap-md'>
+            <input
+              type='text'
+              readOnly
+              value={joinUrl}
+              className='min-w-0 flex-1 rounded-base border border-border bg-surface px-md py-xs text-sm'
+              onFocus={event => event.currentTarget.select()}
+            />
+            <Button variant='tertiary' onClick={handleCopy}>
+              Copy
+            </Button>
+          </div>
+        )}
+        {inviteError && (
+          <p className='mt-md text-sm text-error-600 dark:text-error-400'>{inviteError}</p>
+        )}
+      </section>
 
       {/* Owner/member actions: Edit + Delete (owner) or Leave (member) behind
           ConfirmDeleteModal, driven by isOwner — added by the actions sub-task. */}
