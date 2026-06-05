@@ -173,8 +173,8 @@ function transformIconsForTailwind(iconTokens) {
 async function generateTailwindConfig(tokens) {
   const config = {
     content: [
-      './src/**/*.{html,js,svelte,ts}',
-      './src/designsystem/components/**/*.svelte'
+      './src/**/*.{html,js,ts,tsx}',
+      './src/designsystem/components/**/*.{ts,tsx}'
     ],
     theme: {
       extend: {}
@@ -270,9 +270,10 @@ async function generatePlatformTokens() {
       iconMapContent
     );
     
-    // Generate summary file
+    // Generate summary file. generatedAt is intentionally omitted: a wall-clock
+    // timestamp would make every CI run dirty against the committed file, which
+    // turns the "verify design tokens are up to date" gate into a flake.
     const summary = {
-      generatedAt: new Date().toISOString(),
       tokenFiles: Object.keys(tokens),
       tailwindExtensions: Object.keys(tailwindConfig.theme.extend),
       iconCount: Object.keys(iconMap).length
