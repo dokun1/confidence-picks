@@ -100,10 +100,14 @@ describe('PicksTab', () => {
     expect(await screen.findByText('7')).toBeInTheDocument();
   });
 
-  it('shows an error message when the fetch fails', async () => {
+  it('shows an error message and no GroupPicks when the fetch fails', async () => {
     mockGetPicks.mockRejectedValue(new Error('Failed to load picks'));
     render(<PicksTab identifier={identifier} members={members} />);
     expect(await screen.findByText('Failed to load picks')).toBeInTheDocument();
+    // The error branch replaces the matrix entirely — GroupPicks' header/columns are absent.
+    expect(screen.queryByText('Group Picks')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('BUF @ NE')).not.toBeInTheDocument();
   });
 
   it('renders gracefully when the response carries no picks', async () => {
