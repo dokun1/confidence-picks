@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { MockESPNService } from '../src/mocks/MockESPNService.js';
 import { generateMockWorldCupStage, WORLD_CUP_2026_TEAMS } from '../src/mocks/espnWorldCupData.js';
 import { Game } from '../src/models/Game.js';
+import { scoreSoccerPick } from '../src/services/SoccerScoringService.js';
 
 // World Cup 2026 backend suite. This file is the shared home for every World Cup
 // test (ingestion, scoring, leaderboard, ...). The scaffolding below — the mock
@@ -113,5 +114,53 @@ describe('soccer game ingestion', () => {
         assert.ok(validAbbrs.has(game.awayTeam.abbreviation), `${game.awayTeam.abbreviation} should be a World Cup team`);
       });
     });
+  });
+});
+
+describe('scoreSoccerPick — group stage', () => {
+  // Group-stage matches are scored straight off the final scoreline (no
+  // winnerTeamId, no PK resolution). Game objects are built inline to the
+  // SoccerScoringService contract: homeTeam.id / awayTeam.id, homeScore /
+  // awayScore, stage 'group', status 'FINAL' so the match is complete and
+  // scoreable. Source of truth for the points/buckets:
+  // frontend/docs/world-cup-picks-rules.md. Mirrors the inline-game pattern in
+  // tests/soccer-scoring.test.js.
+  const HOME = { id: 'H' };
+  const AWAY = { id: 'A' };
+
+  function groupGame({ homeScore, awayScore }) {
+    return { homeTeam: HOME, awayTeam: AWAY, homeScore, awayScore, stage: 'group', status: 'FINAL' };
+  }
+
+  const pick = (picked_result) => ({ picked_result });
+
+  // (1) Picked the team that won → 3 points, wins_correct.
+  test('picked the winning team → 3 (wins_correct)', () => {
+    const r = scoreSoccerPick(pick('home'), groupGame({ homeScore: 2, awayScore: 0 }));
+    assert.deepStrictEqual(r, { points: 3, bucket: 'wins_correct', scored: true });
+  });
+
+  // (2) Picked the team that lost → 0 points, losses.
+  test('picked the losing team → 0 (losses)', () => {
+    const r = scoreSoccerPick(pick('home'), groupGame({ homeScore: 0, awayScore: 2 }));
+    assert.deepStrictEqual(r, { points: 0, bucket: 'losses', scored: true });
+  });
+
+  // (3) Picked a team but the match drew → 1 point, draws_incorrect.
+  test('picked a team that drew (match drew) → 1 (draws_incorrect)', () => {
+    const r = scoreSoccerPick(pick('away'), groupGame({ homeScore: 1, awayScore: 1 }));
+    assert.deepStrictEqual(r, { points: 1, bucket: 'draws_incorrect', scored: true });
+  });
+
+  // (4) Picked 'draw' and the match drew → 2 points, draws_correct.
+  test("picked 'draw' and the match drew → 2 (draws_correct)", () => {
+    const r = scoreSoccerPick(pick('draw'), groupGame({ homeScore: 0, awayScore: 0 }));
+    assert.deepStrictEqual(r, { points: 2, bucket: 'draws_correct', scored: true });
+  });
+
+  // (5) Picked 'draw' but a team won → 1 point, draws_incorrect.
+  test("picked 'draw' but a team won → 1 (draws_incorrect)", () => {
+    const r = scoreSoccerPick(pick('draw'), groupGame({ homeScore: 3, awayScore: 1 }));
+    assert.deepStrictEqual(r, { points: 1, bucket: 'draws_incorrect', scored: true });
   });
 });
