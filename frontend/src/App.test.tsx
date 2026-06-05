@@ -103,14 +103,16 @@ describe('AppRoutes', () => {
   describe('protected routes', () => {
     it('renders Groups when authenticated', () => {
       renderAt('/groups', { authenticated: true });
-      expect(heading('Groups')).toBeInTheDocument();
+      // GroupsPage owns the page <h1> "My Groups" (faithful port of GroupsPage.svelte,
+      // commit d6b2566^). The placeholder this smoke test originally targeted said "Groups".
+      expect(heading('My Groups')).toBeInTheDocument();
     });
 
     it('redirects to /login when unauthenticated', () => {
       renderAt('/groups', { authenticated: false });
       expect(currentPath()).toBe('/login');
       expect(heading('Login')).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Groups' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'My Groups' })).toBeNull();
     });
   });
 
