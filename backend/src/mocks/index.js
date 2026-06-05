@@ -13,7 +13,7 @@ import {
   generateMockWeek, 
   getProgressiveScore 
 } from './espnGameData.js';
-import { 
+import {
   DEFAULT_MOCK_CONFIG,
   GAME_SCHEDULE,
   SCORE_PROGRESSION_CONFIG,
@@ -23,11 +23,15 @@ import {
   validateMockConfig,
   getScenarioConfig
 } from './mockConfig.js';
+import {
+  WORLD_CUP_2026_TEAMS,
+  generateMockWorldCupStage
+} from './espnWorldCupData.js';
 
-export { 
+export {
   MockESPNService,
-  NFL_TEAMS, 
-  generateMockWeek, 
+  NFL_TEAMS,
+  generateMockWeek,
   getProgressiveScore,
   DEFAULT_MOCK_CONFIG,
   GAME_SCHEDULE,
@@ -36,7 +40,9 @@ export {
   CUSTOM_SCENARIOS,
   getMockConfig,
   validateMockConfig,
-  getScenarioConfig
+  getScenarioConfig,
+  WORLD_CUP_2026_TEAMS,
+  generateMockWorldCupStage
 };
 
 /**
