@@ -144,29 +144,34 @@ describe('GroupDetailsPage', () => {
     expect(screen.queryByText('Owner')).not.toBeInTheDocument();
   });
 
-  it('shows a single Group Not Found UI when any fetch rejects', async () => {
+  it('consolidates a rejected fetch into exactly one Group Not Found UI, not three', async () => {
+    // Only getGroup rejects; members/messages resolve. Promise.all collapses the
+    // single rejection into ONE error UI rather than one-per-failed-branch.
     mockGetGroup.mockRejectedValue(new Error('Group not found'));
     mockGetMembers.mockResolvedValue(members);
     mockGetMessages.mockResolvedValue(messages);
 
     renderPage();
 
-    expect(
-      await screen.findByRole('heading', { name: /Group Not Found/i })
-    ).toBeInTheDocument();
-    expect(screen.getByText('Group not found')).toBeInTheDocument();
+    // Wait for the error state, then assert there is exactly one heading and one
+    // rejection-message node — guarding against the three-error regression.
+    const headings = await screen.findAllByRole('heading', { name: /Group Not Found/i });
+    expect(headings).toHaveLength(1);
+    expect(screen.getAllByText('Group not found')).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: /back to groups/i }));
     expect(mockNavigate).toHaveBeenCalledWith('/groups');
   });
 
-  it('shows the Group Not Found UI without fetching when the query param is absent', () => {
+  it('shows exactly one Group Not Found UI without fetching when the query param is absent', () => {
     renderPage('');
 
-    expect(
-      screen.getByRole('heading', { name: /Group Not Found/i })
-    ).toBeInTheDocument();
+    // Param-less route short-circuits before the mount effect: a single error UI
+    // and zero fetches.
+    expect(screen.getAllByRole('heading', { name: /Group Not Found/i })).toHaveLength(1);
     expect(mockGetGroup).not.toHaveBeenCalled();
+    expect(mockGetMembers).not.toHaveBeenCalled();
+    expect(mockGetMessages).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /back to groups/i }));
     expect(mockNavigate).toHaveBeenCalledWith('/groups');
