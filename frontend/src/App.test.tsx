@@ -90,7 +90,7 @@ describe('AppRoutes', () => {
   describe('catch-all', () => {
     it('renders the NotFoundPage for an unknown path', () => {
       renderAt('/this-route-does-not-exist');
-      expect(heading('Not found')).toBeInTheDocument();
+      expect(heading('Page not found')).toBeInTheDocument();
     });
   });
 
