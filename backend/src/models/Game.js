@@ -41,9 +41,10 @@ export class Game {
 // Create a Game from ESPN API data
 static fromESPNData(espnGame, opts = {}) {
   // Soccer callers pass { league, stage } (e.g. league 'world_cup', stage from the
-  // stage key). NFL callers pass nothing, so both default to null and the NFL path
-  // below is unchanged.
-  const { league = null, stage = null } = opts;
+  // stage key). NFL callers pass nothing — default league to 'nfl' so the INSERT
+  // stamps the column instead of bypassing the games.league NOT NULL DEFAULT 'nfl'
+  // with an explicit NULL (which is what landed pre-fix and 500'd every NFL save).
+  const { league = 'nfl', stage = null } = opts;
 
   console.log('ESPN Game Data:', JSON.stringify(espnGame, null, 2));
   
@@ -65,11 +66,12 @@ static fromESPNData(espnGame, opts = {}) {
   let seasonType = season.type || 2;
 
   // Map ONLY the final preseason week to regular season week 0 for picks/testing.
-  // NFL-only: soccer events carry season.type 1 too, so gate on the absence of a
-  // league tag to keep this remap from firing for World Cup fixtures.
+  // NFL-only: soccer events carry season.type 1 too, so gate explicitly on the NFL
+  // league tag (the prior `!league` check relied on the default being null, which
+  // also made every NFL INSERT 500 — fixed by defaulting league to 'nfl' above).
   try {
     const PRE_FINAL = parseInt(process.env.PRESEASON_FINAL_WEEK || '4', 10); // default 4
-    if (!league && seasonType === 1 && week === PRE_FINAL) {
+    if (league === 'nfl' && seasonType === 1 && week === PRE_FINAL) {
       console.log(`[week-map] Mapping preseason week ${PRE_FINAL} to regular season week 0`);
       week = 0; // represent as week 0
       seasonType = 2; // treat as regular season for picks/standings
