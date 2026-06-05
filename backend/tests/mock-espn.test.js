@@ -400,6 +400,111 @@ describe('Mock ESPN Data', () => {
     });
   });
 
+  describe('generateMockWorldCupStage (knockout stage)', () => {
+    const TOURNAMENT_END = new Date('2026-07-19T23:59:59Z');
+    const GROUP_CLOSE = new Date('2026-06-27T23:59:59Z');
+    const KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
+
+    test('should return 3 knockout matches', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      assert.ok(Array.isArray(matches), 'Should return an array');
+      assert.strictEqual(matches.length, 3, 'Knockout slate should have 3 matches');
+    });
+
+    test('should resolve every match to a single advancing winner', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      matches.forEach(m => {
+        const competitors = m.competitions[0].competitors;
+        const advancing = competitors.filter(c => c.winner === true);
+        assert.strictEqual(advancing.length, 1, 'Exactly one competitor should be flagged winner');
+        const losers = competitors.filter(c => c.winner === false);
+        assert.strictEqual(losers.length, 1, 'The other competitor should be winner:false');
+        assert.ok(m.competitions[0].status.type.completed, 'Knockout match should be completed');
+      });
+    });
+
+    test('should resolve exactly one match by penalty shootout at a level 90 scoreline', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      const shootouts = matches.filter(m => /penalt|shootout/i.test(m.competitions[0].status.type.description));
+      assert.strictEqual(shootouts.length, 1, 'Exactly one knockout should be PK-decided');
+
+      const pk = shootouts[0].competitions[0];
+      const [home, away] = pk.competitors;
+      assert.strictEqual(home.score, away.score, 'PK match should be level at the end of regulation');
+      // The advancer is resolvable only via winner + shootout score, not the scoreline.
+      const advancing = pk.competitors.find(c => c.winner === true);
+      assert.ok(advancing, 'PK match should still flag an advancing winner');
+      assert.ok(pk.competitors.every(c => typeof c.shootoutScore === 'string'), 'Both competitors should carry a shootoutScore');
+      const advScore = Number(advancing.shootoutScore);
+      const loser = pk.competitors.find(c => c !== advancing);
+      assert.ok(advScore > Number(loser.shootoutScore), 'Advancing side should have the higher shootout tally');
+    });
+
+    test('should resolve the other two matches in regulation', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      const regulation = matches.filter(m => !/penalt|shootout/i.test(m.competitions[0].status.type.description));
+      assert.strictEqual(regulation.length, 2, 'Two knockouts should be regulation results');
+      regulation.forEach(m => {
+        const [home, away] = m.competitions[0].competitors;
+        assert.notStrictEqual(home.score, away.score, 'Regulation knockout should not be level');
+        const advancing = m.competitions[0].competitors.find(c => c.winner === true);
+        const higher = Number(home.score) > Number(away.score) ? home : away;
+        assert.strictEqual(advancing, higher, 'Higher-scoring side should be the advancing winner');
+      });
+    });
+
+    test('should tag each competition with a real knockout stage code', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      matches.forEach(m => {
+        assert.ok(KNOCKOUT_STAGES.has(m.competitions[0].stage), `${m.competitions[0].stage} should be a knockout stage code`);
+      });
+    });
+
+    test('should not carry a 3-way draw moneyline', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      matches.forEach(m => {
+        assert.strictEqual(m.competitions[0].odds.length, 0, 'Knockout matches omit the 3-way draw odds');
+      });
+    });
+
+    test('should keep kickoffs after the group stage and inside the tournament window', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      matches.forEach(m => {
+        const kickoff = new Date(m.date);
+        assert.ok(kickoff > GROUP_CLOSE, `${m.date} should be after the group stage closes`);
+        assert.ok(kickoff <= TOURNAMENT_END, `${m.date} should be on/before tournament end`);
+      });
+    });
+
+    test('should clamp an out-of-window baseDate into the knockout window', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', baseDate: new Date('2026-06-05T00:00:00Z'), year: 2026 });
+      matches.forEach(m => {
+        const kickoff = new Date(m.date);
+        assert.ok(kickoff > GROUP_CLOSE && kickoff <= TOURNAMENT_END, `${m.date} should be clamped into the knockout window`);
+      });
+    });
+
+    test('should share the group-stage competitor structure (drop-in)', () => {
+      const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
+      const validIds = new Set(Object.values(WORLD_CUP_2026_TEAMS).map(t => t.id));
+      matches.forEach(m => {
+        const c = m.competitions[0];
+        assert.strictEqual(c.competitors.length, 2, 'Should have 2 competitors like the group stage');
+        c.competitors.forEach(comp => {
+          assert.ok(validIds.has(comp.team.id), `Competitor ${comp.team.id} should be a World Cup team`);
+          assert.ok(comp.team && comp.homeAway && typeof comp.score === 'string', 'Should keep the shared competitor shape');
+        });
+        assert.ok(c.status?.type, 'Should keep the shared status structure');
+      });
+    });
+
+    test('should leave group-stage competitors free of the winner field', () => {
+      const group = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      const leaks = group.some(m => m.competitions[0].competitors.some(c => 'winner' in c));
+      assert.strictEqual(leaks, false, 'Group competitors should not gain a winner field');
+    });
+  });
+
   describe('NFL Teams Data', () => {
     test('should have team data', () => {
       assert.ok(NFL_TEAMS, 'Should have NFL_TEAMS object');

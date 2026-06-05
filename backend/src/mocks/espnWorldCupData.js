@@ -54,6 +54,12 @@ export const WORLD_CUP_2026_TEAMS = {
  * @param {string} [descriptor.displayClock=null]
  * @param {Object} [descriptor.odds=null] - 3-way moneyline descriptor { home, draw, away, provider, favorite }
  * @param {Object} [descriptor.probability=null] - { homeWinPct, awayWinPct, drawPct }
+ * @param {('home'|'away'|null)} [descriptor.winner=null] - homeAway of the team ESPN flags as the
+ *   result. Required for knockout advancement: stamps `competitors[].winner` (true on the advancing
+ *   side, false on the other) so a level 90' scoreline still resolves a winner. Group regulation
+ *   wins/draws omit it (the parser reads scores there); null leaves `winner` off the competitors.
+ * @param {Object} [descriptor.shootout=null] - penalty-shootout tally { home, away } stamped onto
+ *   `competitors[].shootoutScore`. Pairs with status 'finalPK' to model a PK-decided knockout.
  * @returns {Object} ESPN scoreboard event
  */
 export function buildMockWorldCupEvent({
@@ -71,7 +77,9 @@ export function buildMockWorldCupEvent({
   clock = null,
   displayClock = null,
   odds = null,
-  probability = null
+  probability = null,
+  winner = null,
+  shootout = null
 }) {
   const statusConfig = {
     scheduled: { state: 'pre', name: 'STATUS_SCHEDULED', description: 'Scheduled', detail: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }), completed: false },
@@ -119,28 +127,42 @@ export function buildMockWorldCupEvent({
     awayTeamOdds: { favorite: odds.favorite === 'away' }
   }] : [];
 
-  const buildCompetitor = (team, homeAway, scoreValue, order) => ({
-    id: team.id,
-    uid: `s:600~t:${team.id}`,
-    type: 'team',
-    order,
-    homeAway,
-    team: {
+  const buildCompetitor = (team, homeAway, scoreValue, order) => {
+    const competitor = {
       id: team.id,
       uid: `s:600~t:${team.id}`,
-      location: team.name,
-      name: team.name,
-      abbreviation: team.abbreviation,
-      displayName: team.name,
-      shortDisplayName: team.abbreviation,
-      color: team.color,
-      alternateColor: team.alternateColor,
-      isActive: true,
-      logo: team.logo
-    },
-    score: scoreValue.toString(),
-    linescores: []
-  });
+      type: 'team',
+      order,
+      homeAway,
+      team: {
+        id: team.id,
+        uid: `s:600~t:${team.id}`,
+        location: team.name,
+        name: team.name,
+        abbreviation: team.abbreviation,
+        displayName: team.name,
+        shortDisplayName: team.abbreviation,
+        color: team.color,
+        alternateColor: team.alternateColor,
+        isActive: true,
+        logo: team.logo
+      },
+      score: scoreValue.toString(),
+      linescores: []
+    };
+    // ESPN flags the result team via competitors[].winner. Only stamped when a
+    // winner is declared (knockouts), so group regulation matches keep their
+    // existing shape and the parser there still reads the scoreline.
+    if (winner === 'home' || winner === 'away') {
+      competitor.winner = homeAway === winner;
+    }
+    // Penalty-shootout tally lives on the competitor alongside the level
+    // regulation score, mirroring ESPN's PK-decided knockout payload.
+    if (shootout) {
+      competitor.shootoutScore = (homeAway === 'home' ? shootout.home : shootout.away).toString();
+    }
+    return competitor;
+  };
 
   return {
     id,
@@ -214,8 +236,12 @@ export function buildMockWorldCupEvent({
  * @returns {Array<Object>} ESPN scoreboard events for the stage
  */
 export function generateMockWorldCupStage({ stage, baseDate, year = 2026 } = {}) {
+  if (stage === 'knockout') {
+    return generateKnockoutSlate({ baseDate, year });
+  }
   if (stage !== 'group') {
-    // Knockout stages are produced by a later task; keep the file importable.
+    // Individual knockout-stage codes (r32/r16/qf/...) are not generated piecemeal;
+    // the whole knockout slate is produced via stage:'knockout'. Keep importable.
     return [];
   }
 
@@ -284,4 +310,97 @@ export function generateMockWorldCupStage({ stage, baseDate, year = 2026 } = {})
   });
 
   return [drawMatch, winnerMatch, liveMatch];
+}
+
+/**
+ * Build the knockout slate: 3 resolved ESPN-event-shaped matches, identical in
+ * competition/competitor/status structure to the group stage so the file is a
+ * drop-in across both. Each match declares an advancing team via
+ * `competitors[].winner` (the knockout truth source — a level 90' scoreline
+ * still resolves a result), and each competition is tagged with its real
+ * knockout `stage` code (r16/qf/final).
+ *
+ * Resolutions, per the task:
+ *  - One PENALTY SHOOTOUT: 90' level (1-1), away side advances on penalties.
+ *    status 'finalPK' (description "Full Time (Penalties)") + competitor
+ *    shootoutScore, so downstream scoring treats the advancer as the winner
+ *    even though the regulation score is level.
+ *  - Two regulation wins: the higher-scoring side advances and is winner:true.
+ *
+ * Knockouts carry no 3-way moneyline — a 'draw' pick scores 0 here, so the draw
+ * price is meaningless. Kickoffs land in the post-group knockout window
+ * (Jun 28 - Jul 19, 2026), clamped so they never escape the tournament bounds.
+ *
+ * @param {Object} config
+ * @param {Date} [config.baseDate] - anchor date for kickoff offsets
+ * @param {number} [config.year=2026]
+ * @returns {Array<Object>} three ESPN scoreboard events
+ */
+function generateKnockoutSlate({ baseDate, year = 2026 }) {
+  // Knockout window opens the day after the group stage closes (Jun 27) and runs
+  // through the final (Jul 19). Anchor inside it; fall back to mid-bracket when
+  // the caller's baseDate is out of range, so offsets never leave the window.
+  const KO_OPEN = new Date(Date.UTC(year, 5, 28, 16, 0, 0)); // Jun 28
+  const KO_CLOSE = new Date(Date.UTC(year, 6, 19, 19, 0, 0)); // Jul 19 (final)
+  const requested = baseDate instanceof Date ? baseDate : new Date(Date.UTC(year, 6, 9, 18, 0, 0));
+  const anchor = (requested >= KO_OPEN && requested <= KO_CLOSE)
+    ? requested
+    : new Date(Date.UTC(year, 6, 9, 18, 0, 0)); // Jul 9, mid-bracket
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const clampToWindow = (d) => new Date(Math.min(Math.max(d.getTime(), KO_OPEN.getTime()), KO_CLOSE.getTime()));
+
+  // Match 1: Round of 16, regulation win. ENG 2-0 GER — home advances outright.
+  const r16Date = clampToWindow(new Date(anchor.getTime() - 4 * DAY));
+  const r16Match = buildMockWorldCupEvent({
+    id: '760611',
+    date: r16Date,
+    homeTeam: WORLD_CUP_2026_TEAMS.ENG,
+    awayTeam: WORLD_CUP_2026_TEAMS.GER,
+    homeScore: 2,
+    awayScore: 0,
+    status: 'final',
+    stage: 'r16',
+    season: year,
+    period: 2,
+    winner: 'home'
+  });
+
+  // Match 2: Quarter-final decided by PENALTY SHOOTOUT. MEX 1-1 USA at 90' (level);
+  // USA (away) advances on penalties 4-3. The level regulation scoreline gives
+  // neither side a goal edge, so the result is resolvable only via winner:true +
+  // the shootout score — exactly the case knockout scoring must handle.
+  const pkDate = clampToWindow(new Date(anchor.getTime()));
+  const pkMatch = buildMockWorldCupEvent({
+    id: '760612',
+    date: pkDate,
+    homeTeam: WORLD_CUP_2026_TEAMS.MEX,
+    awayTeam: WORLD_CUP_2026_TEAMS.USA,
+    homeScore: 1,
+    awayScore: 1,
+    status: 'finalPK',
+    stage: 'qf',
+    season: year,
+    period: 2,
+    winner: 'away',
+    shootout: { home: 3, away: 4 }
+  });
+
+  // Match 3: Final, regulation win. BRA 3-1 ARG — home lifts the trophy.
+  const finalDate = clampToWindow(new Date(anchor.getTime() + 6 * DAY));
+  const finalMatch = buildMockWorldCupEvent({
+    id: '760613',
+    date: finalDate,
+    homeTeam: WORLD_CUP_2026_TEAMS.BRA,
+    awayTeam: WORLD_CUP_2026_TEAMS.ARG,
+    homeScore: 3,
+    awayScore: 1,
+    status: 'final',
+    stage: 'final',
+    season: year,
+    period: 2,
+    winner: 'home'
+  });
+
+  return [r16Match, pkMatch, finalMatch];
 }
