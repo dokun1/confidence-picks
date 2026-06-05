@@ -8,6 +8,7 @@ import GamePickRow, { type DraftPick, type PickGame } from '../components/GamePi
 import AuthService from '../lib/authService.js';
 import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
 import { savePicks } from '../lib/picksService.js';
+import { getMyGroups } from '../lib/groupsService.js';
 
 // Ported from GamesPage.svelte + GamePickRow.svelte (commit d6b2566^). The page
 // owns the year/season-type/week selector, fetches the public games endpoint,
@@ -185,6 +186,12 @@ export default function GamesPage() {
 
   const canSubmit = !!groupId && completePicks.length > 0 && !submitting && !pageState.loading;
 
+  // Opt-in "save these picks to every NFL group I'm in" toggle. Restores the
+  // heritage Svelte 'save for all groups' UX (PR #37, Aug 2025) that the React
+  // rewrite dropped. NFL pools include groups with poolType 'nfl_weekly' AND
+  // legacy groups created before #86 where poolType is null.
+  const [applyToAll, setApplyToAll] = useState(false);
+
   async function submit() {
     if (!groupId) return;
     // Client-side guard: each confidence value must be used at most once. The UI
@@ -202,16 +209,52 @@ export default function GamesPage() {
       seen.add(p.confidence);
     }
 
+    const body = {
+      season: year,
+      seasonType,
+      week,
+      picks: completePicks,
+      clearedGameIds: [],
+    };
+
     setSubmitting(true);
     try {
-      await savePicks(groupId, {
-        season: year,
-        seasonType,
-        week,
-        picks: completePicks,
-        clearedGameIds: [],
-      });
-      setToast({ open: true, message: 'Picks saved', variant: 'success' });
+      if (!applyToAll) {
+        await savePicks(groupId, body);
+        setToast({ open: true, message: 'Picks saved', variant: 'success' });
+        return;
+      }
+
+      // Fan-out: every NFL group the user belongs to. Treat null poolType
+      // (legacy groups predating the WC migration) as NFL.
+      const groups = await getMyGroups();
+      const targets = groups
+        .filter((g) => g.poolType !== 'world_cup_2026')
+        .map((g) => g.identifier);
+      if (!targets.includes(groupId)) targets.push(groupId);
+
+      const results = await Promise.allSettled(targets.map((id) => savePicks(id, body)));
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const fail = results.length - ok;
+      if (fail === 0) {
+        setToast({
+          open: true,
+          message: `Picks saved to ${ok} group${ok === 1 ? '' : 's'}`,
+          variant: 'success',
+        });
+      } else if (ok === 0) {
+        setToast({
+          open: true,
+          message: `Failed to save picks (0/${results.length})`,
+          variant: 'error',
+        });
+      } else {
+        setToast({
+          open: true,
+          message: `Saved to ${ok}/${results.length} groups (${fail} failed)`,
+          variant: 'error',
+        });
+      }
     } catch (err) {
       setToast({
         open: true,
@@ -338,14 +381,26 @@ export default function GamesPage() {
 
       {/* Submit bar */}
       {pageState.games.length > 0 && (
-        <div className="mt-lg flex items-center justify-between gap-md border-t border-border pt-md">
-          <div className="text-sm text-secondary">
-            {completePicks.length} of {totalGames} pick{totalGames === 1 ? '' : 's'} complete
-            {hasIncomplete && (
-              <span className="ml-sm text-warning-600 dark:text-warning-400">
-                Finish selecting a winner and confidence for highlighted games.
-              </span>
-            )}
+        <div className="mt-lg flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-xxs text-sm text-secondary sm:flex-row sm:items-center sm:gap-md">
+            <span>
+              {completePicks.length} of {totalGames} pick{totalGames === 1 ? '' : 's'} complete
+              {hasIncomplete && (
+                <span className="ml-sm text-warning-600 dark:text-warning-400">
+                  Finish selecting a winner and confidence for highlighted games.
+                </span>
+              )}
+            </span>
+            <label className="flex items-center gap-xs">
+              <input
+                type="checkbox"
+                checked={applyToAll}
+                onChange={(e) => setApplyToAll(e.target.checked)}
+                aria-label="Save to all my NFL groups"
+                className="h-4 w-4"
+              />
+              Save to all my NFL groups
+            </label>
           </div>
           <div className="relative inline-toast-anchor">
             <InlineToast
@@ -361,7 +416,7 @@ export default function GamesPage() {
               disabled={!canSubmit}
               onClick={submit}
             >
-              {submitting ? 'Saving…' : 'Submit Picks'}
+              {submitting ? 'Saving…' : applyToAll ? 'Submit to All' : 'Submit Picks'}
             </Button>
           </div>
         </div>

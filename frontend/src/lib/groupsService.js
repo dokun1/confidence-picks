@@ -49,7 +49,10 @@ export async function getMyGroups() {
     userRole: g.userRole,
   createdAt: g.createdAt,
   createdByName: g.createdByName || null,
-  createdByPictureUrl: g.createdByPictureUrl || null
+  createdByPictureUrl: g.createdByPictureUrl || null,
+  // Forwarded so the picks pages can fan a single submit out to every group
+  // of the same poolType ('save to all my World Cup groups' / NFL groups).
+  poolType: g.poolType || null
   }));
 }
 
