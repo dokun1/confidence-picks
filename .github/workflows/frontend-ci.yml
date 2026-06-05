@@ -15,12 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build (Node ${{ matrix.node }})
+  ci:
+    name: Frontend CI
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [18, 20]
     defaults:
       run:
         working-directory: frontend
@@ -28,60 +25,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-            node-version: ${{ matrix.node }}
-    
-      - name: Install pnpm
-        run: npm install -g pnpm
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Show pnpm version
-        run: pnpm --version
-        
-      - name: Determine pnpm store path
-        id: pnpm-store
-        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ matrix.node }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-store-${{ runner.os }}-${{ matrix.node }}-
-
-      - name: Install dependencies (frozen lockfile)
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Verify design tokens are up to date
         run: |
           pnpm tokens:generate
-          # Fail if generation produced uncommitted changes (ensures committed tokens current)
-          if [ -n "$(git status --porcelain frontend/src/designsystem/platform-tokens frontend/src/designsystem/tokens || true)" ]; then
+          if ! git diff --exit-code -- src/designsystem/platform-tokens/; then
             echo '::error::Design tokens are out of date. Run pnpm tokens:generate and commit the changes.'
-            git --no-pager diff --name-only frontend/src/designsystem/platform-tokens frontend/src/designsystem/tokens || true
             exit 1
           fi
+
+      - name: Run unit tests with coverage
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: pnpm test:e2e
 
       - name: Build
         env:
           VITE_API_URL: https://api.confidence-picks.com
-        run: pnpm build
+        run: pnpm run build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist-node-${{ matrix.node }}
+          name: frontend-dist
           path: frontend/dist
           if-no-files-found: error
-
-  summary:
-    name: CI Summary
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Provide result summary
-        run: |
-          echo "All matrix builds succeeded." >> $GITHUB_STEP_SUMMARY
-          echo "Artifacts contain the production build for each tested Node version." >> $GITHUB_STEP_SUMMARY

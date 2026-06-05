@@ -30,15 +30,16 @@ jobs:
       working-directory: ./frontend
       
     - name: Build application
-      run: pnpm build
+      run: pnpm run build
       working-directory: ./frontend
       env:
-        VITE_API_URL: https://api.confidence-picks.com        
-  
+        VITE_API_URL: https://api.confidence-picks.com
+
     - name: Deploy to Vercel
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       working-directory: ./frontend
-      run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+      run: pnpm dlx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
       env:
         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_FRONTEND_PROJECT_ID }}
+        VITE_API_URL: https://api.confidence-picks.com
