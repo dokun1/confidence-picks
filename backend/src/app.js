@@ -8,6 +8,7 @@ import apiRoutes from './routes/api.js';
 import authRoutes from './routes/auth.js';
 import groupsRoutes from './routes/groups.js';
 import picksRoutes from './routes/picks.js';
+import worldCupPicksRoutes from './routes/worldCupPicks.js';
 import invitesRoutes from './routes/invites.js';
 import { initDatabase } from './database/init.js';
 
@@ -51,6 +52,7 @@ app.use('/api', apiRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/groups', groupsRoutes);
 app.use('/api/groups', picksRoutes);
+app.use('/api/picks', worldCupPicksRoutes);
 app.use('/api/invites', invitesRoutes);
 
 // Health check
