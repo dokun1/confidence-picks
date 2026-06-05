@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Avatar from '../../designsystem/components/Avatar';
 import Button from '../../designsystem/components/Button';
+import { ConfirmDeleteModal } from '../../designsystem/components/Modal';
 import { createLinkInvite } from '../../lib/invitesService.js';
+import { deleteGroup, leaveGroup } from '../../lib/groupsService.js';
 import type { GroupDetail, GroupMember } from '../../lib/groupsService';
 
 export interface SettingsTabProps {
@@ -22,11 +25,16 @@ export interface SettingsTabProps {
  * sub-tasks can slot in without restructuring.
  */
 export default function SettingsTab(props: SettingsTabProps) {
-  const { members, identifier } = props;
+  const { members, identifier, isOwner } = props;
+  const navigate = useNavigate();
 
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
+
+  // Discriminated modal state: which action the shared ConfirmDeleteModal confirms.
+  const [confirmAction, setConfirmAction] = useState<'delete' | 'leave' | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   async function handleCreateInvite() {
     setInviteError(null);
@@ -46,6 +54,39 @@ export default function SettingsTab(props: SettingsTabProps) {
       navigator.clipboard.writeText(joinUrl);
     }
   }
+
+  function closeConfirm() {
+    if (!actionLoading) {
+      setConfirmAction(null);
+    }
+  }
+
+  async function handleConfirmAction() {
+    setActionLoading(true);
+    try {
+      if (confirmAction === 'delete') {
+        await deleteGroup(identifier);
+      } else {
+        await leaveGroup(identifier);
+      }
+      navigate('/groups');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  const confirmCopy =
+    confirmAction === 'delete'
+      ? {
+          title: 'Delete Group?',
+          body: 'This permanently deletes the group and all its picks, messages, and members. This cannot be undone.',
+          confirmLabel: 'Delete Group',
+        }
+      : {
+          title: 'Leave Group?',
+          body: 'You will be removed from this group and lose access to its picks and messages. You can rejoin later with an invite.',
+          confirmLabel: 'Leave Group',
+        };
 
   return (
     <div className='space-y-lg'>
@@ -104,8 +145,37 @@ export default function SettingsTab(props: SettingsTabProps) {
         )}
       </section>
 
-      {/* Owner/member actions: Edit + Delete (owner) or Leave (member) behind
-          ConfirmDeleteModal, driven by isOwner — added by the actions sub-task. */}
+      {/* Owner/member actions: Edit + Delete (owner) or Leave (member), each
+          confirmed through the shared ConfirmDeleteModal. */}
+      <section className='rounded-md border border-border bg-surface p-lg'>
+        <h2 className='text-lg font-semibold mb-lg'>{isOwner ? 'Manage Group' : 'Membership'}</h2>
+        <div className='flex flex-wrap items-center gap-md'>
+          {isOwner ? (
+            <>
+              <Button variant='secondary' onClick={() => navigate(`/edit-group/${identifier}`)}>
+                Edit
+              </Button>
+              <Button variant='destructive' onClick={() => setConfirmAction('delete')}>
+                Delete
+              </Button>
+            </>
+          ) : (
+            <Button variant='destructive' onClick={() => setConfirmAction('leave')}>
+              Leave Group
+            </Button>
+          )}
+        </div>
+      </section>
+
+      <ConfirmDeleteModal
+        isOpen={confirmAction !== null}
+        onClose={closeConfirm}
+        onConfirm={handleConfirmAction}
+        title={confirmCopy.title}
+        body={confirmCopy.body}
+        confirmLabel={confirmCopy.confirmLabel}
+        loading={actionLoading}
+      />
     </div>
   );
 }
