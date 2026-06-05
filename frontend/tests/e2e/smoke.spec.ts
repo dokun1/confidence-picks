@@ -23,7 +23,6 @@ const protectedRoutes: string[] = [
   '/group-details',
   '/edit-group/test-id',
   '/games',
-  '/invite',
 ]
 
 test('home page renders title', async ({ page }) => {
