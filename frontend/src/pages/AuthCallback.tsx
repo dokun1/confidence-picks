@@ -15,8 +15,12 @@ export default function AuthCallback() {
 
     async function finalize() {
       const params = new URLSearchParams(window.location.search);
-      const accessToken = params.get('accessToken');
-      const refreshToken = params.get('refreshToken');
+      // The backend redirects with ?token=...&refresh=... (see
+      // backend/src/routes/auth.js — both /google/callback and the Apple POST
+      // callback). Accept the long-form names too so existing vitest
+      // fixtures (which use accessToken/refreshToken) keep passing.
+      const accessToken = params.get('token') || params.get('accessToken');
+      const refreshToken = params.get('refresh') || params.get('refreshToken');
 
       if (!accessToken) {
         navigate('/login', {
