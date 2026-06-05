@@ -65,6 +65,14 @@ describe('WorldCupPicksPage', () => {
     expect(screen.queryByText('World Cup 2026 Picks')).not.toBeInTheDocument();
   });
 
+  it('shows the loading indicator while a stage fetch is in flight', async () => {
+    // A never-resolving promise pins the page in its loading state.
+    mockGetStageMatches.mockReturnValue(new Promise<never>(() => {}));
+    renderPage();
+    expect(await screen.findByText('Loading matches…')).toBeInTheDocument();
+    expect(screen.queryByText('No matches found for this tournament.')).not.toBeInTheDocument();
+  });
+
   it('fetches every tournament stage and groups matches by stage', async () => {
     renderPage();
     await screen.findByTestId('match-row-10');
@@ -73,6 +81,14 @@ describe('WorldCupPicksPage', () => {
     expect(screen.getByRole('heading', { name: 'Group Stage' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Round of 16' })).toBeInTheDocument();
     expect(screen.getByTestId('match-row-20')).toBeInTheDocument();
+
+    // The populated state renders the MatchPickRow's three outcome buttons.
+    const groupRow = screen.getByTestId('match-row-10');
+    expect(within(groupRow).getByRole('button', { name: 'Pick Mexico to win' })).toBeInTheDocument();
+    expect(within(groupRow).getByRole('button', { name: 'Pick a draw' })).toBeInTheDocument();
+    expect(
+      within(groupRow).getByRole('button', { name: 'Pick United States to win' }),
+    ).toBeInTheDocument();
   });
 
   it('shows an error state with a retry when a stage fetch fails', async () => {
