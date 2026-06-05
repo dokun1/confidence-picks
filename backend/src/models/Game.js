@@ -92,9 +92,12 @@ static fromESPNData(espnGame, opts = {}) {
   else if (statusState === 'post') normalized = statusType.completed ? 'FINAL' : 'IN_PROGRESS';
   else normalized = statusType.completed ? 'FINAL' : 'SCHEDULED';
 
-  // Odds extraction
+  // Odds extraction. WC knockout fixtures with TBD matchups (R32 onwards
+  // before group stage concludes) sometimes have `competition.odds = [null]`
+  // — length>0 but the entry itself is null. Guarding it here so the whole
+  // upsert path doesn't throw on those rows.
   let oddsObj = null;
-  if (competition.odds && competition.odds.length > 0) {
+  if (competition.odds && competition.odds.length > 0 && competition.odds[0]) {
     const o = competition.odds[0];
     let favoriteTeamId = null;
     let favoriteAbbr = null;
