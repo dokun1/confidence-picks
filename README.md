@@ -1,7 +1,7 @@
 # Confidence Picks
 
 > [!NOTE]
-> Open-source learning project (Svelte + Express + Postgres). Expect occasional experiments.
+> Open-source learning project (React + Express + Postgres). Expect occasional experiments.
 
 This is a full-stack app where users authenticate, create or join groups, make weekly NFL confidence picks, view leaderboards, share invite links, and post simple group messages.
 
