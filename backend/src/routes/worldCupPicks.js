@@ -114,6 +114,41 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
 });
 
 /**
+ * Read the authenticated user's own World Cup picks for a group.
+ *
+ * Returns the same shape POST accepts and writes: `{ picks: [{ gameId,
+ * pickedResult }] }`, scoped to WC games (league='world_cup') so an NFL pick
+ * row from a shared user can never leak in. Picks page hydrates the draft
+ * state from this so a refresh doesn't blank out a previously-saved choice.
+ */
+router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const group = await ensureMembership(groupId, req.user.id);
+
+    const { rows } = await pool.query(
+      `SELECT up.game_id, up.picked_result
+       FROM user_picks up
+       JOIN games g ON g.id = up.game_id
+       WHERE up.user_id = $1
+         AND up.group_id = $2
+         AND g.league = 'world_cup'
+         AND up.picked_result IS NOT NULL`,
+      [req.user.id, group.id]
+    );
+
+    res.json({
+      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+    });
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    console.error('GET world-cup picks error', e);
+    res.status(500).json({ error: 'Failed to load World Cup picks' });
+  }
+});
+
+/**
  * World Cup tournament leaderboard for a group.
  *
  * Loads every member's World Cup picks, joins them to the stage-resolved games

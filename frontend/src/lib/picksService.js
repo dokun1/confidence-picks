@@ -42,6 +42,22 @@ export async function getPicks(groupIdentifier, { season, seasonType, week }) {
   return res.json();
 }
 
+/**
+ * Read the authenticated user's own picks for a week. Returns
+ * `{ picks: [{ gameId, pickedTeamId, confidence }] }` — same shape POST
+ * /:identifier/picks expects. GamesPage hydrates its draft state with this
+ * so a refresh doesn't blank out previously-saved picks.
+ */
+export async function getMyPicks(groupIdentifier, { season, seasonType, week }) {
+  const params = new URLSearchParams({ season, seasonType, week });
+  const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks/me?${params}`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load my picks');
+  }
+  return res.json();
+}
+
 export async function savePicks(groupIdentifier, body) {
   const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks`, { method: 'POST', body: JSON.stringify(body) });
   if (!res.ok) {

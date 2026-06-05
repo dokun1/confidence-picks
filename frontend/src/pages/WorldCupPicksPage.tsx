@@ -11,7 +11,11 @@ import {
   type WorldCupMatch,
   type WorldCupStage,
 } from '../lib/types';
-import { getStageMatches, submitWorldCupPicks } from '../lib/worldCupService.js';
+import {
+  getStageMatches,
+  submitWorldCupPicks,
+  getMyWorldCupPicks,
+} from '../lib/worldCupService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 import SaveTargetsDropdown, { type SaveTarget } from '../components/SaveTargetsDropdown';
 
@@ -95,9 +99,6 @@ export default function WorldCupPicksPage() {
       const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
       const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
       setPageState({ loading: false, error: '', matches });
-      // A fresh load starts with an empty draft — the public stage endpoint
-      // carries no per-user pick to prefill.
-      setDraft({});
     } catch (err) {
       setPageState((s) => ({
         ...s,
@@ -111,6 +112,34 @@ export default function WorldCupPicksPage() {
     if (!identifier) return;
     fetchMatches();
   }, [identifier, fetchMatches]);
+
+  // Hydrate the draft from the user's already-saved picks on this group so
+  // a refresh doesn't blank them out. Runs independently of the stage fetch
+  // so a transient picks-endpoint failure can't block the matches from
+  // rendering — the draft just stays empty in that case.
+  useEffect(() => {
+    if (!groupId) {
+      setDraft({});
+      return;
+    }
+    let cancelled = false;
+    getMyWorldCupPicks(groupId)
+      .then((resp) => {
+        if (cancelled) return;
+        const next: DraftMap = {};
+        for (const p of resp.picks ?? []) {
+          if (p && p.gameId != null && p.pickedResult) next[p.gameId] = p.pickedResult;
+        }
+        setDraft(next);
+      })
+      .catch(() => {
+        // Best-effort — don't surface a toast for the silent hydrate; the user
+        // can still re-pick and submit. Leaving draft as whatever it currently is.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   function pickResult(matchId: number, result: MatchPickResult) {
     setDraft((prev) => {

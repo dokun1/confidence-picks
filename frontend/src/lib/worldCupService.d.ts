@@ -39,4 +39,16 @@ export function submitWorldCupPicks(
 /** Fetch the tournament-shaped leaderboard (with tiebreaker columns) for a group. */
 export function getWorldCupLeaderboard(groupId: string): Promise<LeaderboardResponse>;
 
+/** Response shape of GET /api/picks/group/:groupId/world-cup/me. */
+export interface MyWorldCupPicksResponse {
+  picks: MatchPick[];
+}
+
+/**
+ * Fetch the authenticated user's own World Cup picks for a group, in the
+ * same shape POST submitWorldCupPicks accepts. Used by WorldCupPicksPage to
+ * hydrate the draft state on mount so a refresh doesn't blank out picks.
+ */
+export function getMyWorldCupPicks(groupId: string): Promise<MyWorldCupPicksResponse>;
+
 export type { MatchPickResult };

@@ -40,6 +40,21 @@ export async function submitWorldCupPicks(groupId, picks) {
   return res.json();
 }
 
+/**
+ * Read the authenticated user's own World Cup picks for a group.
+ * Returns { picks: [{ gameId, pickedResult }] } — same shape as the POST
+ * response. The picker page hydrates its draft state with this so a refresh
+ * doesn't blank out previously-saved choices.
+ */
+export async function getMyWorldCupPicks(groupId) {
+  const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup/me`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load World Cup picks');
+  }
+  return res.json();
+}
+
 export async function getWorldCupLeaderboard(groupId) {
   const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup/leaderboard`);
   if (!res.ok) {

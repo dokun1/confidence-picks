@@ -7,15 +7,21 @@ import type { WorldCupMatch, WorldCupStage } from '../lib/types';
 vi.mock('../lib/worldCupService.js', () => ({
   getStageMatches: vi.fn(),
   submitWorldCupPicks: vi.fn(),
+  getMyWorldCupPicks: vi.fn(),
 }));
 vi.mock('../lib/groupsService.js', () => ({
   getMyGroups: vi.fn(),
 }));
 
-import { getStageMatches, submitWorldCupPicks } from '../lib/worldCupService.js';
+import {
+  getStageMatches,
+  submitWorldCupPicks,
+  getMyWorldCupPicks,
+} from '../lib/worldCupService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 const mockGetStageMatches = vi.mocked(getStageMatches);
 const mockSubmitPicks = vi.mocked(submitWorldCupPicks);
+const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
 const mockGetMyGroups = vi.mocked(getMyGroups);
 
 const mex = { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: '' };
@@ -67,6 +73,8 @@ describe('WorldCupPicksPage', () => {
     mockGetMyGroups.mockResolvedValue([
       { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026' },
     ] as any);
+    // Default: no previously-saved picks. The hydration test below re-mocks.
+    mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
   });
 
   it('shows the not-found UI when no group query param is present', () => {
@@ -211,6 +219,34 @@ describe('WorldCupPicksPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit to 2' }));
 
     expect(await screen.findByText('Saved to 1/2 groups (1 failed)')).toBeInTheDocument();
+  });
+
+  it('hydrates the draft from previously-saved picks on mount', async () => {
+    // The user already submitted Mexico-home for game 10. After a refresh the
+    // page must reflect that — the source of the bug was the draft initializing
+    // to {} regardless of what the DB held for this user.
+    mockGetMyWorldCupPicks.mockResolvedValue({
+      picks: [{ gameId: 10, pickedResult: 'home' }],
+    });
+    mockSubmitPicks.mockResolvedValue({});
+
+    renderPage();
+    await screen.findByTestId('match-row-10');
+
+    // The submit button should be enabled because the draft now has 1 pick,
+    // and the pick count line reflects it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeEnabled(),
+    );
+    expect(screen.getByText('1 pick selected')).toBeInTheDocument();
+
+    // Submitting without touching anything sends the hydrated pick verbatim.
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+    await waitFor(() =>
+      expect(mockSubmitPicks).toHaveBeenCalledWith('la-crew', [
+        { gameId: 10, pickedResult: 'home' },
+      ]),
+    );
   });
 
   it('toggles a pick off when the selected result is clicked again', async () => {

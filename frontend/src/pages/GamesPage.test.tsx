@@ -8,12 +8,13 @@ vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 20
 vi.mock('../lib/authService.js', () => ({
   default: { getApiBaseUrl: () => 'http://test' },
 }));
-vi.mock('../lib/picksService.js', () => ({ savePicks: vi.fn() }));
+vi.mock('../lib/picksService.js', () => ({ savePicks: vi.fn(), getMyPicks: vi.fn() }));
 vi.mock('../lib/groupsService.js', () => ({ getMyGroups: vi.fn() }));
 
-import { savePicks } from '../lib/picksService.js';
+import { savePicks, getMyPicks } from '../lib/picksService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 const mockSavePicks = vi.mocked(savePicks);
+const mockGetMyPicks = vi.mocked(getMyPicks);
 const mockGetMyGroups = vi.mocked(getMyGroups);
 
 const buf = { id: '1', name: 'Bills', abbreviation: 'BUF', logo: '' };
@@ -57,6 +58,8 @@ describe('GamesPage', () => {
     mockGetMyGroups.mockResolvedValue([
       { id: 1, identifier: 'sunday-squad', name: 'Sunday Squad', poolType: 'nfl_weekly' },
     ] as any);
+    // Default: no previously-saved picks. The hydration test below re-mocks.
+    mockGetMyPicks.mockResolvedValue({ picks: [] });
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -205,5 +208,34 @@ describe('GamesPage', () => {
     const calledIdentifiers = mockSavePicks.mock.calls.map((c) => c[0]).sort();
     expect(calledIdentifiers).toEqual(['office-pool', 'sunday-squad']);
     expect(await screen.findByText('Picks saved to 2 groups')).toBeInTheDocument();
+  });
+
+  it('hydrates the draft from previously-saved picks on mount', async () => {
+    // Regression: GamesPage used to setDraft({}) on every fetch, so a refresh
+    // blanked out picks the user had successfully saved. Now we re-fetch the
+    // user's row and seed the draft from it.
+    mockGetMyPicks.mockResolvedValue({
+      picks: [{ gameId: 10, pickedTeamId: 1, confidence: 2 }],
+    });
+    mockSavePicks.mockResolvedValue({ games: [] });
+
+    renderPage();
+    await screen.findByText('Bills');
+
+    // Submit should already be enabled — the pick was hydrated.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeEnabled(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+    await waitFor(() =>
+      expect(mockSavePicks).toHaveBeenCalledWith('sunday-squad', {
+        season: 2025,
+        seasonType: 2,
+        week: 1,
+        picks: [{ gameId: 10, pickedTeamId: 1, confidence: 2 }],
+        clearedGameIds: [],
+      }),
+    );
   });
 });
