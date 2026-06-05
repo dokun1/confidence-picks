@@ -138,7 +138,7 @@ export default function GroupsPage() {
             showHeader={false}
             onCreateNew={() => navigate('/create-group')}
             onJoinExisting={() => navigate('/join-group')}
-            onViewGroup={() => navigate('/group-details')}
+            onViewGroup={(group) => navigate(`/group-details?group=${group.identifier}`)}
             onEditGroup={(group) => navigate(`/edit-group/${group.identifier}`)}
             onLeaveGroup={handleLeaveGroup}
             onDeleteGroup={handleDeleteGroup}

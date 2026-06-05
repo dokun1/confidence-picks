@@ -86,9 +86,9 @@ describe('GroupsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /join group/i }));
     expect(mockNavigate).toHaveBeenCalledWith('/join-group');
 
-    // View Group (one per card) → /group-details.
+    // View Group (one per card) → /group-details with the card's identifier.
     fireEvent.click(screen.getAllByRole('button', { name: /view group/i })[0]);
-    expect(mockNavigate).toHaveBeenCalledWith('/group-details');
+    expect(mockNavigate).toHaveBeenCalledWith(`/group-details?group=${groupA.identifier}`);
 
     // groupA is owner → Edit + Delete; Edit routes to the parameterized path.
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
