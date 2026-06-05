@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { GroupPicks } from './';
 import type { GameData, GroupMember, MemberPicks, PickData, TeamData } from '../../../lib/types';
@@ -159,6 +159,67 @@ describe('GroupPicks', () => {
       render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
       const names = MEMBERS.map(member => screen.getByText(member.name));
       expect(names).toHaveLength(MEMBERS.length);
+    });
+  });
+
+  describe('revealed picks', () => {
+    // Member cells render in member order, after the row-header; the trailing
+    // "Correct" column (present because GAMES contains a FINAL game) is last.
+    function cellsForGameRow(label: string) {
+      const row = screen.getByText(label).closest('tr');
+      expect(row).not.toBeNull();
+      return within(row as HTMLElement).getAllByRole('cell');
+    }
+
+    it('shows the picked team abbreviation and confidence in the picker cell', () => {
+      render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
+      // IN_PROGRESS game has started, so Alice's pick (EAGLES @ confidence 2) is revealed.
+      const [aliceCell] = cellsForGameRow('PHI @ DAL');
+      expect(within(aliceCell).getByText('PHI')).toBeInTheDocument();
+      expect(within(aliceCell).getByText('(2)')).toBeInTheDocument();
+    });
+
+    it("lands each member's differing pick in its own cell, not crossed", () => {
+      render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
+      const [aliceCell, bobCell] = cellsForGameRow('PHI @ DAL');
+
+      // Alice picked the Eagles; Bob picked the Cowboys for the same game.
+      expect(within(aliceCell).getByText('PHI')).toBeInTheDocument();
+      expect(within(aliceCell).queryByText('DAL')).not.toBeInTheDocument();
+
+      expect(within(bobCell).getByText('DAL')).toBeInTheDocument();
+      expect(within(bobCell).getByText('(3)')).toBeInTheDocument();
+      expect(within(bobCell).queryByText('PHI')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('hidden and missing picks', () => {
+    function cellsForGameRow(label: string) {
+      const row = screen.getByText(label).closest('tr');
+      expect(row).not.toBeNull();
+      return within(row as HTMLElement).getAllByRole('cell');
+    }
+
+    it("renders the 'Hidden' placeholder for every member in a SCHEDULED game", () => {
+      render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
+      // SCHEDULED game: picks are withheld until kickoff for all three members,
+      // even though each of them has a complete pick in the fixtures.
+      const cells = cellsForGameRow('KC @ BUF');
+      const [aliceCell] = cells;
+      expect(within(aliceCell).getByText('Hidden')).toBeInTheDocument();
+      // Withheld regardless of the underlying data — Alice's KC pick is not shown.
+      expect(within(aliceCell).queryByText('KC')).not.toBeInTheDocument();
+
+      const hidden = MEMBERS.map((_, i) => within(cells[i]).getByText('Hidden'));
+      expect(hidden).toHaveLength(MEMBERS.length);
+    });
+
+    it("renders 'No pick' for a started game where the member has no complete pick", () => {
+      render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
+      // IN_PROGRESS game has started; Carol submitted no pick for it.
+      const cells = cellsForGameRow('PHI @ DAL');
+      const carolCell = cells[MEMBERS.indexOf(CAROL)];
+      expect(within(carolCell).getByText('No pick')).toBeInTheDocument();
     });
   });
 });
