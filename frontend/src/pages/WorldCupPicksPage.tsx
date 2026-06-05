@@ -12,6 +12,7 @@ import {
   type WorldCupStage,
 } from '../lib/types';
 import { getStageMatches, submitWorldCupPicks } from '../lib/worldCupService.js';
+import { getMyGroups } from '../lib/groupsService.js';
 
 // World Cup sibling of GamesPage. A world_cup_2026 pool renders the WHOLE
 // tournament as one stage-grouped match list — there is NO week selector. The
@@ -142,12 +143,56 @@ export default function WorldCupPicksPage() {
 
   const canSubmit = !!groupId && picks.length > 0 && !submitting;
 
+  // Opt-in "save these picks to every World Cup group I'm in" toggle. Mirrors
+  // the heritage Svelte 'save for all groups' UX (PR #37, Aug 2025) that the
+  // React rewrite dropped. Backend has no fan-out endpoint; we iterate the
+  // user's groups client-side and submit per group.
+  const [applyToAll, setApplyToAll] = useState(false);
+
   async function submit() {
     if (!groupId || picks.length === 0) return;
     setSubmitting(true);
     try {
-      await submitWorldCupPicks(groupId, picks);
-      setToast({ open: true, message: 'Picks saved', variant: 'success' });
+      if (!applyToAll) {
+        await submitWorldCupPicks(groupId, picks);
+        setToast({ open: true, message: 'Picks saved', variant: 'success' });
+        return;
+      }
+
+      // Fan-out: every World Cup group the user belongs to. Always include the
+      // current `groupId` (the source group) — getMyGroups should list it, but
+      // if for some reason it doesn't, we still want a single-group save to
+      // succeed rather than silently no-op.
+      const groups = await getMyGroups();
+      const targets = groups
+        .filter((g) => g.poolType === 'world_cup_2026')
+        .map((g) => g.identifier);
+      if (!targets.includes(groupId)) targets.push(groupId);
+
+      const results = await Promise.allSettled(
+        targets.map((id) => submitWorldCupPicks(id, picks)),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const fail = results.length - ok;
+      if (fail === 0) {
+        setToast({
+          open: true,
+          message: `Picks saved to ${ok} group${ok === 1 ? '' : 's'}`,
+          variant: 'success',
+        });
+      } else if (ok === 0) {
+        setToast({
+          open: true,
+          message: `Failed to save picks (0/${results.length})`,
+          variant: 'error',
+        });
+      } else {
+        setToast({
+          open: true,
+          message: `Saved to ${ok}/${results.length} groups (${fail} failed)`,
+          variant: 'error',
+        });
+      }
     } catch (err) {
       setToast({
         open: true,
@@ -207,9 +252,21 @@ export default function WorldCupPicksPage() {
 
       {/* Submit bar */}
       {pageState.matches.length > 0 && (
-        <div className="mt-lg flex items-center justify-between gap-md border-t border-border pt-md">
-          <div className="text-sm text-secondary">
-            {picks.length} pick{picks.length === 1 ? '' : 's'} selected
+        <div className="mt-lg flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
+            <span className="text-sm text-secondary">
+              {picks.length} pick{picks.length === 1 ? '' : 's'} selected
+            </span>
+            <label className="flex items-center gap-xs text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={applyToAll}
+                onChange={(e) => setApplyToAll(e.target.checked)}
+                aria-label="Save to all my World Cup groups"
+                className="h-4 w-4"
+              />
+              Save to all my World Cup groups
+            </label>
           </div>
           <div className="relative inline-toast-anchor">
             <InlineToast
@@ -225,7 +282,7 @@ export default function WorldCupPicksPage() {
               disabled={!canSubmit}
               onClick={submit}
             >
-              {submitting ? 'Saving…' : 'Submit Picks'}
+              {submitting ? 'Saving…' : applyToAll ? 'Submit to All' : 'Submit Picks'}
             </Button>
           </div>
         </div>

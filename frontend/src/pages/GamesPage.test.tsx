@@ -9,9 +9,12 @@ vi.mock('../lib/authService.js', () => ({
   default: { getApiBaseUrl: () => 'http://test' },
 }));
 vi.mock('../lib/picksService.js', () => ({ savePicks: vi.fn() }));
+vi.mock('../lib/groupsService.js', () => ({ getMyGroups: vi.fn() }));
 
 import { savePicks } from '../lib/picksService.js';
+import { getMyGroups } from '../lib/groupsService.js';
 const mockSavePicks = vi.mocked(savePicks);
+const mockGetMyGroups = vi.mocked(getMyGroups);
 
 const buf = { id: '1', name: 'Bills', abbreviation: 'BUF', logo: '' };
 const ne = { id: '2', name: 'Patriots', abbreviation: 'NE', logo: '' };
@@ -168,5 +171,32 @@ describe('GamesPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
     expect(await screen.findByText('Server said no')).toBeInTheDocument();
+  });
+
+  it('fans the same picks out to every NFL group when "Save to all" is checked', async () => {
+    // Three groups: two NFL (one explicit poolType, one legacy null) + one WC.
+    // Fan-out must call savePicks for both NFL identifiers and skip the WC one.
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'sunday-squad', poolType: 'nfl_weekly' },
+      { id: 2, identifier: 'office-pool', poolType: null }, // legacy pre-#86
+      { id: 3, identifier: 'wc-crew', poolType: 'world_cup_2026' },
+    ] as any);
+    mockSavePicks.mockResolvedValue({ games: [] });
+
+    renderPage();
+    await screen.findByText('Bills');
+
+    const row10 = screen.getByTestId('game-row-10');
+    fireEvent.click(within(row10).getByRole('radio', { name: 'Pick Bills to win' }));
+    fireEvent.click(within(row10).getByRole('button', { name: /Confidence for BUF at NE/ }));
+    fireEvent.click(within(row10).getByRole('option', { name: '1' }));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my NFL groups' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+
+    await waitFor(() => expect(mockSavePicks).toHaveBeenCalledTimes(2));
+    const calledIdentifiers = mockSavePicks.mock.calls.map((c) => c[0]).sort();
+    expect(calledIdentifiers).toEqual(['office-pool', 'sunday-squad']);
+    expect(await screen.findByText('Picks saved to 2 groups')).toBeInTheDocument();
   });
 });

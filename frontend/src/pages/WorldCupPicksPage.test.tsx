@@ -8,10 +8,15 @@ vi.mock('../lib/worldCupService.js', () => ({
   getStageMatches: vi.fn(),
   submitWorldCupPicks: vi.fn(),
 }));
+vi.mock('../lib/groupsService.js', () => ({
+  getMyGroups: vi.fn(),
+}));
 
 import { getStageMatches, submitWorldCupPicks } from '../lib/worldCupService.js';
+import { getMyGroups } from '../lib/groupsService.js';
 const mockGetStageMatches = vi.mocked(getStageMatches);
 const mockSubmitPicks = vi.mocked(submitWorldCupPicks);
+const mockGetMyGroups = vi.mocked(getMyGroups);
 
 const mex = { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: '' };
 const usa = { id: '2', name: 'United States', abbreviation: 'USA', logo: '' };
@@ -148,6 +153,54 @@ describe('WorldCupPicksPage', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
     expect(await screen.findByText('Server said no')).toBeInTheDocument();
+  });
+
+  it('fans the same picks out to every world_cup_2026 group when "Save to all" is checked', async () => {
+    // The user is in three groups: two WC + one NFL. The fan-out must hit
+    // both WC group identifiers (in addition to the source identifier when
+    // the source is itself a WC group) and skip the NFL one entirely.
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'la-crew', poolType: 'world_cup_2026' },
+      { id: 2, identifier: 'work-pool', poolType: 'world_cup_2026' },
+      { id: 3, identifier: 'family-nfl', poolType: 'nfl_weekly' },
+    ] as any);
+    mockSubmitPicks.mockResolvedValue({});
+
+    renderPage();
+    await screen.findByTestId('match-row-10');
+
+    fireEvent.click(
+      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my World Cup groups' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+
+    await waitFor(() => expect(mockSubmitPicks).toHaveBeenCalledTimes(2));
+    const calledIdentifiers = mockSubmitPicks.mock.calls.map((c) => c[0]).sort();
+    expect(calledIdentifiers).toEqual(['la-crew', 'work-pool']);
+    expect(await screen.findByText('Picks saved to 2 groups')).toBeInTheDocument();
+  });
+
+  it('reports partial failure when some fan-out submits reject', async () => {
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'la-crew', poolType: 'world_cup_2026' },
+      { id: 2, identifier: 'work-pool', poolType: 'world_cup_2026' },
+    ] as any);
+    mockSubmitPicks.mockImplementation(async (groupId: string) => {
+      if (groupId === 'work-pool') throw new Error('boom');
+      return {};
+    });
+
+    renderPage();
+    await screen.findByTestId('match-row-10');
+
+    fireEvent.click(
+      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my World Cup groups' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+
+    expect(await screen.findByText('Saved to 1/2 groups (1 failed)')).toBeInTheDocument();
   });
 
   it('toggles a pick off when the selected result is clicked again', async () => {
