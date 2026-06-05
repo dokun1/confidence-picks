@@ -29,7 +29,16 @@ test('create group page renders the create group form', async ({ page }) => {
 
   await page.goto('/create-group')
 
-  // Placeholder assertion (full coverage lands in the next sub-task): the form's
-  // "Create New Group" heading confirms the page mounted behind ProtectedRoute.
+  // The form heading is "Create New Group" (the page <h1> is "Create Group");
+  // asserting the form heading unambiguously proves CreateGroupForm rendered.
   await expect(page.getByRole('heading', { name: 'Create New Group' })).toBeVisible()
+
+  // TextField renders a <label htmlFor> linked to its input, so getByLabel
+  // resolves each field by its accessible name.
+  await expect(page.getByLabel(/Group Name/)).toBeVisible()
+  await expect(page.getByLabel(/Group ID/)).toBeVisible()
+
+  // Exact name avoids matching the page <h1> "Create Group" — the button label
+  // reads "Create Group" while idle. Do not submit the form.
+  await expect(page.getByRole('button', { name: 'Create Group' })).toBeVisible()
 })
