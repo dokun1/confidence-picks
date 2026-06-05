@@ -50,7 +50,7 @@ export default function HomePage() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="max-w-4xl mx-auto px-lg py-lg">
+    <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg">
       <div className="text-center space-y-lg">
         <header className="space-y-md">
           <h1 className="text-4xl font-heading font-bold text-[var(--color-text-primary)]">
