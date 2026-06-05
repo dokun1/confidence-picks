@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Avatar from '../../designsystem/components/Avatar';
+import Button from '../../designsystem/components/Button';
+import TextField from '../../designsystem/components/TextField';
+import AuthService from '../../lib/authService';
+import { postMessage as apiPostMessage } from '../../lib/groupsService.js';
 import type { GroupMessage } from '../../lib/groupsService';
 
 export interface ChatTabProps {
@@ -19,6 +23,46 @@ function formatDate(dateString: string): string {
  */
 export default function ChatTab(props: ChatTabProps) {
   const [messages, setMessages] = useState<GroupMessage[]>(props.initialMessages);
+  const [text, setText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Monotonic counter for synthetic temp ids — avoids the nondeterminism of
+  // Date.now()/Math.random and collisions when messages.length shifts mid-post.
+  const tempCounter = useRef(0);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    setError(null);
+    const tempId = `temp-${tempCounter.current++}`;
+    // Best-effort author from the cached current user; content is the fallback.
+    const user = AuthService.getUser();
+    const optimistic: GroupMessage = {
+      id: tempId,
+      authorId: user ? String(user.id) : '',
+      authorName: user?.name ?? trimmed,
+      authorPictureUrl: user?.pictureUrl ?? null,
+      content: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages(prev => [optimistic, ...prev]);
+    setText('');
+    setPosting(true);
+    try {
+      const posted = await apiPostMessage(props.identifier, trimmed);
+      // Re-sync: swap the temp entry for the server's canonical message.
+      setMessages(prev => prev.map(msg => (msg.id === tempId ? posted : msg)));
+    } catch (err) {
+      // Roll back the optimistic entry and surface the failure near the form.
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
+      setError(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setPosting(false);
+    }
+  }
 
   return (
     <div className='rounded-md border border-border bg-surface p-lg'>
@@ -41,6 +85,25 @@ export default function ChatTab(props: ChatTabProps) {
           ))
         )}
       </div>
+
+      <form onSubmit={handleSubmit} className='mt-lg flex items-start gap-sm'>
+        <div className='flex-1'>
+          <TextField
+            value={text}
+            onChange={setText}
+            placeholder='Type your message...'
+            disabled={posting}
+          />
+        </div>
+        <Button
+          type='submit'
+          disabled={text.trim().length === 0 || posting}
+          loading={posting}
+        >
+          Send
+        </Button>
+      </form>
+      {error && <p className='mt-sm text-sm text-error-600 dark:text-error-400'>{error}</p>}
     </div>
   );
 }
