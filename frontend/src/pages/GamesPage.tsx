@@ -7,7 +7,7 @@ import type { ToastVariant } from '../designsystem/components/InlineToast/Inline
 import GamePickRow, { type DraftPick, type PickGame } from '../components/GamePickRow';
 import AuthService from '../lib/authService.js';
 import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
-import { savePicks } from '../lib/picksService.js';
+import { savePicks, getMyPicks } from '../lib/picksService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 import SaveTargetsDropdown, { type SaveTarget } from '../components/SaveTargetsDropdown';
 
@@ -81,9 +81,6 @@ export default function GamesPage() {
         const data = await res.json();
         const games: PickGame[] = Array.isArray(data?.games) ? data.games : [];
         setPageState({ loading: false, error: '', games });
-        // A fresh week starts with an empty draft — the public endpoint carries
-        // no per-user pick to prefill.
-        setDraft({});
       } catch (err) {
         setPageState((s) => ({
           ...s,
@@ -99,6 +96,40 @@ export default function GamesPage() {
   useEffect(() => {
     fetchGames();
   }, [fetchGames]);
+
+  // Hydrate the draft from the user's already-saved picks for the current
+  // (group × season × seasonType × week). Without this a refresh blanks out
+  // picks that successfully persisted to the DB. Runs independently of
+  // fetchGames so a transient picks-endpoint failure can't block the games
+  // list — the draft just stays empty in that case.
+  useEffect(() => {
+    if (!groupId) {
+      setDraft({});
+      return;
+    }
+    let cancelled = false;
+    setDraft({});
+    getMyPicks(groupId, { season: year, seasonType, week })
+      .then((resp) => {
+        if (cancelled) return;
+        const next: DraftMap = {};
+        for (const p of resp.picks ?? []) {
+          if (p && p.gameId != null) {
+            next[p.gameId] = {
+              pickedTeamId: p.pickedTeamId,
+              confidence: p.confidence,
+            };
+          }
+        }
+        setDraft(next);
+      })
+      .catch(() => {
+        // Best-effort — leave draft empty on failure.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, year, seasonType, week]);
 
   // N for the confidence range is the number of games in the loaded week.
   const totalGames = pageState.games.length;

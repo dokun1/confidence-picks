@@ -55,6 +55,21 @@ export function getPicks(
   query: { season: number; seasonType: number; week: number },
 ): Promise<GetPicksResponse>;
 
+/** Response shape of GET /:identifier/picks/me. */
+export interface MyPicksResponse {
+  picks: Array<{ gameId: number; pickedTeamId: number | null; confidence: number | null }>;
+}
+
+/**
+ * Fetch the authenticated user's own picks for a week, in the same shape POST
+ * /:identifier/picks accepts. Used by GamesPage to hydrate the draft on mount
+ * + every selector change so a refresh doesn't blank out picks.
+ */
+export function getMyPicks(
+  groupIdentifier: string,
+  query: { season: number; seasonType: number; week: number },
+): Promise<MyPicksResponse>;
+
 /** One pick in a save payload: which team, with what confidence, for a game. */
 export interface PickInput {
   gameId: number;

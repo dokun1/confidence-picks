@@ -45,6 +45,57 @@ function deriveGamePickMeta(gameJson, pick) {
   };
 }
 
+/**
+ * Read the authenticated user's own picks for a week, in the same shape POST
+ * /:identifier/picks accepts. GamesPage hydrates its draft from this on
+ * mount + on every selector change so a refresh doesn't blank out picks the
+ * user already submitted. Scoped to the auth'd user only — no fan-out, no
+ * other members.
+ */
+router.get('/:identifier/picks/me', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const season = parseInt(req.query.season);
+    const seasonType = parseInt(req.query.seasonType);
+    const weekRaw = req.query.week;
+    const week = weekRaw === '0' ? 0 : parseInt(weekRaw);
+    if (Number.isNaN(season) || Number.isNaN(seasonType) || Number.isNaN(week)) {
+      return res.status(400).json({ error: 'season, seasonType and week are required' });
+    }
+    const group = await ensureMembership(identifier, req.user.id);
+    // Mirror the existing /picks GET's preseason→week0 mapping so the row the
+    // upsert wrote (under the mapped slot) is the row we read back.
+    let fetchSeasonType = seasonType;
+    let fetchWeek = week;
+    if (seasonType === 2 && week === 0 && season !== 2025) {
+      fetchSeasonType = 1;
+      fetchWeek = 4;
+    }
+    const picks = await UserPick.findForUserWeek({
+      userId: req.user.id,
+      groupId: group.id,
+      season,
+      seasonType: fetchSeasonType,
+      week: fetchWeek,
+    });
+    res.json({
+      picks: picks
+        .filter((p) => p.pickedTeamId != null || p.confidence != null)
+        .map((p) => ({
+          gameId: p.gameId,
+          pickedTeamId: p.pickedTeamId,
+          confidence: p.confidence,
+        })),
+    });
+  } catch (e) {
+    if (e.message === 'NOT_MEMBER' || e.message === 'GROUP_NOT_FOUND') {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    console.error('GET /:identifier/picks/me error', e);
+    res.status(500).json({ error: 'Failed to load picks' });
+  }
+});
+
 router.get('/:identifier/picks', authenticateToken, async (req, res) => {
   try {
     const { identifier } = req.params;
