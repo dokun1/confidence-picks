@@ -52,7 +52,8 @@ confidence-picks/
 ## Tech Stack
 
 ### Frontend
-- **Svelte**
+- **React**
+- **TypeScript**
 - **Vite** (dev/build)
 - **Deployed on:** Vercel (https://www.confidence-picks.com)
 
