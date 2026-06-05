@@ -3,7 +3,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { AuthContextValue } from '../contexts/AuthContext';
 
 vi.mock('../contexts/AuthContext', () => {
-  const mockUseAuth = vi.fn<[], AuthContextValue>(() => ({
+  const mockUseAuth = vi.fn<() => AuthContextValue>(() => ({
     isAuthenticated: false,
     user: null,
     setAuthUser: vi.fn(),
