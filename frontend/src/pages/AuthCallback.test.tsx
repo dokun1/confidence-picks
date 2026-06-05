@@ -59,6 +59,30 @@ describe('AuthCallback', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
   });
 
+  // Regression: backend/src/routes/auth.js redirects to
+  // /auth/callback?token=…&refresh=… (NOT accessToken/refreshToken).
+  // Prior to fix/auth-callback-param-names the React AuthCallback only read
+  // the long-form names, so every successful OAuth round-trip silently fell
+  // through to the missing-tokens branch and bounced the user back to /login.
+  // This test pins the actual backend contract so any future regression of
+  // the param names trips a unit test rather than reaching prod.
+  it('persists tokens and hydrates the user when given the backend "?token=&refresh=" shape', async () => {
+    window.history.pushState({}, '', '/auth/callback?token=BACKEND_ACCESS&refresh=BACKEND_REFRESH');
+    mockGetCurrentUser.mockResolvedValue(testUser as any);
+
+    render(
+      <MemoryRouter>
+        <AuthCallback />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+
+    expect(mockSetTokens).toHaveBeenCalledWith('BACKEND_ACCESS', 'BACKEND_REFRESH');
+    expect(mockSetAuthUser).toHaveBeenCalledWith(testUser);
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
   it('redirects to /login with an error toast when tokens are missing', async () => {
     window.history.pushState({}, '', '/auth/callback');
 
