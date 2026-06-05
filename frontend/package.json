@@ -12,7 +12,8 @@
     "dev:tokens": "concurrently \"pnpm tokens:watch\" \"pnpm dev\"",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test --pass-with-no-tests"
+    "test:e2e": "playwright test",
+    "verify:coverage": "node scripts/check-page-spec-coverage.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1",
