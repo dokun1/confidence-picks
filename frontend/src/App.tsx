@@ -14,6 +14,7 @@ import JoinGroupPage from './pages/JoinGroupPage';
 import GroupDetailsPage from './pages/GroupDetailsPage';
 import EditGroupPage from './pages/EditGroupPage';
 import GamesPage from './pages/GamesPage';
+import WorldCupPicksPage from './pages/WorldCupPicksPage';
 import InvitePage from './pages/InvitePage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -39,6 +40,7 @@ export function AppRoutes() {
           <Route path="/group-details" element={<GroupDetailsPage />} />
           <Route path="/edit-group/:identifier" element={<EditGroupPage />} />
           <Route path="/games" element={<GamesPage />} />
+          <Route path="/world-cup" element={<WorldCupPicksPage />} />
         </Route>
         {/* NotFoundPage's derived /not-found route is intentionally undeclared;
             it falls through to this catch-all. */}
