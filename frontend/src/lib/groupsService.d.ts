@@ -8,7 +8,10 @@
 import type { GroupData } from '../designsystem/components/GroupCard/GroupCard';
 
 export interface GroupDetail {
-  id: string;
+  // Optional: the backend returns id, but no consumer reads it off getGroup, and
+  // joinGroup's runtime fallback (`res.json().catch(() => ({}))`) can resolve to
+  // an id-less object. Typing it required would overstate the contract.
+  id?: string;
   name: string;
   identifier: string;
   description?: string;
@@ -38,11 +41,14 @@ export interface GroupMessage {
 }
 
 export function getMyGroups(): Promise<GroupData[]>;
+// createGroup/updateGroup/joinGroup resolve to a parsed JSON body at runtime, but
+// every page consumes them as fire-and-forget (await, then navigate) and never
+// reads the resolved value. Typed as void to match actual consumption.
 export function createGroup(payload: {
   name: string;
   identifier: string;
   description?: string;
-}): Promise<GroupDetail>;
+}): Promise<void>;
 export function getGroup(identifier: string): Promise<GroupDetail>;
 export function getMembers(identifier: string): Promise<GroupMember[]>;
 export function getMessages(
@@ -51,9 +57,9 @@ export function getMessages(
 ): Promise<GroupMessage[]>;
 export function postMessage(identifier: string, message: string): Promise<GroupMessage>;
 export function leaveGroup(identifier: string): Promise<void>;
-export function joinGroup(identifier: string): Promise<GroupDetail>;
+export function joinGroup(identifier: string): Promise<void>;
 export function updateGroup(
   identifier: string,
   updates: Partial<Pick<GroupDetail, 'name' | 'description' | 'isPublic' | 'maxMembers'>>,
-): Promise<GroupDetail>;
+): Promise<void>;
 export function deleteGroup(identifier: string): Promise<boolean>;
