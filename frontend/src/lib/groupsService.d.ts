@@ -6,6 +6,7 @@
 // GroupCard's GroupData, so it is typed as such.
 
 import type { GroupData } from '../designsystem/components/GroupCard/GroupCard';
+import type { PoolType } from './types';
 
 export interface GroupDetail {
   // Optional: the backend returns id, but no consumer reads it off getGroup, and
@@ -20,6 +21,7 @@ export interface GroupDetail {
   memberCount?: number;
   userRole?: string;
   createdAt?: string;
+  poolType?: PoolType;
 }
 
 export interface GroupMember {
@@ -48,6 +50,7 @@ export function createGroup(payload: {
   name: string;
   identifier: string;
   description?: string;
+  poolType?: PoolType;
 }): Promise<void>;
 export function getGroup(identifier: string): Promise<GroupDetail>;
 export function getMembers(identifier: string): Promise<GroupMember[]>;

@@ -152,4 +152,98 @@ export class GameService {
       throw error;
     }
   }
+
+  // Knockout stage codes. In these rounds a match always advances one team:
+  // the 90' score may be level, but penalties/extra time resolve a winner. The
+  // group stage is the only World Cup phase where a 'draw' is a terminal result.
+  static KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
+
+  // Get World Cup matches for a tournament stage, with the same per-event
+  // cache/save flow getGamesForWeek uses. Soccer-only: routes through
+  // fetchSoccerWeek('fifa.world', stage) and stamps league/stage on each Game.
+  // Each returned Game carries a resolved `winnerTeamId` (null when undecided)
+  // that the WC games route consumes for scoring.
+  static async getWorldCupStage(stage, forceRefresh = false) {
+    const games = [];
+    try {
+      const service = getESPNService();
+      const espnEvents = await service.fetchSoccerWeek('fifa.world', stage);
+
+      for (const espnEvent of espnEvents) {
+        const espnId = espnEvent.id;
+        const cachedGame = await Game.findByESPNId(espnId);
+        const freshGame = Game.fromESPNData(espnEvent, { league: 'world_cup', stage });
+        // The advancing-side flag (ESPN competitor.winner, set on PK shootouts)
+        // is not carried on the persisted Game, so read it from the live event.
+        const winnerHomeAway = GameService.winnerHomeAwayFromESPN(espnEvent);
+
+        if (!cachedGame) {
+          console.log(`Creating new World Cup game: ${espnId}`);
+          await freshGame.save();
+          freshGame.winnerTeamId = GameService.resolveWinnerTeamId(freshGame, stage, winnerHomeAway);
+          games.push(freshGame);
+          continue;
+        }
+
+        if (forceRefresh || cachedGame.isStale() || freshGame.isDifferentFrom(cachedGame)) {
+          console.log(`Saving refresh for World Cup game: ${espnId}`);
+          await freshGame.save();
+          freshGame.winnerTeamId = GameService.resolveWinnerTeamId(freshGame, stage, winnerHomeAway);
+          games.push(freshGame);
+        } else {
+          cachedGame.winnerTeamId = GameService.resolveWinnerTeamId(cachedGame, stage, winnerHomeAway);
+          games.push(cachedGame);
+        }
+      }
+      return games;
+    } catch (error) {
+      console.error('Failed to fetch World Cup stage:', error);
+      throw error;
+    }
+  }
+
+  // Read the homeAway side ESPN flags as the result. ESPN sets
+  // competitors[].winner === true on the advancing team — notably on PK
+  // shootouts, where the 90' scoreline is level and is the only signal of who
+  // went through. Returns 'home' | 'away' | null.
+  static winnerHomeAwayFromESPN(espnEvent) {
+    const competitors = espnEvent?.competitions?.[0]?.competitors || [];
+    const flagged = competitors.find(c => c.winner === true);
+    return flagged ? flagged.homeAway : null;
+  }
+
+  // Resolve the winning team's id for a World Cup match, or null when there is
+  // no single winner. ESPN `status` is the completion truth source: a match
+  // only counts once status.type.completed is true (normalized to 'FINAL').
+  //
+  // Group stage: the higher-scoring side wins; a level score is a draw (null).
+  // Knockout stages: a team always advances even at a level 90' scoreline —
+  // prefer the ESPN-flagged winner side (PK shootouts), falling back to the
+  // higher regulation score. A 'draw' is never a valid knockout result.
+  //
+  // @param {Game} game - the match (reads status/completed, team ids, scores)
+  // @param {string} [stage=game.stage] - tournament stage code
+  // @param {('home'|'away'|null)} [winnerHomeAway=null] - ESPN's flagged side
+  // @returns {string|null} the winning team's id, or null when undecided
+  static resolveWinnerTeamId(game, stage = game.stage, winnerHomeAway = null) {
+    const isFinal = game.completed === true || game.status === 'FINAL';
+    if (!isFinal) return null;
+
+    const homeId = game.homeTeam?.id ?? null;
+    const awayId = game.awayTeam?.id ?? null;
+
+    if (GameService.KNOCKOUT_STAGES.has(stage)) {
+      if (winnerHomeAway === 'home') return homeId;
+      if (winnerHomeAway === 'away') return awayId;
+      if (game.homeScore > game.awayScore) return homeId;
+      if (game.awayScore > game.homeScore) return awayId;
+      // Level with no flagged advancer: unresolved. Never a draw for knockouts.
+      return null;
+    }
+
+    // Group stage: higher score wins, level is a draw with no single winner.
+    if (game.homeScore > game.awayScore) return homeId;
+    if (game.awayScore > game.homeScore) return awayId;
+    return null;
+  }
 }

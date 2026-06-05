@@ -30,13 +30,21 @@ export class Game {
     this.week = data.week;
     this.season = data.season;
     this.seasonType = data.seasonType;
+    // League/stage carry soccer awareness. NFL games leave these null/undefined.
+    this.league = data.league;
+    this.stage = data.stage;
     this.lastUpdated = data.lastUpdated;
     this.createdAt = data.createdAt;
   }
 
   // Create a Game from ESPN API data
 // Create a Game from ESPN API data
-static fromESPNData(espnGame) {
+static fromESPNData(espnGame, opts = {}) {
+  // Soccer callers pass { league, stage } (e.g. league 'world_cup', stage from the
+  // stage key). NFL callers pass nothing, so both default to null and the NFL path
+  // below is unchanged.
+  const { league = null, stage = null } = opts;
+
   console.log('ESPN Game Data:', JSON.stringify(espnGame, null, 2));
   
   const competition = espnGame.competitions[0];
@@ -56,10 +64,12 @@ static fromESPNData(espnGame) {
   const seasonYear = season.year || getCurrentNFLSeason();
   let seasonType = season.type || 2;
 
-  // Map ONLY the final preseason week to regular season week 0 for picks/testing
+  // Map ONLY the final preseason week to regular season week 0 for picks/testing.
+  // NFL-only: soccer events carry season.type 1 too, so gate on the absence of a
+  // league tag to keep this remap from firing for World Cup fixtures.
   try {
     const PRE_FINAL = parseInt(process.env.PRESEASON_FINAL_WEEK || '4', 10); // default 4
-    if (seasonType === 1 && week === PRE_FINAL) {
+    if (!league && seasonType === 1 && week === PRE_FINAL) {
       console.log(`[week-map] Mapping preseason week ${PRE_FINAL} to regular season week 0`);
       week = 0; // represent as week 0
       seasonType = 2; // treat as regular season for picks/standings
@@ -150,6 +160,8 @@ static fromESPNData(espnGame) {
     week: week,
     season: seasonYear,
     seasonType: seasonType,
+    league,
+    stage,
     lastUpdated: new Date()
   });
 }
@@ -178,11 +190,12 @@ static fromESPNData(espnGame) {
 async save() {
   const query = `
     INSERT INTO games (
-      espn_id, home_team, away_team, game_date, status, 
+      espn_id, home_team, away_team, game_date, status,
       period, display_clock, status_detail,
-      home_score, away_score, week, season, season_type, odds, probability, last_updated
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-    ON CONFLICT (espn_id) 
+      home_score, away_score, week, season, season_type, odds, probability, last_updated,
+      league, stage
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    ON CONFLICT (espn_id)
     DO UPDATE SET
       home_team = $2,
       away_team = $3,
@@ -198,7 +211,9 @@ async save() {
       season_type = $13,
       odds = $14,
       probability = $15,
-      last_updated = $16
+      last_updated = $16,
+      league = $17,
+      stage = $18
     RETURNING *
   `;
 
@@ -225,7 +240,9 @@ async save() {
     this.seasonType,
     JSON.stringify(this.odds || null),
     JSON.stringify(this.probability || null),
-    this.lastUpdated
+    this.lastUpdated,
+    this.league || null,
+    this.stage || null
   ];
 
   const result = await pool.query(query, values);
@@ -279,6 +296,8 @@ static async findByESPNId(espnId) {
     week: row.week,
     season: row.season,
     seasonType: row.season_type,
+    league: row.league,
+    stage: row.stage,
     lastUpdated: new Date(row.last_updated),
     createdAt: new Date(row.created_at)
   });
@@ -307,6 +326,8 @@ static async findByWeekSeason(season, seasonType, week) {
     week: row.week,
     season: row.season,
     seasonType: row.season_type,
+    league: row.league,
+    stage: row.stage,
     lastUpdated: new Date(row.last_updated),
     createdAt: new Date(row.created_at)
   }));
@@ -336,6 +357,8 @@ static async findByWeekSeason(season, seasonType, week) {
       week: this.week,
       season: this.season,
       seasonType: this.seasonType,
+      league: this.league,
+      stage: this.stage,
       lastUpdated: this.lastUpdated,
       createdAt: this.createdAt
     };

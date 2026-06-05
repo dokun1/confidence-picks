@@ -17,6 +17,42 @@ router.get('/', (req, res) => {
   });
 });
 
+const WORLD_CUP_2026_STAGES = new Set(['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final']);
+
+// Registered before /games/:year/:seasonType/:week: both are four-segment paths, so
+// the literal world-cup-2026/stage prefix must match before the NFL param route
+// claims it (year='world-cup-2026', seasonType='stage' → NaN → DB error).
+router.get('/games/world-cup-2026/stage/:stage', async (req, res) => {
+  try {
+    const { stage } = req.params;
+
+    if (!WORLD_CUP_2026_STAGES.has(stage)) {
+      return res.status(400).json({
+        error: `Invalid stage '${stage}'. Must be one of: ${[...WORLD_CUP_2026_STAGES].join(', ')}`
+      });
+    }
+
+    const forceRefresh = (req.query.refresh === 'true') || (req.query.force === 'true') || (req.query.force === '1');
+
+    const games = await GameService.getWorldCupStage(stage, forceRefresh);
+
+    res.json({
+      // Mirror the week handler's { games, count, cached } shape. winnerTeamId is
+      // resolved onto each Game by GameService but isn't part of Game.toJSON(), so
+      // graft it on here to preserve the knockout advancing-team signal in the payload.
+      games: games.map(g => {
+        const json = (typeof g.toJSON === 'function' ? g.toJSON() : { ...g });
+        json.winnerTeamId = g.winnerTeamId ?? null;
+        return json;
+      }),
+      count: games.length,
+      cached: !forceRefresh
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/games/:year/:seasonType/:week', async (req, res) => {
   try {
     const { year, seasonType, week } = req.params;

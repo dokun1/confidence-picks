@@ -56,6 +56,33 @@ describe('CreateGroupPage', () => {
       name: 'My Group',
       identifier: 'my-group',
       description: '',
+      poolType: 'nfl_weekly',
+    });
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/groups');
+    });
+  });
+
+  it('forwards the selected World Cup 2026 pool type to createGroup', async () => {
+    mockCreateGroup.mockResolvedValue(undefined);
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/Group Name/), {
+      target: { value: 'My Group' },
+    });
+    fireEvent.change(screen.getByLabelText('Pool Type'), {
+      target: { value: 'world_cup_2026' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+    });
+
+    expect(mockCreateGroup).toHaveBeenCalledWith({
+      name: 'My Group',
+      identifier: 'my-group',
+      description: '',
+      poolType: 'world_cup_2026',
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');

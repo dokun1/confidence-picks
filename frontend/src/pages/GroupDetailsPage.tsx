@@ -6,12 +6,19 @@ import Button from '../designsystem/components/Button';
 import PicksTab from './GroupDetails/PicksTab';
 import ChatTab from './GroupDetails/ChatTab';
 import SettingsTab from './GroupDetails/SettingsTab';
+import WorldCupLeaderboardTab from './GroupDetails/WorldCupLeaderboardTab';
 
 // Ported from GroupDetailsPage.svelte (commit d6b2566^). This is the page shell:
 // it resolves the group identifier, runs the parallel mount fetch, and owns the
 // header + tab navigation. The tab bodies (picks/chat/settings) are delegated to
 // child components; the leaderboard tab is a deferred placeholder (no
 // getScoreboard wiring per the task scope).
+//
+// World Cup pools (poolType === 'world_cup_2026') render the tournament-shaped
+// variant of the same two tabs: the Leaderboard tab swaps the placeholder for
+// the fetched TournamentLeaderboard, and the Picks tab links out to the
+// WorldCupPicksPage route instead of embedding the NFL week matrix. NFL pools
+// (poolType absent or 'nfl_weekly') are UNCHANGED.
 //
 // The route is param-less ('/group-details'); the identifier comes from the
 // `group` query param, NOT a route param — App.tsx is intentionally untouched.
@@ -132,6 +139,9 @@ export default function GroupDetailsPage() {
 
   // getGroup returns userRole (NOT isOwner); admin is the owning role.
   const isOwner = group.userRole === 'admin';
+  // World Cup pools render the tournament-shaped tab variants. Absent/NFL pools
+  // keep the existing behavior untouched.
+  const isWorldCup = group.poolType === 'world_cup_2026';
 
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
@@ -203,15 +213,36 @@ export default function GroupDetailsPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'leaderboard' && (
-          <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-            <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-sm">
-              Leaderboard
-            </h2>
-            <p className="text-[var(--color-text-secondary)]">Leaderboard coming soon</p>
-          </div>
-        )}
-        {activeTab === 'picks' && <PicksTab identifier={identifier} members={members} />}
+        {activeTab === 'leaderboard' &&
+          (isWorldCup ? (
+            <WorldCupLeaderboardTab identifier={identifier} />
+          ) : (
+            <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
+              <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-sm">
+                Leaderboard
+              </h2>
+              <p className="text-[var(--color-text-secondary)]">Leaderboard coming soon</p>
+            </div>
+          ))}
+        {activeTab === 'picks' &&
+          (isWorldCup ? (
+            <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg space-y-md">
+              <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+                Picks
+              </h2>
+              <p className="text-[var(--color-text-secondary)]">
+                World Cup picks are made on the tournament stage list — Home / Draw / Away for
+                every match, no confidence.
+              </p>
+              <Button
+                onClick={() => navigate(`/world-cup?group=${encodeURIComponent(identifier)}`)}
+              >
+                Make World Cup Picks
+              </Button>
+            </div>
+          ) : (
+            <PicksTab identifier={identifier} members={members} />
+          ))}
         {activeTab === 'chat' && (
           <ChatTab identifier={identifier} initialMessages={messages} />
         )}

@@ -25,6 +25,13 @@ vi.mock('../lib/picksService.js', () => ({
   getPicks: vi.fn(),
 }));
 
+// World Cup pools fetch a tournament-shaped leaderboard. Mock the service so the
+// WC-branch tests control the rows without a network call; the real
+// TournamentLeaderboard component renders them.
+vi.mock('../lib/worldCupService.js', () => ({
+  getWorldCupLeaderboard: vi.fn(),
+}));
+
 // Keep the real react-router exports (MemoryRouter, useSearchParams), stub only
 // useNavigate so navigation targets are assertable.
 const mockNavigate = vi.fn();
@@ -35,10 +42,12 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
 import { getClosestWeek } from '../lib/picksService.js';
+import { getWorldCupLeaderboard } from '../lib/worldCupService.js';
 const mockGetGroup = vi.mocked(getGroup);
 const mockGetMembers = vi.mocked(getMembers);
 const mockGetMessages = vi.mocked(getMessages);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
+const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
 
 const ownerGroup: GroupDetail = {
   id: '1',
@@ -52,6 +61,12 @@ const ownerGroup: GroupDetail = {
 const memberGroup: GroupDetail = {
   ...ownerGroup,
   userRole: 'member',
+};
+
+const worldCupGroup: GroupDetail = {
+  ...memberGroup,
+  name: 'World Cup Squad',
+  poolType: 'world_cup_2026',
 };
 
 const members: GroupMember[] = [
@@ -185,5 +200,57 @@ describe('GroupDetailsPage', () => {
     renderPage();
 
     expect(await screen.findByText(/Loading group/i)).toBeInTheDocument();
+  });
+
+  describe('World Cup pool', () => {
+    beforeEach(() => {
+      mockGetGroup.mockResolvedValue(worldCupGroup);
+      mockGetMembers.mockResolvedValue(members);
+      mockGetMessages.mockResolvedValue(messages);
+    });
+
+    it('renders the TournamentLeaderboard on the Leaderboard tab for a world_cup_2026 pool', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({
+        leaderboard: [
+          {
+            memberId: 'm1',
+            name: 'Alice',
+            points: 12,
+            wins_correct: 4,
+            losses: 1,
+            draws_correct: 2,
+            draws_incorrect: 1,
+          },
+        ],
+      });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      // Leaderboard is the default tab; the WC branch fetches and renders the
+      // tournament table instead of the NFL "coming soon" placeholder.
+      expect(mockGetWorldCupLeaderboard).toHaveBeenCalledWith('sunday-squad');
+      expect(screen.queryByText(/Leaderboard coming soon/i)).not.toBeInTheDocument();
+      // The tournament table surfaces the tiebreaker columns and the member row.
+      expect(await screen.findByText('Wins Correct')).toBeInTheDocument();
+      expect(screen.getByText('Draws Incorrect')).toBeInTheDocument();
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    it('links the Picks tab to the World Cup picks page for a world_cup_2026 pool', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
+      // The WC Picks tab links out to the dedicated page rather than embedding
+      // the NFL week matrix, so the picks loader never appears here.
+      expect(screen.queryByText('Loading picks…')).not.toBeInTheDocument();
+
+      const goToPicks = screen.getByRole('button', { name: /make world cup picks/i });
+      fireEvent.click(goToPicks);
+      expect(mockNavigate).toHaveBeenCalledWith('/world-cup?group=sunday-squad');
+    });
   });
 });

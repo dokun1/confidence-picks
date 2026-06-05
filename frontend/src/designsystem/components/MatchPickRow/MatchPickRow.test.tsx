@@ -1,0 +1,123 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import MatchPickRow from './MatchPickRow';
+import type { TeamData, WorldCupMatch } from '../../../lib/types';
+
+const mexico: TeamData = { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: '' };
+const usa: TeamData = { id: '2', name: 'United States', abbreviation: 'USA', logo: '' };
+
+function groupMatch(overrides: Partial<WorldCupMatch> = {}): WorldCupMatch {
+  return {
+    id: 100,
+    stage: 'group',
+    homeTeam: mexico,
+    awayTeam: usa,
+    homeScore: 0,
+    awayScore: 0,
+    status: 'SCHEDULED',
+    isKnockout: false,
+    gameDate: '2026-06-11T20:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function knockoutMatch(overrides: Partial<WorldCupMatch> = {}): WorldCupMatch {
+  return groupMatch({ id: 200, stage: 'r16', isKnockout: true, ...overrides });
+}
+
+function baseProps() {
+  return {
+    match: groupMatch(),
+    pickedResult: null,
+    onPick: vi.fn(),
+    disabled: false,
+  };
+}
+
+describe('MatchPickRow', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('renders the three Home / Draw / Away buttons', () => {
+    render(<MatchPickRow {...baseProps()} />);
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pick a draw' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).toBeInTheDocument();
+  });
+
+  it('disables the Draw button for a knockout match', () => {
+    render(<MatchPickRow {...baseProps()} match={knockoutMatch()} />);
+    expect(screen.getByRole('button', { name: 'Pick a draw' })).toBeDisabled();
+    // Home and Away remain pickable on knockouts.
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).not.toBeDisabled();
+  });
+
+  it('does not render a confidence selector', () => {
+    render(<MatchPickRow {...baseProps()} />);
+    expect(screen.queryByRole('button', { name: /Confidence/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it("fires onPick with 'home' when the home button is clicked", () => {
+    const props = baseProps();
+    render(<MatchPickRow {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
+    expect(props.onPick).toHaveBeenCalledWith('home');
+  });
+
+  it("fires onPick with 'draw' when the draw button is clicked on a group match", () => {
+    const props = baseProps();
+    render(<MatchPickRow {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a draw' }));
+    expect(props.onPick).toHaveBeenCalledWith('draw');
+  });
+
+  it("fires onPick with 'away' when the away button is clicked", () => {
+    const props = baseProps();
+    render(<MatchPickRow {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick United States to win' }));
+    expect(props.onPick).toHaveBeenCalledWith('away');
+  });
+
+  it('does not fire onPick for a disabled draw on a knockout match', () => {
+    const props = { ...baseProps(), match: knockoutMatch() };
+    render(<MatchPickRow {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a draw' }));
+    expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  it('visually marks the selected result via aria-pressed', () => {
+    render(<MatchPickRow {...baseProps()} pickedResult="away" />);
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByRole('button', { name: 'Pick a draw' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('does not fire onPick when the row is disabled', () => {
+    const props = { ...baseProps(), disabled: true };
+    render(<MatchPickRow {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
+    expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  it('locks all picks once the match is final', () => {
+    const props = {
+      ...baseProps(),
+      match: groupMatch({ status: 'FINAL', homeScore: 2, awayScore: 1 }),
+      pickedResult: 'home' as const,
+    };
+    render(<MatchPickRow {...props} />);
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
+    expect(props.onPick).not.toHaveBeenCalled();
+  });
+});
