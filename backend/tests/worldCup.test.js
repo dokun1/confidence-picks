@@ -164,3 +164,46 @@ describe('scoreSoccerPick — group stage', () => {
     assert.deepStrictEqual(r, { points: 1, bucket: 'draws_incorrect', scored: true });
   });
 });
+
+describe('scoreSoccerPick — knockout stage', () => {
+  // Knockout matches always advance exactly one team — there is no draw result.
+  // The GameService-resolved `winnerTeamId` names the advancing side; on a PK
+  // shootout it is the only signal, since the 90'/120' scoreline can be level.
+  // Games are built inline to the SoccerScoringService contract (homeTeam.id /
+  // awayTeam.id, homeScore/awayScore, stage 'r16', status 'FINAL', winnerTeamId).
+  // Mirrors the knockout block in tests/soccer-scoring.test.js. Source of truth
+  // for the points/buckets: frontend/docs/world-cup-picks-rules.md.
+  const HOME = { id: 'H' };
+  const AWAY = { id: 'A' };
+
+  function knockoutGame({ homeScore, awayScore, winnerTeamId }) {
+    return { homeTeam: HOME, awayTeam: AWAY, homeScore, awayScore, stage: 'r16', status: 'FINAL', winnerTeamId };
+  }
+
+  const pick = (picked_result) => ({ picked_result });
+
+  // Picked the advancing team on a regulation win → 3, wins_correct.
+  test('picked the advancing team (regulation win) → 3 (wins_correct)', () => {
+    const r = scoreSoccerPick(pick('home'), knockoutGame({ homeScore: 2, awayScore: 0, winnerTeamId: 'H' }));
+    assert.deepStrictEqual(r, { points: 3, bucket: 'wins_correct', scored: true });
+  });
+
+  // Picked the advancing team on a PK shootout (level 1-1 score, winnerTeamId
+  // names the side that advanced) → 3, wins_correct.
+  test('picked the advancing team via PK shootout on a level score → 3 (wins_correct)', () => {
+    const r = scoreSoccerPick(pick('away'), knockoutGame({ homeScore: 1, awayScore: 1, winnerTeamId: 'A' }));
+    assert.deepStrictEqual(r, { points: 3, bucket: 'wins_correct', scored: true });
+  });
+
+  // Picked the eliminated team → 0, losses (including the level-score PK case).
+  test('picked the eliminated team → 0 (losses)', () => {
+    const r = scoreSoccerPick(pick('home'), knockoutGame({ homeScore: 1, awayScore: 1, winnerTeamId: 'A' }));
+    assert.deepStrictEqual(r, { points: 0, bucket: 'losses', scored: true });
+  });
+
+  // A 'draw' pick can never score on a knockout — there is always an advancer.
+  test("picked 'draw' on a knockout → 0 (draws_incorrect)", () => {
+    const r = scoreSoccerPick(pick('draw'), knockoutGame({ homeScore: 2, awayScore: 0, winnerTeamId: 'H' }));
+    assert.deepStrictEqual(r, { points: 0, bucket: 'draws_incorrect', scored: true });
+  });
+});
