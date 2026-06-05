@@ -4,8 +4,35 @@ import pool from '../config/database.js';
 
 const router = express.Router();
 
-// Endpoint to recalculate scoring for ALL users on completed games (temp no auth)
-router.post('/admin/recalculate-scoring-temp', async (req, res) => {
+// Email-allowlist admin gate. ADMIN_EMAILS is a comma-separated env var of the
+// users.email values authorized to hit admin endpoints. Fail-closed: if the
+// allowlist is empty/unset, the endpoint refuses every request (503), which
+// keeps an unset prod env from accidentally being open.
+function requireAdmin(req, res, next) {
+  const allowed = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowed.length === 0) {
+    return res.status(503).json({
+      error: 'Admin endpoint disabled: ADMIN_EMAILS env is not configured',
+    });
+  }
+  const email = req.user?.email?.toLowerCase();
+  if (!email || !allowed.includes(email)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}
+
+// Endpoint to recalculate scoring for ALL users on completed games. Now gated
+// by JWT auth + ADMIN_EMAILS allowlist (was unauthenticated pre-fix). See
+// docs/runbooks/world-cup-scoring.md for safe operating procedure.
+router.post(
+  '/admin/recalculate-scoring-temp',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
   try {
     console.log('Scoring recalculation request from temporary endpoint');
     

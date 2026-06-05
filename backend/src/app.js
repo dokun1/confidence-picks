@@ -10,6 +10,7 @@ import groupsRoutes from './routes/groups.js';
 import picksRoutes from './routes/picks.js';
 import worldCupPicksRoutes from './routes/worldCupPicks.js';
 import invitesRoutes from './routes/invites.js';
+import adminRoutes from './routes/admin.js';
 import { initDatabase } from './database/init.js';
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/groups', groupsRoutes);
 app.use('/api/groups', picksRoutes);
 app.use('/api/picks', worldCupPicksRoutes);
 app.use('/api/invites', invitesRoutes);
+app.use('/api', adminRoutes);
 
 // Health check
 app.get('/', (req, res) => {
