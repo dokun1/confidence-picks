@@ -129,12 +129,96 @@ a team pick scores 3 or 0, and a `draw` pick is dead (always 0).
 
 ## Tiebreakers
 
-<!-- PLACEHOLDER — filled in by a following sub-task.
-     Summary of intended content (do not treat as final spec), applied in order:
-       1. Most wins correctly picked
-       2. Fewest losses
-       3. Most draws correctly picked
-       4. Fewest draws incorrectly picked
-       5. Split the pot among those still tied. -->
+When two or more users finish with the **same total score**, rank them by applying the
+following criteria **in this exact order**. Each criterion is only consulted when all
+earlier criteria are equal; the first criterion that distinguishes two tied users
+determines their relative order. If all four criteria are equal, the users remain tied
+and step 5 applies.
 
-_To be authored in a following sub-task._
+1. **Most wins correctly picked** (`wins_correct`) — higher is better.
+2. **Fewest losses** (`losses`) — lower is better.
+3. **Most draws correctly picked** (`draws_correct`) — higher is better.
+4. **Fewest draws incorrectly picked** (`draws_incorrect`) — lower is better.
+5. **Split the pot** — any users still tied after criteria 1–4 share the prize equally.
+
+### Field definitions (for the backend implementer)
+
+These four counts ship as part of the leaderboard endpoint payload so the frontend can
+display them as columns. Each is computed per user by iterating over **only that user's
+scored picks** (a match the user did not pick contributes to none of the counts). A match
+is scored once its `status` from ESPN reports completion.
+
+For every match, resolve two facts first:
+
+- **The actual result.** Group stage: `home_win`, `away_win`, or `draw` (level final
+  score). Knockout stage: there is never a draw — exactly one team is the **advancing
+  team** (the winner), determined by who progresses, including via extra time or a
+  penalty shootout. The eliminated team is the loser. (See the Knockout-Stage Scoring
+  section: a PK result counts as a win for the advancing team.)
+- **The user's pick:** `home`, `away`, or `draw`.
+
+Then increment the counts as follows:
+
+| Field             | Increment when…                                                                                     |
+|-------------------|-----------------------------------------------------------------------------------------------------|
+| `wins_correct`    | the user picked a **team** (`home`/`away`) and that team **won** (group) or **advanced** (knockout). |
+| `losses`          | the user picked a **team** (`home`/`away`) and that team **lost** (group) or was **eliminated** (knockout). |
+| `draws_correct`   | the user picked **`draw`** and the match **actually drew** (group stage only; knockouts never draw). |
+| `draws_incorrect` | the user picked **`draw`** but a team won/advanced, **or** the user picked a **team** but the match **drew**. |
+
+Stated precisely:
+
+- **`wins_correct`** = count of matches where the user picked the team that won
+  (group) or advanced (knockout). These are the user's 3-point picks.
+- **`losses`** = count of matches where the user picked the team that lost (group) or
+  was eliminated (knockout). In the group stage these are 0-point team picks; in the
+  knockout stage these are 0-point team picks. A `draw` pick is **never** counted as a
+  loss.
+- **`draws_correct`** = count of matches where the user picked `draw` **and** the match
+  drew. Only group-stage matches can satisfy this (a knockout match never resolves to a
+  draw). These are the user's 2-point picks.
+- **`draws_incorrect`** = count of matches where the user's pick and the actual result
+  disagree **on the draw axis** — i.e. exactly one of (pick, result) is a draw:
+  - the user picked `draw` but a team won/advanced
+    (group: a 1-point pick; knockout: a 0-point pick — draw picks are disabled in the
+    knockout UI but a stored `draw` is still counted here), **or**
+  - the user picked a team (`home`/`away`) but the match drew
+    (group stage only: a 1-point pick — the picked team drew).
+
+### Worked relationship to scoring
+
+The four tiebreaker counts are derived from the same (pick, result) pair as the points,
+so they partition every scored pick exactly once:
+
+| Group-stage outcome                          | Points | Counts toward      |
+|----------------------------------------------|:------:|--------------------|
+| Picked team, that team won                   | 3      | `wins_correct`     |
+| Picked team, that team lost                  | 0      | `losses`           |
+| Picked team, match drew                      | 1      | `draws_incorrect`  |
+| Picked `draw`, match drew                    | 2      | `draws_correct`    |
+| Picked `draw`, a team won                    | 1      | `draws_incorrect`  |
+
+| Knockout-stage outcome                       | Points | Counts toward      |
+|----------------------------------------------|:------:|--------------------|
+| Picked team, that team advanced              | 3      | `wins_correct`     |
+| Picked team, that team eliminated            | 0      | `losses`           |
+| Picked `draw` (any knockout result)          | 0      | `draws_incorrect`  |
+
+Every scored pick lands in exactly one of the four buckets, so for any user
+`wins_correct + losses + draws_correct + draws_incorrect` equals the number of matches
+that user picked and that have been scored.
+
+### Comparator semantics
+
+Implement the leaderboard ordering as a **stable comparator** that returns ordered rows
+from the API. To compare two users A and B:
+
+1. Higher `total_score` ranks first.
+2. If equal, higher `wins_correct` ranks first.
+3. If equal, lower `losses` ranks first.
+4. If equal, higher `draws_correct` ranks first.
+5. If equal, lower `draws_incorrect` ranks first.
+6. If still equal, the users are **tied** — present them at the same rank (pot is split).
+
+The comparator must be stable so that genuinely-tied users keep a deterministic,
+repeatable order in the response even though they share a rank.
