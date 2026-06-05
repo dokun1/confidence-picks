@@ -2,6 +2,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { MockESPNService } from '../src/mocks/MockESPNService.js';
 import { generateMockWeek, getProgressiveScore, NFL_TEAMS } from '../src/mocks/espnGameData.js';
+import { generateMockWorldCupStage, WORLD_CUP_2026_TEAMS } from '../src/mocks/espnWorldCupData.js';
 import { getMockConfig, validateMockConfig, getScenarioConfig } from '../src/mocks/mockConfig.js';
 
 describe('Mock ESPN Data', () => {
@@ -305,6 +306,97 @@ describe('Mock ESPN Data', () => {
         /Unknown scenario/,
         'Should throw for unknown scenario'
       );
+    });
+  });
+
+  describe('generateMockWorldCupStage (group stage)', () => {
+    const TOURNAMENT_START = new Date('2026-06-11T00:00:00Z');
+    const TOURNAMENT_END = new Date('2026-07-19T23:59:59Z');
+
+    test('should return 3 group-stage matches', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      assert.ok(Array.isArray(matches), 'Should return an array');
+      assert.strictEqual(matches.length, 3, 'Group stage should have 3 matches');
+    });
+
+    test('should return empty array for stages other than group', () => {
+      for (const stage of ['r32', 'r16', 'qf', 'sf', 'third', 'final']) {
+        const matches = generateMockWorldCupStage({ stage, year: 2026 });
+        assert.strictEqual(matches.length, 0, `${stage} should be stubbed (empty)`);
+      }
+    });
+
+    test('should include exactly one regulation draw', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      const draws = matches.filter(m => {
+        const c = m.competitions[0];
+        const [home, away] = c.competitors;
+        const type = c.status.type;
+        return home.score === away.score && type.state === 'post' && type.completed === true;
+      });
+      assert.strictEqual(draws.length, 1, 'Exactly one match should be a completed draw');
+
+      const drawType = draws[0].competitions[0].status.type;
+      assert.strictEqual(drawType.name, 'STATUS_FINAL', 'Draw should be STATUS_FINAL');
+      assert.match(drawType.description, /draw/i, 'Draw description should read as a draw');
+    });
+
+    test('should vary across distinct states like generateMockWeek', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      const states = new Set(matches.map(m => m.competitions[0].status.type.state));
+      assert.ok(states.size >= 2, 'Should span at least two distinct states');
+      assert.ok(states.has('post'), 'Should include a completed match');
+      assert.ok(states.has('in') || states.has('pre'), 'Should include a live or scheduled match');
+    });
+
+    test('should attach 3-way (home/draw/away) odds on every match', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      matches.forEach(m => {
+        const odds = m.competitions[0].odds;
+        assert.ok(Array.isArray(odds) && odds.length === 1, 'Each match should carry one odds entry');
+        const ml = odds[0].moneyline;
+        assert.ok(ml.home?.close?.odds, 'Should have a home moneyline price');
+        assert.ok(ml.draw?.close?.odds, 'Should have a draw moneyline price');
+        assert.ok(ml.away?.close?.odds, 'Should have an away moneyline price');
+        assert.ok(odds[0].drawOdds?.moneyLine, 'Should expose drawOdds.moneyLine');
+      });
+    });
+
+    test('should keep kickoffs inside the Jun 11 - Jul 19 2026 window', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      matches.forEach(m => {
+        const kickoff = new Date(m.date);
+        assert.ok(kickoff >= TOURNAMENT_START, `${m.date} should be on/after tournament start`);
+        assert.ok(kickoff <= TOURNAMENT_END, `${m.date} should be on/before tournament end`);
+      });
+    });
+
+    test('should clamp out-of-window baseDate into the group window', () => {
+      // baseDate before the tournament opener — fixtures must still land in-window.
+      const matches = generateMockWorldCupStage({ stage: 'group', baseDate: new Date('2026-06-05T00:00:00Z'), year: 2026 });
+      matches.forEach(m => {
+        const kickoff = new Date(m.date);
+        assert.ok(kickoff >= TOURNAMENT_START && kickoff <= TOURNAMENT_END, `${m.date} should be clamped in-window`);
+      });
+    });
+
+    test('should stamp season.year from year and group seasonType marker', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      matches.forEach(m => {
+        assert.strictEqual(m.season.year, 2026, 'season.year should come from year arg');
+        assert.strictEqual(m.season.type, 1, 'Group stage should be stamped seasonType 1');
+        assert.strictEqual(m.competitions[0].stage, 'group', 'Competition should be tagged stage=group');
+      });
+    });
+
+    test('should use WORLD_CUP_2026_TEAMS competitors', () => {
+      const matches = generateMockWorldCupStage({ stage: 'group', year: 2026 });
+      const validIds = new Set(Object.values(WORLD_CUP_2026_TEAMS).map(t => t.id));
+      matches.forEach(m => {
+        m.competitions[0].competitors.forEach(c => {
+          assert.ok(validIds.has(c.team.id), `Competitor ${c.team.id} should be a World Cup team`);
+        });
+      });
     });
   });
 
