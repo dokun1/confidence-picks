@@ -653,3 +653,7 @@ Phase 6: Pages - Complex (Week 11-12)
 - [ ] Update CI/CD pipeline
 - [ ] Performance testing
 - [ ] Accessibility audit
+
+## Migration Complete (2026-06-05)
+
+The Svelte to React migration has landed. All 11 design-system components were ported to React/TSX (Avatar, Button, TextField, InlineToast, Modal/ConfirmDeleteModal, Navigation, GroupCard, GroupsList, GroupPicks, and CreateGroupForm), built on top of a shared Modal primitive that ConfirmDeleteModal composes. Routing is handled by a BrowserRouter route table wired in `frontend/src/App.tsx`, which also exports an `AppRoutes` component so unit tests can mount the same routes under a MemoryRouter. Every page under `frontend/src/pages/` was ported: Home, About, NotFound, AuthCallback, Login, Profile, Groups, CreateGroup, JoinGroup, EditGroup, and GroupDetails (including its PicksTab, ChatTab, and SettingsTab tabs), plus Games and Invite. A Playwright end-to-end smoke suite is in place alongside a page-to-spec coverage invariant enforced by `scripts/check-page-spec-coverage.mjs`, ensuring each page has a corresponding e2e spec. Vitest unit coverage is enforced at the configured 70% thresholds for statements, branches, functions, and lines per `frontend/vitest.config.ts`.
