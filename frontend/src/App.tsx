@@ -28,6 +28,9 @@ export function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         {/* OAuth handshake runs from an unauthenticated state — not protected. */}
         <Route path="/auth/callback" element={<AuthCallback />} />
+        {/* Invite acceptance is public: a signed-out user must be able to view
+            the invite and be routed to sign in (preserving the token). */}
+        <Route path="/invite/:token" element={<InvitePage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/groups" element={<GroupsPage />} />
@@ -36,7 +39,6 @@ export function AppRoutes() {
           <Route path="/group-details" element={<GroupDetailsPage />} />
           <Route path="/edit-group/:identifier" element={<EditGroupPage />} />
           <Route path="/games" element={<GamesPage />} />
-          <Route path="/invite" element={<InvitePage />} />
         </Route>
         {/* NotFoundPage's derived /not-found route is intentionally undeclared;
             it falls through to this catch-all. */}
