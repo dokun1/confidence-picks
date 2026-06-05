@@ -599,60 +599,60 @@ Phase 6: Pages - Complex (Week 11-12)
 
 ### Pre-Migration
 
-- [ ] Review all existing Svelte components
-- [ ] Document any undocumented component props
-- [ ] Identify all page-specific styles that should become components
-- [ ] Set up React project alongside Svelte (optional: incremental migration)
+- [x] Review all existing Svelte components
+- [x] Document any undocumented component props
+- [x] Identify all page-specific styles that should become components
+- [x] Set up React project alongside Svelte (optional: incremental migration)
 
 ### Design System Components
 
-- [ ] Button
-- [ ] TextField
-- [ ] Avatar
-- [ ] InlineToast
-- [ ] Navigation
-- [ ] GroupCard
-- [ ] GroupsList
-- [ ] CreateGroupForm
-- [ ] JoinGroupForm
-- [ ] GroupPicks
-- [ ] Modal (new)
-- [ ] ConfirmDeleteModal
-- [ ] Badge (new)
-- [ ] Card (new, optional)
-- [ ] EmptyState (new, optional)
-- [ ] Spinner (new, optional)
+- [x] Button
+- [x] TextField
+- [x] Avatar
+- [x] InlineToast
+- [x] Navigation
+- [x] GroupCard
+- [x] GroupsList
+- [x] CreateGroupForm
+- [x] JoinGroupForm
+- [x] GroupPicks
+- [x] Modal (new)
+- [x] ConfirmDeleteModal
+- [x] Badge (new)
+- [x] Card (new, optional)
+- [x] EmptyState (new, optional)
+- [x] Spinner (new, optional)
 
 ### Infrastructure
 
-- [ ] React Router setup
-- [ ] Auth context
-- [ ] Theme context (dark mode)
-- [ ] API service hooks (React Query optional)
+- [x] React Router setup
+- [x] Auth context
+- [x] Theme context (dark mode)
+- [x] API service hooks (React Query optional)
 
 ### Pages
 
-- [ ] HomePage
-- [ ] AboutPage
-- [ ] NotFoundPage
-- [ ] LoginPage
-- [ ] ProfilePage
-- [ ] GroupsPage
-- [ ] CreateGroupPage
-- [ ] JoinGroupPage
-- [ ] GroupDetailsPage
-- [ ] EditGroupPage
-- [ ] GamesPage
-- [ ] InvitePage
-- [ ] AuthCallback
+- [x] HomePage
+- [x] AboutPage
+- [x] NotFoundPage
+- [x] LoginPage
+- [x] ProfilePage
+- [x] GroupsPage
+- [x] CreateGroupPage
+- [x] JoinGroupPage
+- [x] GroupDetailsPage
+- [x] EditGroupPage
+- [x] GamesPage
+- [x] InvitePage
+- [x] AuthCallback
 
 ### Post-Migration
 
-- [ ] Remove Svelte dependencies
-- [ ] Update build scripts
-- [ ] Update CI/CD pipeline
-- [ ] Performance testing
-- [ ] Accessibility audit
+- [x] Remove Svelte dependencies
+- [x] Update build scripts
+- [x] Update CI/CD pipeline
+- [x] Performance testing
+- [x] Accessibility audit
 
 ## Migration Complete (2026-06-05)
 
