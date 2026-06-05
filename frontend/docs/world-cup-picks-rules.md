@@ -70,15 +70,60 @@ Notes:
 
 ---
 
-## Knockout Scoring
+## Knockout-Stage Scoring (flat, no confidence multiplier)
 
-<!-- PLACEHOLDER — filled in by a following sub-task.
-     Summary of intended content (do not treat as final spec):
-     knockout matches always have an advancing team (the advancer is the scoring
-     "winner" even when 90 minutes were level and the result came via extra time or
-     penalties); a `draw` pick on a knockout match scores 0. -->
+Knockout matches (stages `r32`, `r16`, `qf`, `sf`, `third`, `final`) **cannot end in a
+draw as a scoring result.** Every knockout match produces exactly one **advancing team**
+— the team that progresses to the next round (or, for the `final`, the champion; for
+`third`, the third-place winner). The advancing team is the scoring "winner," **regardless
+of how they advanced.**
 
-_To be authored in a following sub-task._
+### The advancing team is the result
+
+- The **advancing team counts as the winner**, full stop. It does not matter whether they
+  won in regulation (90'), in extra time (120'), or on a **penalty shootout** after the
+  90'/120' score was level.
+- A **penalty-shootout result counts as a win for the advancing team.** There is **no draw
+  scoring** in the knockout stage even when regulation/extra time ended level — the level
+  90'/120' score is irrelevant to scoring; only who advanced matters.
+- The non-advancing (eliminated) team counts as the **loser**.
+
+### Scoring rules
+
+- Pick the **advancing team** → **3 points**.
+- Pick the **eliminated team** → **0 points**.
+- Pick **draw** → **0 points**. A `draw` pick **can never score in a knockout match**,
+  because a knockout match never resolves to a draw for scoring purposes — there is always
+  an advancing team. (In the UI, the draw option is disabled for knockout matches; if a
+  stored pick is nonetheless `draw`, it scores 0.)
+
+### Scoring matrix
+
+| Your pick        | Picked team advanced? | Points |
+|------------------|:---------------------:|:------:|
+| Home / Away      | yes                   | 3      |
+| Home / Away      | no (eliminated)       | 0      |
+| Draw             | n/a                   | 0      |
+
+"Advanced" is determined by which team progresses, not by the 90'/120' scoreline. A team
+that draws 0–0 over 120 minutes and wins on penalties **advanced**, so a pick for that team
+scores 3 and a pick for the other team scores 0.
+
+### How this differs from group-stage scoring
+
+This is the **only** structural difference between the two stages, and it is deliberate:
+
+| Aspect                          | Group stage                                  | Knockout stage                              |
+|---------------------------------|----------------------------------------------|---------------------------------------------|
+| Can the match result be a draw? | **Yes** — a level final score is a draw.     | **No** — there is always an advancing team. |
+| `draw` pick can score?          | **Yes**: 2 on an actual draw, 1 if a team won. | **No**: always **0**.                     |
+| Team pick on a level scoreline  | **1 point** (the picked team drew).          | **3 or 0** by whether that team *advanced* (a level 90'/120' score is ignored; PKs decide). |
+| Team pick when that team wins    | **3 points**.                               | **3 points** (the team advanced).           |
+| Team pick when that team loses   | **0 points**.                               | **0 points** (the team was eliminated).     |
+
+In short: the group stage has three live outcomes (win / draw / loss) and a `draw` pick
+that can score up to 2; the knockout stage collapses to two outcomes (advanced / eliminated),
+a team pick scores 3 or 0, and a `draw` pick is dead (always 0).
 
 ---
 
