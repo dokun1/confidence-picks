@@ -1,7 +1,54 @@
 import pool from '../config/database.js';
 
+// Valid World Cup pick outcomes (side-relative). Mirrors the games/user_picks
+// CHECK constraint and SoccerScoringService's `picked_result` contract.
+export const WORLD_CUP_RESULTS = ['home', 'away', 'draw'];
+
 /**
- * UserPick model handles persistence of picks (winner + confidence) per user/game/group.
+ * Build the parameterized bulk-upsert for World Cup picks.
+ *
+ * Pure (no DB) so it can be unit-tested offline. World Cup picks store
+ * `picked_result` and carry NO confidence/picked_team_id — the inverse of an
+ * NFL pick. Keyed by (user_id, group_id, game_id) like the NFL upsert; on
+ * conflict the team/confidence columns are forced NULL so a row can never carry
+ * both an NFL and a World Cup shape (keeps the chk_pick_consistency CHECK happy).
+ *
+ * @returns {{ sql: string, values: any[] }}
+ * @throws {Error} on a missing gameId or a picked_result outside WORLD_CUP_RESULTS.
+ */
+export function buildWorldCupUpsert({ userId, groupId, season, seasonType, week, picks }) {
+  const values = [];
+  const placeholders = picks.map((p, i) => {
+    if (p.gameId == null) throw new Error('World Cup pick missing gameId');
+    if (!WORLD_CUP_RESULTS.includes(p.pickedResult)) {
+      throw new Error(`Invalid picked_result: ${p.pickedResult}`);
+    }
+    // 7 columns per row; base offset keeps parameter numbers contiguous.
+    const base = i * 7;
+    values.push(userId, groupId, p.gameId, p.pickedResult, week, season, seasonType);
+    return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7})`;
+  }).join(',');
+
+  const sql = `INSERT INTO user_picks (user_id, group_id, game_id, picked_result, week, season, season_type)
+         VALUES ${placeholders}
+         ON CONFLICT (user_id, group_id, game_id) DO UPDATE SET
+                   picked_result = EXCLUDED.picked_result,
+                   picked_team_id = NULL,
+                   confidence_level = NULL,
+                   week = EXCLUDED.week,
+                   season = EXCLUDED.season,
+                   season_type = EXCLUDED.season_type,
+                   updated_at = NOW()
+                 RETURNING *`;
+  return { sql, values };
+}
+
+/**
+ * UserPick model handles persistence of picks per user/game/group.
+ *
+ * Two pick shapes share the table:
+ *   NFL        — picked_team_id + confidence_level set, picked_result NULL.
+ *   World Cup  — picked_result ('home'|'away'|'draw') set, the other two NULL.
  */
 export class UserPick {
   constructor(row) {
@@ -11,6 +58,9 @@ export class UserPick {
     this.gameId = row.game_id;
     this.pickedTeamId = row.picked_team_id;
     this.confidence = row.confidence_level;
+    // World Cup pick outcome ('home'|'away'|'draw'); NULL for NFL picks. Surfaced
+    // so the picks router and tournament leaderboard can read it back.
+    this.pickedResult = row.picked_result ?? null;
     this.week = row.week;
     this.season = row.season;
     this.seasonType = row.season_type;
@@ -50,6 +100,23 @@ export class UserPick {
                  RETURNING *`;
     const { rows } = await pool.query(sql, values);
   console.log('[user_picks] bulkUpsert result', rows.map(r => ({ id:r.id, game:r.game_id, conf:r.confidence_level, team:r.picked_team_id })));
+    return rows.map(r => new UserPick(r));
+  }
+
+  /**
+   * Bulk upsert World Cup picks. Additive sibling to bulkUpsert: persists
+   * `picked_result` rows (no confidence, no picked_team_id) keyed by
+   * (user_id, group_id, game_id). NFL pick read/write is untouched.
+   *
+   * @param {{ picks: Array<{ gameId: number, pickedResult: 'home'|'away'|'draw' }> }} args
+   * @returns {Promise<UserPick[]>}
+   */
+  static async bulkUpsertWorldCupPicks({ userId, groupId, season, seasonType, week, picks }) {
+    if (!picks || picks.length === 0) return [];
+  console.log('[user_picks] bulkUpsertWorldCupPicks incoming', { userId, groupId, season, seasonType, week, picks });
+    const { sql, values } = buildWorldCupUpsert({ userId, groupId, season, seasonType, week, picks });
+    const { rows } = await pool.query(sql, values);
+  console.log('[user_picks] bulkUpsertWorldCupPicks result', rows.map(r => ({ id:r.id, game:r.game_id, result:r.picked_result })));
     return rows.map(r => new UserPick(r));
   }
 
