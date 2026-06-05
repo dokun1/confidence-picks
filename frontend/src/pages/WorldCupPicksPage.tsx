@@ -13,6 +13,7 @@ import {
 } from '../lib/types';
 import { getStageMatches, submitWorldCupPicks } from '../lib/worldCupService.js';
 import { getMyGroups } from '../lib/groupsService.js';
+import SaveTargetsDropdown, { type SaveTarget } from '../components/SaveTargetsDropdown';
 
 // World Cup sibling of GamesPage. A world_cup_2026 pool renders the WHOLE
 // tournament as one stage-grouped match list — there is NO week selector. The
@@ -143,32 +144,55 @@ export default function WorldCupPicksPage() {
 
   const canSubmit = !!groupId && picks.length > 0 && !submitting;
 
-  // Opt-in "save these picks to every World Cup group I'm in" toggle. Mirrors
-  // the heritage Svelte 'save for all groups' UX (PR #37, Aug 2025) that the
-  // React rewrite dropped. Backend has no fan-out endpoint; we iterate the
-  // user's groups client-side and submit per group.
-  const [applyToAll, setApplyToAll] = useState(false);
+  // Multi-select "save to which World Cup groups?" — restores the heritage
+  // Svelte PR #37 dropdown UX. We eagerly load the user's groups on mount so
+  // the dropdown shows a real count without waiting for the first click.
+  const [myGroups, setMyGroups] = useState<SaveTarget[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [selectedTargets, setSelectedTargets] = useState<Set<string>>(
+    () => new Set(groupId ? [groupId] : []),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!groupId) return;
+    setGroupsLoading(true);
+    getMyGroups()
+      .then((groups) => {
+        if (cancelled) return;
+        const wc: SaveTarget[] = groups
+          .filter((g) => g.poolType === 'world_cup_2026')
+          .map((g) => ({ identifier: g.identifier, name: g.name }));
+        // Ensure source group is in the list even if the backend didn't return
+        // it (offline-cached state, race with create-group, etc.).
+        if (!wc.some((g) => g.identifier === groupId)) {
+          wc.unshift({ identifier: groupId, name: groupId });
+        }
+        setMyGroups(wc);
+      })
+      .catch(() => {
+        // Fall back to a single-group dropdown — the source group always works.
+        if (!cancelled) setMyGroups([{ identifier: groupId, name: groupId }]);
+      })
+      .finally(() => {
+        if (!cancelled) setGroupsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   async function submit() {
     if (!groupId || picks.length === 0) return;
     setSubmitting(true);
     try {
-      if (!applyToAll) {
-        await submitWorldCupPicks(groupId, picks);
+      const targets = Array.from(selectedTargets);
+      if (!targets.includes(groupId)) targets.push(groupId);
+      if (targets.length === 1) {
+        await submitWorldCupPicks(targets[0], picks);
         setToast({ open: true, message: 'Picks saved', variant: 'success' });
         return;
       }
-
-      // Fan-out: every World Cup group the user belongs to. Always include the
-      // current `groupId` (the source group) — getMyGroups should list it, but
-      // if for some reason it doesn't, we still want a single-group save to
-      // succeed rather than silently no-op.
-      const groups = await getMyGroups();
-      const targets = groups
-        .filter((g) => g.poolType === 'world_cup_2026')
-        .map((g) => g.identifier);
-      if (!targets.includes(groupId)) targets.push(groupId);
-
       const results = await Promise.allSettled(
         targets.map((id) => submitWorldCupPicks(id, picks)),
       );
@@ -250,40 +274,52 @@ export default function WorldCupPicksPage() {
         )}
       </div>
 
-      {/* Submit bar */}
+      {/* Spacer so the sticky bar never covers the last match row. */}
+      {pageState.matches.length > 0 && <div className="h-20" aria-hidden="true" />}
+
+      {/* Sticky submit bar — pinned to the bottom of the viewport so the
+          user can submit from anywhere in the stage list without scrolling
+          to the page end. */}
       {pageState.matches.length > 0 && (
-        <div className="mt-lg flex flex-col gap-sm border-t border-border pt-md sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
-            <span className="text-sm text-secondary">
-              {picks.length} pick{picks.length === 1 ? '' : 's'} selected
-            </span>
-            <label className="flex items-center gap-xs text-sm text-secondary">
-              <input
-                type="checkbox"
-                checked={applyToAll}
-                onChange={(e) => setApplyToAll(e.target.checked)}
-                aria-label="Save to all my World Cup groups"
-                className="h-4 w-4"
+        <div className="sticky bottom-0 -mx-lg mt-lg border-t border-border bg-neutral-0/95 px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
+          <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
+              <span className="text-sm text-secondary">
+                {picks.length} pick{picks.length === 1 ? '' : 's'} selected
+              </span>
+              {groupId && (
+                <SaveTargetsDropdown
+                  groups={myGroups}
+                  sourceIdentifier={groupId}
+                  selected={selectedTargets}
+                  onChange={setSelectedTargets}
+                  label="World Cup"
+                  loading={groupsLoading}
+                  disabled={submitting}
+                />
+              )}
+            </div>
+            <div className="relative inline-toast-anchor">
+              <InlineToast
+                open={toast.open}
+                message={toast.message}
+                variant={toast.variant}
+                onClose={() => setToast((t) => ({ ...t, open: false }))}
               />
-              Save to all my World Cup groups
-            </label>
-          </div>
-          <div className="relative inline-toast-anchor">
-            <InlineToast
-              open={toast.open}
-              message={toast.message}
-              variant={toast.variant}
-              onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-            <Button
-              variant="primary"
-              size="md"
-              loading={submitting}
-              disabled={!canSubmit}
-              onClick={submit}
-            >
-              {submitting ? 'Saving…' : applyToAll ? 'Submit to All' : 'Submit Picks'}
-            </Button>
+              <Button
+                variant="primary"
+                size="md"
+                loading={submitting}
+                disabled={!canSubmit}
+                onClick={submit}
+              >
+                {submitting
+                  ? 'Saving…'
+                  : selectedTargets.size > 1
+                    ? `Submit to ${selectedTargets.size}`
+                    : 'Submit Picks'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

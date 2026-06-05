@@ -62,6 +62,11 @@ describe('WorldCupPicksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetStageMatches.mockImplementation(stageResponder([groupMatch, r16Match]));
+    // Default: source group is the user's only WC group. Tests exercising the
+    // dropdown re-mock with multiple groups.
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026' },
+    ] as any);
   });
 
   it('shows the not-found UI when no group query param is present', () => {
@@ -155,14 +160,13 @@ describe('WorldCupPicksPage', () => {
     expect(await screen.findByText('Server said no')).toBeInTheDocument();
   });
 
-  it('fans the same picks out to every world_cup_2026 group when "Save to all" is checked', async () => {
-    // The user is in three groups: two WC + one NFL. The fan-out must hit
-    // both WC group identifiers (in addition to the source identifier when
-    // the source is itself a WC group) and skip the NFL one entirely.
+  it('fans the same picks out to every selected World Cup group via the dropdown', async () => {
+    // Three groups: two WC (source + another) + one NFL. The dropdown only
+    // surfaces the two WC groups; ticking the non-source one fans-out to both.
     mockGetMyGroups.mockResolvedValue([
-      { id: 1, identifier: 'la-crew', poolType: 'world_cup_2026' },
-      { id: 2, identifier: 'work-pool', poolType: 'world_cup_2026' },
-      { id: 3, identifier: 'family-nfl', poolType: 'nfl_weekly' },
+      { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026' },
+      { id: 2, identifier: 'work-pool', name: 'Work Pool', poolType: 'world_cup_2026' },
+      { id: 3, identifier: 'family-nfl', name: 'Family NFL', poolType: 'nfl_weekly' },
     ] as any);
     mockSubmitPicks.mockResolvedValue({});
 
@@ -172,8 +176,13 @@ describe('WorldCupPicksPage', () => {
     fireEvent.click(
       within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
     );
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my World Cup groups' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+
+    // Open dropdown, tick the second WC group. The source 'la-crew' is
+    // disabled-and-checked by SaveTargetsDropdown so we don't touch it.
+    fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Work Pool' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to 2' }));
 
     await waitFor(() => expect(mockSubmitPicks).toHaveBeenCalledTimes(2));
     const calledIdentifiers = mockSubmitPicks.mock.calls.map((c) => c[0]).sort();
@@ -183,8 +192,8 @@ describe('WorldCupPicksPage', () => {
 
   it('reports partial failure when some fan-out submits reject', async () => {
     mockGetMyGroups.mockResolvedValue([
-      { id: 1, identifier: 'la-crew', poolType: 'world_cup_2026' },
-      { id: 2, identifier: 'work-pool', poolType: 'world_cup_2026' },
+      { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026' },
+      { id: 2, identifier: 'work-pool', name: 'Work Pool', poolType: 'world_cup_2026' },
     ] as any);
     mockSubmitPicks.mockImplementation(async (groupId: string) => {
       if (groupId === 'work-pool') throw new Error('boom');
@@ -197,8 +206,9 @@ describe('WorldCupPicksPage', () => {
     fireEvent.click(
       within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
     );
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Save to all my World Cup groups' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit to All' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Work Pool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit to 2' }));
 
     expect(await screen.findByText('Saved to 1/2 groups (1 failed)')).toBeInTheDocument();
   });
