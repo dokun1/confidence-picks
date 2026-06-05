@@ -9,6 +9,11 @@ export class ESPNService {
   // Internal stage keys -> ESPN's `groups` scoreboard filter value
   // (WORLD_CUP_2026_API.md "Scoreboard by Group/Round"). A raw numeric value or
   // a stage key both resolve here; an unknown value passes through unchanged.
+  //
+  // NOTE: empirically the `?groups=<n>` filter on the WC2026 league returns ≤2
+  // events per stage (only today's matches in that group), not the whole bracket.
+  // The real per-stage fetch uses SOCCER_STAGE_DATE_RANGES below; this map is
+  // kept for backwards-compat with callers that still pass `?groups=`.
   static SOCCER_STAGE_GROUPS = {
     group: '1',
     r32: '2',
@@ -17,6 +22,36 @@ export class ESPNService {
     sf: '5',
     third: '6',
     final: '7'
+  };
+
+  // Internal stage keys -> tournament-schedule date window for that stage,
+  // formatted as ESPN's `?dates=YYYYMMDD-YYYYMMDD` range. Source: official
+  // FIFA World Cup 2026 schedule. Group-stage matches fall June 11–27 2026;
+  // knockout windows trail behind. ESPN tags each event with
+  // `season.slug` ('group-stage', 'round-of-32', …) which the caller uses to
+  // filter spillover events; the date range is a coarse pre-filter so we
+  // don't pull all 104 tournament matches every time.
+  static SOCCER_STAGE_DATE_RANGES = {
+    group:  '20260611-20260627',
+    r32:    '20260628-20260703',
+    r16:    '20260704-20260707',
+    qf:     '20260709-20260711',
+    sf:     '20260714-20260715',
+    third:  '20260718-20260718',
+    final:  '20260719-20260719',
+  };
+
+  // Internal stage keys -> ESPN season.slug values used to filter spillover
+  // matches within a date range (e.g. an early R32 listed under June 27).
+  // Empirically verified against the live scoreboard 2026-06-05.
+  static SOCCER_STAGE_SLUGS = {
+    group:  'group-stage',
+    r32:    'round-of-32',
+    r16:    'round-of-16',
+    qf:     'quarterfinals',
+    sf:     'semifinals',
+    third:  '3rd-place-match', // NOT 'third-place'
+    final:  'final',
   };
 
   static async fetchGames(year, seasonType, week) {
@@ -59,7 +94,23 @@ export class ESPNService {
       }
 
       const data = await response.json();
-      return data.events || [];
+      const events = data.events || [];
+
+      // For known stage keys, filter spillover by matching event.season.slug.
+      // Without this, a date-range fetch (e.g. group: 20260611-20260627) could
+      // return early matches from the next stage that happen to fall on June 27.
+      // Unknown stages and free-form `{ dates }` objects fall through unfiltered.
+      const stageKey = typeof stage === 'string' ? stage : (stage && stage.stage);
+      const expectedSlug = stageKey && this.SOCCER_STAGE_SLUGS[stageKey];
+      if (expectedSlug) {
+        return events.filter((e) => {
+          const slug = e && e.season && e.season.slug;
+          // Be permissive: if ESPN omits the slug, keep the event — better to
+          // show an extra match than to silently drop a real one.
+          return !slug || slug === expectedSlug;
+        });
+      }
+      return events;
     } catch (error) {
       console.error('Failed to fetch ESPN soccer data:', error);
       throw error;
@@ -77,17 +128,32 @@ export class ESPNService {
     let groups;
     let dates;
     if (stage && typeof stage === 'object') {
+      // Explicit `{ dates, groups, stage }` object — honor every field the
+      // caller provides. Stage key still maps to `groups` for legacy callers.
       dates = stage.dates;
       groups = stage.groups != null
         ? stage.groups
         : (stage.stage != null ? (this.SOCCER_STAGE_GROUPS[stage.stage] ?? stage.stage) : undefined);
     } else if (stage != null) {
-      groups = this.SOCCER_STAGE_GROUPS[stage] ?? stage;
+      // Bare stage key: prefer the date-range path (returns the full slate
+      // for that stage), fall through to `groups` for unknown keys to keep
+      // the legacy contract for the mock service's URL-equality tests.
+      const dateRange = this.SOCCER_STAGE_DATE_RANGES[stage];
+      if (dateRange) {
+        dates = dateRange;
+      } else {
+        groups = this.SOCCER_STAGE_GROUPS[stage] ?? stage;
+      }
     }
 
     const params = new URLSearchParams();
     if (dates != null) params.set('dates', dates);
     if (groups != null) params.set('groups', groups);
+    // `?limit=200` covers the worst-case stage (group, ~72 events in the date
+    // window) under the default 25-event cap. Only emit when we're actually
+    // hitting the API by date so legacy `?groups=` URLs (used by tests) are
+    // byte-identical to before.
+    if (dates != null && groups == null) params.set('limit', '200');
 
     const qs = params.toString();
     return qs ? `${base}?${qs}` : base;
