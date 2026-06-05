@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test'
 
 // Public routes: reachable while unauthenticated. Each renders its placeholder
-// heading. /auth/callback is public because OAuth runs from an unauthenticated
-// state. /not-found is intentionally undeclared as its own route, so it falls
-// through to the '*' catch-all and renders NotFoundPage's 'Not found' heading.
+// heading. /auth/callback is intentionally excluded — it renders no stable
+// heading, instead finalizing the OAuth handshake and redirecting (to /login
+// when no tokens are present). /not-found is intentionally undeclared as its
+// own route, so it falls through to the '*' catch-all and renders
+// NotFoundPage's 'Not found' heading.
 const publicRoutes: [string, string][] = [
   ['/', 'Home'],
   ['/about', 'About'],
   ['/login', 'Login'],
-  ['/auth/callback', 'Auth Callback'],
   ['/not-found', 'Not found'],
 ]
 

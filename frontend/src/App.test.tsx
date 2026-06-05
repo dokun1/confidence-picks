@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App, { AppRoutes } from './App';
@@ -11,11 +11,14 @@ import { AuthProvider } from './contexts/AuthContext';
 vi.mock('./lib/authService.js', () => ({
   default: {
     getUser: vi.fn(),
+    setTokens: vi.fn(),
+    getCurrentUser: vi.fn(),
   },
 }));
 
 import AuthService from './lib/authService.js';
 const mockGetUser = vi.mocked(AuthService.getUser);
+const mockGetCurrentUser = vi.mocked(AuthService.getCurrentUser);
 
 const TEST_USER = {
   id: 1,
@@ -61,6 +64,8 @@ function currentPath() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetUser.mockReturnValue(null);
+  // Unauthenticated callback: no user comes back, so AuthCallback routes to /login.
+  mockGetCurrentUser.mockResolvedValue(null as never);
 });
 
 describe('App', () => {
@@ -90,7 +95,7 @@ describe('AppRoutes', () => {
   describe('catch-all', () => {
     it('renders the NotFoundPage for an unknown path', () => {
       renderAt('/this-route-does-not-exist');
-      expect(heading('Not found')).toBeInTheDocument();
+      expect(heading('Page not found')).toBeInTheDocument();
     });
   });
 
@@ -110,11 +115,12 @@ describe('AppRoutes', () => {
 
   describe('auth callback', () => {
     // /auth/callback sits OUTSIDE ProtectedRoute because the OAuth handshake runs
-    // from an unauthenticated state — it must render even with no user.
-    it('renders the AuthCallback heading even when unauthenticated', () => {
+    // from an unauthenticated state. With no tokens in the URL and no user to
+    // hydrate, AuthCallback finalizes by redirecting to /login.
+    it('redirects to /login when unauthenticated', async () => {
       renderAt('/auth/callback', { authenticated: false });
-      expect(heading('Auth Callback')).toBeInTheDocument();
-      expect(currentPath()).toBe('/auth/callback');
+      await waitFor(() => expect(currentPath()).toBe('/login'));
+      expect(heading('Login')).toBeInTheDocument();
     });
   });
 });
