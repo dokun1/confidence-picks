@@ -41,6 +41,11 @@ export function AppRoutes() {
           <Route path="/edit-group/:identifier" element={<EditGroupPage />} />
           <Route path="/games" element={<GamesPage />} />
           <Route path="/world-cup" element={<WorldCupPicksPage />} />
+          {/* Bare /invite (no token) carries no invitation to accept, so it sits
+              behind auth and redirects signed-out users to /login. The public,
+              token-bearing acceptance flow is the separate /invite/:token route
+              declared above. */}
+          <Route path="/invite" element={<InvitePage />} />
         </Route>
         {/* NotFoundPage's derived /not-found route is intentionally undeclared;
             it falls through to this catch-all. */}

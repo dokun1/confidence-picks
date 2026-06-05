@@ -201,10 +201,47 @@ BEGIN
     ALTER TABLE games ADD COLUMN odds JSONB NULL;
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
+    SELECT 1 FROM information_schema.columns
     WHERE table_name = 'games' AND column_name = 'probability'
   ) THEN
     ALTER TABLE games ADD COLUMN probability JSONB NULL;
+  END IF;
+END $$;
+
+-- World Cup 2026 / league-awareness columns. These were added to the CREATE TABLE
+-- blocks above, but those are no-ops on a DB whose tables predate the change, so a
+-- pre-existing games/groups/user_picks would never gain the columns. Add them here
+-- as forward-only, idempotent ALTERs. The NOT NULL DEFAULTs backfill existing rows
+-- (NFL games -> league='nfl'; existing groups -> pool_type='nfl_weekly'); the
+-- nullable columns leave legacy rows untouched (stage NULL, picked_result NULL).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'games' AND column_name = 'league'
+  ) THEN
+    ALTER TABLE games ADD COLUMN league VARCHAR(50) NOT NULL DEFAULT 'nfl';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'games' AND column_name = 'stage'
+  ) THEN
+    ALTER TABLE games ADD COLUMN stage VARCHAR(20) NULL
+      CHECK (stage IN ('group','r32','r16','qf','sf','third','final'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'pool_type'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly'
+      CHECK (pool_type IN ('nfl_weekly','world_cup_2026'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'user_picks' AND column_name = 'picked_result'
+  ) THEN
+    ALTER TABLE user_picks ADD COLUMN picked_result VARCHAR(10) NULL
+      CHECK (picked_result IN ('home','away','draw'));
   END IF;
 END $$;
 
