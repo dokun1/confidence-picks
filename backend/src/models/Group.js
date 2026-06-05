@@ -17,11 +17,15 @@ export class Group {
     this.updatedAt = data.updatedAt;
     this.memberCount = data.memberCount;
     this.userRole = data.userRole; // For current user's role in group
+    // 'nfl_weekly' (default) or 'world_cup_2026'. Carried through so the
+    // frontend's GroupDetailsPage can branch on group.poolType — without it
+    // every WC group rendered the NFL PicksTab.
+    this.poolType = data.poolType;
   }
 
   // Create new group
   static async create(groupData, creatorId) {
-    const { name, identifier, description, isPublic, maxMembers, avatarUrl } = groupData;
+    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType } = groupData;
     
     // Ensure identifier is unique and URL-friendly
     // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
@@ -35,14 +39,16 @@ export class Group {
     try {
       await client.query('BEGIN');
       
-      // Create group
+      // Create group. pool_type defaults to 'nfl_weekly' at the schema level
+      // (see addWorldCupColumns.js migration), so omitting it preserves the
+      // pre-WC behavior for NFL callers. Pass through when set.
       const groupQuery = `
-        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'))
         RETURNING *
       `;
       const groupResult = await client.query(groupQuery, [
-        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId
+        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null
       ]);
       
       const group = groupResult.rows[0];
@@ -114,7 +120,8 @@ export class Group {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       memberCount: parseInt(row.member_count),
-      userRole: row.user_role
+      userRole: row.user_role,
+      poolType: row.pool_type,
     });
   }
 
@@ -149,7 +156,8 @@ export class Group {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       memberCount: parseInt(row.member_count),
-      userRole: row.user_role
+      userRole: row.user_role,
+      poolType: row.pool_type,
     }));
   }
 
