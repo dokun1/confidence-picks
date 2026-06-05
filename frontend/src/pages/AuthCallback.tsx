@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthService from '../lib/authService.js';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, type User } from '../contexts/AuthContext';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -26,13 +26,16 @@ export default function AuthCallback() {
         return;
       }
 
-      AuthService.setTokens(accessToken, refreshToken);
+      AuthService.setTokens(accessToken, refreshToken ?? '');
 
       try {
         const user = await AuthService.getCurrentUser();
         if (cancelled) return;
         if (user) {
-          setAuthUser(user);
+          // AuthService types `user` as AuthUser (provider optional); the auth
+          // context's User requires it. Mirror the cast already used in
+          // AuthContext.tsx where getUser() is widened to User.
+          setAuthUser(user as User);
           navigate('/', { replace: true });
         } else {
           navigate('/login', {
