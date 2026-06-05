@@ -45,6 +45,25 @@ describe('ProfilePage', () => {
     expect(screen.getByText('Google')).toBeInTheDocument();
   });
 
+  it('renders the Avatar with initials derived from the seeded user', () => {
+    // The seeded user has a null pictureUrl, so Avatar falls back to initials
+    // built from the name ('Ada Lovelace' -> 'AL').
+    render(<ProfilePage />);
+    expect(screen.getByText('AL')).toBeInTheDocument();
+  });
+
+  it('reveals a TextField prefilled with the current name when Edit is clicked', () => {
+    render(<ProfilePage />);
+    // No editable field until Edit is clicked.
+    expect(screen.queryByPlaceholderText('Enter your name')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    const input = screen.getByPlaceholderText('Enter your name') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('Ada Lovelace');
+  });
+
   it('renders a fallback when no user is present', () => {
     currentUser = null;
     render(<ProfilePage />);
@@ -99,7 +118,9 @@ describe('ProfilePage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('Name already taken')).toBeInTheDocument();
+    // The error surfaces through an InlineToast, which renders with role 'status'.
+    const toast = await screen.findByRole('status');
+    expect(toast).toHaveTextContent('Name already taken');
     expect(setAuthUser).not.toHaveBeenCalled();
   });
 
