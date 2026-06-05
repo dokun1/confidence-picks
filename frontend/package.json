@@ -9,20 +9,39 @@
     "preview": "vite preview",
     "tokens:generate": "node scripts/generate-platform-tokens.js",
     "tokens:watch": "node scripts/watch-tokens.js",
-    "dev:tokens": "concurrently \"pnpm tokens:watch\" \"pnpm dev\""
+    "dev:tokens": "concurrently \"pnpm tokens:watch\" \"pnpm dev\"",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "verify:coverage": "node scripts/check-page-spec-coverage.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1",
     "@sveltejs/vite-plugin-svelte": "^2.4.2",
     "@tailwindcss/typography": "0.5.16",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4",
+    "@vitest/coverage-v8": "^2",
     "autoprefixer": "^10.4.21",
     "chokidar": "^4.0.3",
     "concurrently": "^9.2.0",
+    "jsdom": "^25",
     "postcss": "^8.5.6",
     "svelte": "^4.0.5",
     "tailwindcss": "3.4.10",
-    "vite": "^4.4.5"
+    "typescript": "^5",
+    "vite": "^4.4.5",
+    "vitest": "^2"
   },
   "dependencies": {
-    "heroicons": "^2.2.0"
+    "@heroicons/react": "^2",
+    "heroicons": "^2.2.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-router-dom": "^6"
   }
 }
