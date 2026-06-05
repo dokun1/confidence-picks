@@ -8,23 +8,30 @@ const router = express.Router();
 // Create a new group
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, identifier, description, isPublic = true, maxMembers = 40, avatarUrl } = req.body;
-    
+    const { name, identifier, description, isPublic = true, maxMembers = 40, avatarUrl, poolType } = req.body;
+
     if (!name || !identifier) {
       return res.status(400).json({ error: 'Name and identifier are required' });
     }
-    
+
     if (maxMembers > 40) {
       return res.status(400).json({ error: 'Maximum members cannot exceed 40' });
     }
-    
+
+    // poolType is optional. The CHECK constraint on groups.pool_type would
+    // reject bad values with a 500, so we surface a 400 first.
+    if (poolType && poolType !== 'nfl_weekly' && poolType !== 'world_cup_2026') {
+      return res.status(400).json({ error: 'Invalid poolType' });
+    }
+
     const group = await Group.create({
       name,
       identifier,
       description,
       isPublic,
       maxMembers,
-      avatarUrl
+      avatarUrl,
+      poolType,
     }, req.user.id);
     
     res.status(201).json(group);
