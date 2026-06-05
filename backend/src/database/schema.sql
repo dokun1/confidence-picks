@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS games (
   week INTEGER NOT NULL,
   season INTEGER NOT NULL,
   season_type INTEGER NOT NULL,
+  league VARCHAR(50) NOT NULL DEFAULT 'nfl', -- 'nfl' or a soccer league slug (e.g. 'world_cup_2026')
+  stage VARCHAR(20) NULL CHECK (stage IN ('group','r32','r16','qf','sf','third','final')), -- soccer tournament stage; NFL leaves NULL
   last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS groups (
   description TEXT,
   is_public BOOLEAN DEFAULT true,
   max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
+  pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly' CHECK (pool_type IN ('nfl_weekly','world_cup_2026')), -- pick-pool variant
   avatar_url VARCHAR(500),
   created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -149,6 +152,7 @@ CREATE TABLE IF NOT EXISTS user_picks (
   group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
   game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
   picked_team_id VARCHAR(50) NULL, -- ESPN team ID (nullable until user selects)
+  picked_result VARCHAR(10) NULL CHECK (picked_result IN ('home','away','draw')), -- soccer pick outcome; NFL leaves NULL
   confidence_level INTEGER NULL CHECK (confidence_level >= 1 AND confidence_level <= 30), -- upper bound generous; enforced per-week dynamically
   week INTEGER NOT NULL,
   season INTEGER NOT NULL,
