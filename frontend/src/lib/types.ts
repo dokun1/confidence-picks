@@ -94,3 +94,11 @@ export interface InviteDetails {
     remainingUses: number | null;
   };
 }
+
+// Associates a GroupMember (by id) with their PickData for a week.
+// PickData carries no member association on its own, so GroupPicks needs
+// this to render who picked what.
+export interface MemberPicks {
+  memberId: string;
+  picks: PickData[];
+}
