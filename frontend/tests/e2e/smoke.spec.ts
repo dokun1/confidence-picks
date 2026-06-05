@@ -21,7 +21,7 @@ const protectedRoutes: string[] = [
   '/create-group',
   '/join-group',
   '/group-details',
-  '/edit-group',
+  '/edit-group/test-id',
   '/games',
   '/invite',
 ]
