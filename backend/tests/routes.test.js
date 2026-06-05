@@ -1,7 +1,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
 import { spawn } from 'child_process';
-import { setTimeout } from 'timers/promises';
+import { setTimeout as delay } from 'timers/promises';
 
 describe('API Routes', () => {
   let serverProcess;
@@ -22,7 +22,7 @@ describe('API Routes', () => {
     });
     
     // Wait for server to fully start
-    await setTimeout(3000);  // Reduced from 5000ms
+    await delay(3000);  // Reduced from 5000ms
     
     // Verify server is actually running
     let attempts = 0;
@@ -32,7 +32,7 @@ describe('API Routes', () => {
         if (response.ok) break;
       } catch (error) {
         attempts++;
-        await setTimeout(500);  // Reduced from 1000ms
+        await delay(500);  // Reduced from 1000ms
       }
     }
   });
@@ -43,7 +43,7 @@ describe('API Routes', () => {
       
       // Try graceful shutdown first
       serverProcess.kill('SIGTERM');
-      await setTimeout(2000);
+      await delay(2000);
       
       // Force kill if still running
       if (!serverProcess.killed) {
@@ -52,7 +52,7 @@ describe('API Routes', () => {
       }
       
       // Wait a bit more for cleanup
-      await setTimeout(1000);
+      await delay(1000);
     }
   });
   
@@ -140,7 +140,7 @@ describe('API Routes', () => {
       console.log('🧪 Testing auth routes...');
       
       // Add a small delay to ensure server is fully ready
-      await setTimeout(100);
+      await delay(100);
       
       // Test auth status without token with proper error handling
       const controller = new AbortController();
