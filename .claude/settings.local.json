@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs:*)",
+      "Bash(tree:*)",
+      "WebSearch",
+      "Bash(wc:*)",
+      "Bash(find /Users/davidokun/Developer/Web/confidence-picks -name *dashboard* -o -name *3141* -o -name *cost*)",
+      "Bash(grep -r \"cost\\\\|Cost\\\\|3141\\\\|dashboard\" /Users/davidokun/Developer/Web/confidence-picks/.brain --include=*.md)",
+      "Bash(find /Users/davidokun/Developer/Web/confidence-picks/.brain -type f -name *.log -o -name *.json)",
+      "Bash(grep -r \"cleanup\\\\|vitest\\\\|test.*process\\\\|child.*process\\\\|exit\\\\|kill\" /Users/davidokun/Developer/todo-test/.brain --include=*.md --include=*.json)",
+      "Bash(find /Users/davidokun/Developer/todo-test/.brain/worktrees -type f -name *.lock)",
+      "Bash(du -sh /Users/davidokun/Developer/todo-test/.brain/worktrees/goal-*/frontend/node_modules)",
+      "Bash(gh pr:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm run:*)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "Bash(pkill -f 'vite dev')",
+      "Bash(code:*)",
+      "Bash(npx tsc:*)",
+      "Bash(xxd)",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"require\\(''''./src/scaffold/templates/index.js''''\\)\")",
+      "Bash(npx tsx:*)",
+      "Bash(npx vitest:*)",
+      "Bash(gh api:*)",
+      "Bash(npm run:*)",
+      "Bash(npm link:*)",
+      "Bash(brain:*)",
+      "Bash(find /Users/davidokun/Developer/brain/brain-sdk/src -name \"*.ts\" -exec wc -l {})",
+      "Bash(for module:*)",
+      "Bash(do echo:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
