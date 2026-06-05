@@ -1,4 +1,18 @@
 import { generateMockWeek, getProgressiveScore } from './espnGameData.js';
+import { generateMockWorldCupStage } from './espnWorldCupData.js';
+
+/**
+ * Resolve a fetchSoccerWeek `stage` argument to the coarse fixture bucket that
+ * espnWorldCupData generates: the group stage ('group') vs the whole knockout
+ * slate ('knockout'). Group keys ('group', groups value '1') map to 'group';
+ * every knockout stage code / groups value 2-7 maps to 'knockout'.
+ */
+function resolveMockSoccerStage(stage) {
+  const key = (stage && typeof stage === 'object')
+    ? (stage.stage ?? stage.groups)
+    : stage;
+  return (key === 'group' || key === '1' || key === 1) ? 'group' : 'knockout';
+}
 
 /**
  * MockESPNService - A drop-in replacement for ESPNService that returns mock data
@@ -103,6 +117,28 @@ export class MockESPNService {
 
     console.log('[MockESPNService] Returning', updatedGames.length, 'games for', year, 'week', week);
     return updatedGames;
+  }
+
+  /**
+   * Fetch mock World Cup matches for a tournament stage.
+   * Mimics ESPNService.fetchSoccerWeek() so it stays a drop-in replacement when
+   * GameService routes through getESPNService(). Guarded by the same `enabled`
+   * check fetchGames uses; the world-cup fixtures are generated statelessly.
+   *
+   * @param {string} leagueSlug - ESPN soccer league slug (e.g. 'fifa.world')
+   * @param {(string|number|Object)} stage - tournament stage (see ESPNService.fetchSoccerWeek)
+   * @returns {Promise<Array>} Array of ESPN-shaped World Cup events
+   */
+  static async fetchSoccerWeek(leagueSlug, stage) {
+    if (!this.enabled) {
+      throw new Error('MockESPNService is not enabled. Call configure() first or set USE_MOCK_ESPN=true');
+    }
+
+    const mockStage = resolveMockSoccerStage(stage);
+    const matches = generateMockWorldCupStage({ stage: mockStage });
+
+    console.log('[MockESPNService] Returning', matches.length, 'World Cup', mockStage, 'matches for', leagueSlug);
+    return matches;
   }
 
   /**
