@@ -257,4 +257,44 @@ describe('buildLeaderboard', () => {
   test('empty input yields an empty leaderboard', () => {
     assert.deepStrictEqual(buildLeaderboard(), []);
   });
+
+  // Multi-user fixture that forces each realizable tiebreaker level to decide an
+  // adjacent pair, in order. Points are pinned by the counts
+  // (points = 3*wins_correct + 2*draws_correct + 1*draws_incorrect; losses add 0),
+  // so points, wins_correct, losses, and draws_correct can each be made the sole
+  // decider, but draws_incorrect cannot be isolated from real picks — once the
+  // earlier criteria tie it is pinned equal too (covered in tiebreakerComparator
+  // above). Mirrors the buildLeaderboard fixture in tests/worldCup.test.js.
+  test('each realizable tiebreaker level decides an adjacent pair in turn', () => {
+    const win = (userId) => ({ userId, pick: pick('home'), game: groupGame({ homeScore: 1, awayScore: 0 }) });     // +3 wins_correct
+    const loss = (userId) => ({ userId, pick: pick('home'), game: groupGame({ homeScore: 0, awayScore: 1 }) });    // +0 losses
+    const drawRight = (userId) => ({ userId, pick: pick('draw'), game: groupGame({ homeScore: 0, awayScore: 0 }) }); // +2 draws_correct
+    const drawWrong = (userId) => ({ userId, pick: pick('home'), game: groupGame({ homeScore: 1, awayScore: 1 }) }); // +1 draws_incorrect
+
+    const rows = [
+      win('A'), win('A'), win('A'),                                                  // points 9
+      win('B'), win('B'),                                                            // points 6, wins 2
+      win('C'), drawRight('C'), drawWrong('C'),                                      // points 6, wins 1, losses 0
+      win('D'), drawRight('D'), drawWrong('D'), loss('D'), loss('D'),                // points 6, wins 1, losses 2, dc 1
+      win('E'), drawWrong('E'), drawWrong('E'), drawWrong('E'), loss('E'), loss('E'),// points 6, wins 1, losses 2, dc 0
+      win('F'),                                                                       // points 3
+      win('G'),                                                                       // points 3 (ties F)
+    ];
+
+    const lb = buildLeaderboard(rows);
+    const byId = Object.fromEntries(lb.map((u) => [u.userId, u]));
+
+    assert.deepStrictEqual(lb.map((u) => u.userId), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+    assert.deepStrictEqual(lb.map((u) => u.rank), [1, 2, 3, 4, 5, 6, 6]);
+    assert.deepStrictEqual(lb.map((u) => u.tied), [false, false, false, false, false, true, true]);
+
+    assert.ok(byId.A.points > byId.B.points);                                        // points decides A/B
+    assert.strictEqual(byId.B.points, byId.C.points);
+    assert.ok(byId.B.wins_correct > byId.C.wins_correct);                            // wins_correct decides B/C
+    assert.strictEqual(byId.C.wins_correct, byId.D.wins_correct);
+    assert.ok(byId.C.losses < byId.D.losses);                                        // losses decides C/D
+    assert.strictEqual(byId.D.losses, byId.E.losses);
+    assert.ok(byId.D.draws_correct > byId.E.draws_correct);                          // draws_correct decides D/E
+    assert.strictEqual(tiebreakerComparator(byId.F, byId.G), 0);                     // F/G split the pot
+  });
 });
