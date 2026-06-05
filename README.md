@@ -1,7 +1,7 @@
 # Confidence Picks
 
 > [!NOTE]
-> Open-source learning project (Svelte + Express + Postgres). Expect occasional experiments.
+> Open-source learning project (React + Express + Postgres). Expect occasional experiments.
 
 This is a full-stack app where users authenticate, create or join groups, make weekly NFL confidence picks, view leaderboards, share invite links, and post simple group messages.
 
@@ -18,11 +18,13 @@ This is a monorepo containing both frontend and backend applications:
 
 ```
 confidence-picks/
-├── frontend/                    # Svelte frontend application
+├── frontend/                    # React frontend application
 │   ├── src/
-│   │   ├── App.svelte          # Root component / route switch
-│   │   ├── main.js             # Entry point
-│   │   └── components/         # Pages & UI pieces (groups, picks, invite, auth, etc.)
+│   │   ├── App.tsx             # Router + route table (BrowserRouter wrapping the AppRoutes route table)
+│   │   ├── main.tsx            # Entry point (mounts <App/> into #app)
+│   │   ├── pages/             # Route pages (HomePage, GroupsPage, etc.)
+│   │   └── designsystem/
+│   │       └── components/    # Design system (Button, Avatar, Navigation, etc.)
 │   ├── public/
 │   │   ├── index.html          # Main HTML file
 │   │   └── global.css          # Global styles
@@ -50,7 +52,8 @@ confidence-picks/
 ## Tech Stack
 
 ### Frontend
-- **Svelte**
+- **React**
+- **TypeScript**
 - **Vite** (dev/build)
 - **Deployed on:** Vercel (https://www.confidence-picks.com)
 
