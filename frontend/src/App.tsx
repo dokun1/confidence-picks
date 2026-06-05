@@ -34,7 +34,7 @@ export function AppRoutes() {
           <Route path="/create-group" element={<CreateGroupPage />} />
           <Route path="/join-group" element={<JoinGroupPage />} />
           <Route path="/group-details" element={<GroupDetailsPage />} />
-          <Route path="/edit-group" element={<EditGroupPage />} />
+          <Route path="/edit-group/:identifier" element={<EditGroupPage />} />
           <Route path="/games" element={<GamesPage />} />
           <Route path="/invite" element={<InvitePage />} />
         </Route>
