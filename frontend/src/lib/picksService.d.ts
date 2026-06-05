@@ -54,3 +54,29 @@ export function getPicks(
   groupIdentifier: string,
   query: { season: number; seasonType: number; week: number },
 ): Promise<GetPicksResponse>;
+
+/** One pick in a save payload: which team, with what confidence, for a game. */
+export interface PickInput {
+  gameId: number;
+  pickedTeamId: number;
+  confidence: number;
+}
+
+/** Body of POST /:id/picks. `clearedGameIds` removes prior picks for those games. */
+export interface SavePicksBody {
+  season: number;
+  seasonType: number;
+  week: number;
+  picks: PickInput[];
+  clearedGameIds: number[];
+}
+
+/**
+ * Persist the week's picks for a group. Returns the refreshed picks payload
+ * (same shape as getPicks plus availability metadata); GamesPage only needs the
+ * resolved promise to confirm success.
+ */
+export function savePicks(
+  groupIdentifier: string,
+  body: SavePicksBody,
+): Promise<GetPicksResponse>;
