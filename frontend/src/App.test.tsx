@@ -78,7 +78,8 @@ describe('AppRoutes', () => {
   describe('public routes', () => {
     it('renders Home at /', () => {
       renderAt('/');
-      expect(heading('Home')).toBeInTheDocument();
+      // HomePage's ported marketing landing leads with this <h1>.
+      expect(heading('Welcome to Confidence Picks!')).toBeInTheDocument();
     });
 
     it('renders About at /about', () => {
