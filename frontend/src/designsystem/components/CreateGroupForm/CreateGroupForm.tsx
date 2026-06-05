@@ -3,11 +3,13 @@ import Button from '../Button/Button';
 import TextField from '../TextField/TextField';
 import InlineToast from '../InlineToast/InlineToast';
 import type { ToastVariant } from '../InlineToast/InlineToast';
+import type { PoolType } from '../../../lib/types';
 
 export interface CreateGroupFormValues {
   name: string;
   identifier: string;
   description: string;
+  poolType: PoolType;
 }
 
 export interface CreateGroupFormProps {
@@ -64,6 +66,7 @@ export default function CreateGroupForm({
   const [name, setName] = useState(initialValues?.name ?? '');
   const [identifier, setIdentifier] = useState(initialValues?.identifier ?? '');
   const [description, setDescription] = useState(initialValues?.description ?? '');
+  const [poolType, setPoolType] = useState<PoolType>(initialValues?.poolType ?? 'nfl_weekly');
   const [identifierManuallyEdited, setIdentifierManuallyEdited] = useState(
     !!initialValues?.identifier
   );
@@ -118,7 +121,7 @@ export default function CreateGroupForm({
 
     setLoading(true);
     try {
-      await onSubmit({ name, identifier, description });
+      await onSubmit({ name, identifier, description, poolType });
       setToast({ open: true, message: 'Group created!', variant: 'success' });
     } catch (err) {
       setToast({
@@ -184,6 +187,25 @@ export default function CreateGroupForm({
           multiline
           disabled={loading}
         />
+
+        <div>
+          <label
+            htmlFor="pool-type"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Pool Type
+          </label>
+          <select
+            id="pool-type"
+            value={poolType}
+            onChange={(e) => setPoolType(e.target.value as PoolType)}
+            disabled={loading}
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+          >
+            <option value="nfl_weekly">NFL Weekly</option>
+            <option value="world_cup_2026">World Cup 2026</option>
+          </select>
+        </div>
 
         <div className="flex space-x-3 pt-4">
           <div className="relative inline-toast-anchor">

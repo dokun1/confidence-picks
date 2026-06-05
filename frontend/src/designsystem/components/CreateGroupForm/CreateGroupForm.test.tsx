@@ -222,6 +222,7 @@ describe('CreateGroupForm', () => {
         name: 'My Group',
         identifier: 'my-group',
         description: 'A cool group',
+        poolType: 'nfl_weekly',
       });
     });
 
@@ -236,6 +237,53 @@ describe('CreateGroupForm', () => {
         expect(screen.getByRole('status')).toBeInTheDocument();
         expect(screen.getByText('Group created!')).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('pool type selector', () => {
+    it('renders the Pool Type selector defaulting to nfl_weekly', () => {
+      renderForm();
+      expect(screen.getByLabelText(/Pool Type/)).toHaveValue('nfl_weekly');
+    });
+
+    it('honors initialValues.poolType', () => {
+      renderForm({ initialValues: { poolType: 'world_cup_2026' } });
+      expect(screen.getByLabelText(/Pool Type/)).toHaveValue('world_cup_2026');
+    });
+
+    it('switches to world_cup_2026 when selected', () => {
+      renderForm();
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'world_cup_2026' },
+      });
+      expect(screen.getByLabelText(/Pool Type/)).toHaveValue('world_cup_2026');
+    });
+
+    it('includes the default poolType in the onSubmit payload', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ poolType: 'nfl_weekly' })
+      );
+    });
+
+    it('includes the switched poolType in the onSubmit payload', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'world_cup_2026' },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ poolType: 'world_cup_2026' })
+      );
     });
   });
 
