@@ -16,6 +16,15 @@ vi.mock('../lib/groupsService.js', () => ({
   getMessages: vi.fn(),
 }));
 
+// PicksTab owns its own fetch (season -> closest week -> picks). Mock those so the
+// picks tab renders deterministically; getClosestWeek is left pending in the tab-
+// switching test so the tab sits in its loading state.
+vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2025) }));
+vi.mock('../lib/picksService.js', () => ({
+  getClosestWeek: vi.fn(),
+  getPicks: vi.fn(),
+}));
+
 // Keep the real react-router exports (MemoryRouter, useSearchParams), stub only
 // useNavigate so navigation targets are assertable.
 const mockNavigate = vi.fn();
@@ -25,9 +34,11 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
+import { getClosestWeek } from '../lib/picksService.js';
 const mockGetGroup = vi.mocked(getGroup);
 const mockGetMembers = vi.mocked(getMembers);
 const mockGetMessages = vi.mocked(getMessages);
+const mockGetClosestWeek = vi.mocked(getClosestWeek);
 
 const ownerGroup: GroupDetail = {
   id: '1',
@@ -76,6 +87,9 @@ function renderPage(query = '?group=sunday-squad') {
 describe('GroupDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Hold the picks fetch open so the picks tab stays in its loading state for
+    // the tab-switching assertions (this suite covers navigation, not picks data).
+    mockGetClosestWeek.mockReturnValue(new Promise(() => {}));
   });
 
   it('renders the group name as the heading once the parallel fetch resolves', async () => {
@@ -107,13 +121,16 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByText(/Leaderboard coming soon/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
-    expect(screen.getByText(/Picks coming soon/i)).toBeInTheDocument();
+    // PicksTab owns its fetch; with getClosestWeek pending it shows the loader.
+    expect(screen.getByText('Loading picks…')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
-    expect(screen.getByText(/Chat coming soon/i)).toBeInTheDocument();
+    // ChatTab renders the seeded messages passed from the page mount.
+    expect(screen.getByText('Welcome!')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /settings/i }));
-    expect(screen.getByText(/Settings coming soon/i)).toBeInTheDocument();
+    // SettingsTab leads with the Members roster section.
+    expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument();
   });
 
   it('hides the Owner badge for a non-admin member', async () => {
