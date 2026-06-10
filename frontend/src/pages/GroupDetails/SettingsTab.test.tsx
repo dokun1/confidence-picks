@@ -111,17 +111,20 @@ describe('SettingsTab member roster', () => {
   it('renders the roster bare while Invite Link and Manage Group keep their cards', () => {
     renderSettings();
 
-    // The member list flows with the page — its section carries no card styling.
+    // The member list flows with the page — assert the specific card classes
+    // are absent (rather than requiring an empty class attribute) so unrelated
+    // layout classes can be added later without breaking this.
     const membersSection = screen
       .getByRole('heading', { name: 'Members' })
       .closest('section') as HTMLElement;
-    expect(membersSection.className).toBe('');
+    for (const cardClass of ['border', 'rounded-md', 'bg-surface', 'p-lg']) {
+      expect(membersSection).not.toHaveClass(cardClass);
+    }
 
     // The other two sections remain bordered cards.
     for (const name of ['Invite Link', 'Manage Group']) {
       const section = screen.getByRole('heading', { name }).closest('section') as HTMLElement;
-      expect(section.className).toContain('border');
-      expect(section.className).toContain('bg-surface');
+      expect(section).toHaveClass('border', 'bg-surface');
     }
   });
 });
