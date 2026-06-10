@@ -51,4 +51,32 @@ export interface MyWorldCupPicksResponse {
  */
 export function getMyWorldCupPicks(groupId: string): Promise<MyWorldCupPicksResponse>;
 
+/** Response shape of GET /api/picks/group/:groupId/world-cup/user/:userId. */
+export interface MemberWorldCupPicksResponse {
+  picks: MatchPick[];
+  /** True only when the authenticated caller is an admin of the group. */
+  canEdit: boolean;
+}
+
+/**
+ * Fetch another member's World Cup picks for a group. Any member may read; the
+ * `canEdit` flag in the response is true only for admins. Used by the picks
+ * tab's person selector to load a teammate's picks (read-only) or, for admins,
+ * to edit them.
+ */
+export function getUserWorldCupPicks(
+  groupId: string,
+  userId: string | number,
+): Promise<MemberWorldCupPicksResponse>;
+
+/**
+ * Submit World Cup picks on behalf of another member. Admin-only (the backend
+ * returns 403 otherwise) and scoped to the single group.
+ */
+export function submitUserWorldCupPicks(
+  groupId: string,
+  userId: string | number,
+  picks: MatchPick[],
+): Promise<{ picks?: MatchPick[]; targetUserId?: number; isAdminOverride?: boolean } & Record<string, unknown>>;
+
 export type { MatchPickResult };

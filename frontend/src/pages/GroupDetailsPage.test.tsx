@@ -38,6 +38,19 @@ vi.mock('../lib/worldCupService.js', () => ({
   getMyWorldCupPicks: vi.fn(),
 }));
 
+// GroupDetailsPage reads the authenticated caller (useAuth) to thread the
+// current user id into the World Cup picks tab's person selector. Stub it so the
+// page never needs a real AuthProvider; id 1 is an arbitrary signed-in user.
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, email: 'tester@example.com', name: 'Tester', provider: 'google' },
+    isAuthenticated: true,
+    isRestoring: false,
+    setAuthUser: vi.fn(),
+    clearAuth: vi.fn(),
+  }),
+}));
+
 // Keep the real react-router exports (MemoryRouter, useSearchParams), stub only
 // useNavigate so navigation targets are assertable.
 const mockNavigate = vi.fn();

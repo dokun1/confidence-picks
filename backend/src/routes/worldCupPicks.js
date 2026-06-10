@@ -238,4 +238,167 @@ router.get('/group/:groupId/world-cup/leaderboard', authenticateToken, async (re
   }
 });
 
+// Confirm a user id is a member of the group. Returns true/false; never throws.
+async function isGroupMember(groupId, userId) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+    [groupId, userId]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Read ANOTHER member's World Cup picks for a group (the soccer sibling of the
+ * NFL `GET /:identifier/picks/user/:userId` route).
+ *
+ * Visibility rule: any group member may VIEW any other member's picks — World
+ * Cup pools are open-book, mirroring the NFL behavior. The response carries a
+ * `canEdit` flag that is true ONLY for admins; non-admins receive the picks for
+ * display but the client renders them read-only and the write route below
+ * rejects them outright. This split (open read, admin-gated write) is the whole
+ * contract: "see everyone's picks, change only your own — unless you're an admin".
+ */
+router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { groupId, userId } = req.params;
+    const targetUserId = parseInt(userId, 10);
+    if (Number.isNaN(targetUserId)) return res.status(400).json({ error: 'Invalid userId' });
+
+    const group = await ensureMembership(groupId, req.user.id);
+    // Only admins may edit another member's picks. Everyone else gets read-only.
+    const canEdit = group.userRole === 'admin';
+
+    if (!(await isGroupMember(group.id, targetUserId))) {
+      return res.status(404).json({ error: 'User is not a member of this group' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT up.game_id, up.picked_result
+       FROM user_picks up
+       JOIN games g ON g.id = up.game_id
+       WHERE up.user_id = $1
+         AND up.group_id = $2
+         AND g.league = 'world_cup'
+         AND up.picked_result IS NOT NULL`,
+      [targetUserId, group.id]
+    );
+
+    res.json({
+      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+      canEdit,
+    });
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    console.error('GET world-cup user picks error', e);
+    res.status(500).json({ error: 'Failed to load member World Cup picks' });
+  }
+});
+
+/**
+ * Submit World Cup picks ON BEHALF OF another member — admins only.
+ *
+ * This is the only write path that can touch a row whose user_id differs from
+ * the caller's. The guard order is deliberate and airtight:
+ *   1. validate the pick shape (gameId + result) BEFORE any auth-sensitive work;
+ *   2. resolve the caller's membership/role for THIS group;
+ *   3. reject with 403 unless the caller's role is 'admin' — a member who is not
+ *      an admin can never reach the upsert, so nobody can change another
+ *      person's picks by guessing a userId;
+ *   4. reject with 404 unless the TARGET is also a member of this group.
+ * Only after all four does the same WC-game validation + slot-grouped upsert as
+ * the self route run, but keyed to `targetUserId`. There is no multi-group
+ * fan-out here on purpose: an admin override is scoped to the one group whose
+ * roster they administer.
+ */
+router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { groupId, userId } = req.params;
+    const { picks } = req.body;
+
+    const targetUserId = parseInt(userId, 10);
+    if (Number.isNaN(targetUserId)) return res.status(400).json({ error: 'Invalid userId' });
+
+    if (!Array.isArray(picks)) {
+      return res.status(400).json({ error: 'picks array required' });
+    }
+    for (const p of picks) {
+      if (p.gameId == null) {
+        return res.status(400).json({ error: 'Missing gameId' });
+      }
+      if (!WORLD_CUP_RESULTS.includes(p.pickedResult)) {
+        return res.status(400).json({ error: 'Invalid pickedResult', gameId: p.gameId, pickedResult: p.pickedResult });
+      }
+    }
+
+    const group = await ensureMembership(groupId, req.user.id);
+
+    // The single most important check in this file: only an admin of THIS group
+    // may write another member's picks. A non-admin member is membership-valid
+    // (passed ensureMembership) yet still forbidden here.
+    if (group.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only group admins can submit picks for other members' });
+    }
+
+    if (!(await isGroupMember(group.id, targetUserId))) {
+      return res.status(404).json({ error: 'User is not a member of this group' });
+    }
+
+    if (picks.length === 0) {
+      return res.json({ picks: [], targetUserId, isAdminOverride: true });
+    }
+
+    // Same WC-game verification + slot grouping as the self route, but the rows
+    // are upserted under targetUserId rather than the caller.
+    const gameIds = picks.map((p) => p.gameId);
+    const { rows: gameRows } = await pool.query(
+      `SELECT id, season, season_type, week FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      [gameIds]
+    );
+    const gameById = new Map(gameRows.map((g) => [g.id, g]));
+    for (const p of picks) {
+      if (!gameById.has(p.gameId)) {
+        return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
+      }
+    }
+
+    const bySlot = new Map();
+    for (const p of picks) {
+      const g = gameById.get(p.gameId);
+      const key = `${g.season}|${g.season_type}|${g.week}`;
+      if (!bySlot.has(key)) {
+        bySlot.set(key, { season: g.season, seasonType: g.season_type, week: g.week, picks: [] });
+      }
+      bySlot.get(key).picks.push({ gameId: p.gameId, pickedResult: p.pickedResult });
+    }
+
+    const saved = [];
+    for (const slot of bySlot.values()) {
+      const rows = await UserPick.bulkUpsertWorldCupPicks({
+        userId: targetUserId,
+        groupId: group.id,
+        season: slot.season,
+        seasonType: slot.seasonType,
+        week: slot.week,
+        picks: slot.picks,
+      });
+      saved.push(...rows);
+    }
+
+    res.json({
+      picks: saved.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult })),
+      targetUserId,
+      isAdminOverride: true,
+    });
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    if (e.message && /Invalid picked_result|missing gameId/.test(e.message)) {
+      return res.status(400).json({ error: e.message });
+    }
+    console.error('POST world-cup user picks error', e);
+    res.status(500).json({ error: 'Failed to save member World Cup picks' });
+  }
+});
+
 export default router;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../designsystem/components/Button';
 import InlineToast from '../../designsystem/components/InlineToast';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
@@ -14,9 +14,12 @@ import {
   getStageMatches,
   submitWorldCupPicks,
   getMyWorldCupPicks,
+  getUserWorldCupPicks,
+  submitUserWorldCupPicks,
 } from '../../lib/worldCupService.js';
 import { getMyGroups } from '../../lib/groupsService.js';
 import SaveTargetsDropdown, { type SaveTarget } from '../../components/SaveTargetsDropdown';
+import PickPersonSelector, { type PickPersonOption } from '../../components/PickPersonSelector';
 
 // The World Cup pick-making surface: the whole tournament as one stage-grouped
 // match list with a sticky submit bar. Extracted from WorldCupPicksPage so a
@@ -55,13 +58,72 @@ interface ToastState {
   variant: ToastVariant;
 }
 
+/** Minimal member shape the person selector needs. Matches groupsService.GroupMember. */
+export interface PicksTabMember {
+  id: string | number;
+  name: string;
+  email?: string;
+  pictureUrl?: string | null;
+}
+
 export interface WorldCupPicksTabProps {
   /** Group identifier; doubles as the submit target for submitWorldCupPicks. */
   identifier: string;
+  /**
+   * Group roster. When two or more members are known AND the caller's id is
+   * supplied, the "Picking for" selector appears so members can view (and
+   * admins can edit) another member's picks. Omitted/short rosters keep the
+   * original self-only experience — the standalone /world-cup page passes none.
+   */
+  members?: PicksTabMember[];
+  /** The authenticated caller's id. Without it the selector stays hidden. */
+  currentUserId?: string | number | null;
+  /** Whether the caller is a group admin. Gates editing OTHER members' picks. */
+  isAdmin?: boolean;
 }
 
-export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) {
+export default function WorldCupPicksTab({
+  identifier,
+  members = [],
+  currentUserId = null,
+  isAdmin = false,
+}: WorldCupPicksTabProps) {
   const groupId = identifier;
+
+  // Normalize ids to strings up front so every comparison below (auth user vs
+  // member vs selected) is string-to-string — the members API types id as a
+  // string but yields a number at runtime, and the auth user id is a number.
+  const selfId = currentUserId != null ? String(currentUserId) : null;
+  const personOptions: PickPersonOption[] = useMemo(
+    () =>
+      members.map((m) => ({
+        id: String(m.id),
+        name: m.name,
+        email: m.email,
+        pictureUrl: m.pictureUrl ?? null,
+      })),
+    [members],
+  );
+  // The selector only makes sense with a known caller and at least one teammate.
+  const showPersonSelector = selfId != null && personOptions.length > 1;
+
+  // Who the draft below belongs to. Defaults to the caller and is reset to the
+  // caller whenever the group or caller changes — the default never silently
+  // lands on a teammate.
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(selfId);
+  useEffect(() => {
+    setSelectedUserId(selfId);
+  }, [groupId, selfId]);
+
+  // Self vs other, and whether the current selection is editable. A non-admin
+  // viewing a teammate is strictly read-only; an admin may edit anyone.
+  const viewingSelf = selectedUserId == null || selectedUserId === selfId;
+  const readOnly = !viewingSelf && !isAdmin;
+  const adminEditingOther = !viewingSelf && isAdmin;
+  const selectedName = viewingSelf
+    ? 'You'
+    : personOptions.find((m) => m.id === selectedUserId)?.name ?? 'this member';
+  const selectedFirstName = selectedName.split(' ')[0];
 
   const [fetchState, setFetchState] = useState<FetchState>({
     loading: false,
@@ -105,17 +167,38 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
 
   const fetchMatches = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // Hydrate the draft from the user's already-saved picks on this group so
-  // a refresh doesn't blank them out. Runs independently of the stage fetch
-  // so a transient picks-endpoint failure can't block the matches from
-  // rendering — the draft just stays empty in that case.
+  // Clear the draft SYNCHRONOUSLY the instant the selected person changes, so
+  // one member's in-progress picks can never linger on screen — and be
+  // submitted — as another's. This is the airtight core of the person switch:
+  // the async hydrate below repopulates from the newly-selected person, but the
+  // wipe happens first, in the same commit as the selection change. Scoped to
+  // selectedUserId alone (not groupId) so it never fires on the initial mount
+  // or a same-person group change, preserving the existing hydrate timing.
+  const prevPersonRef = useRef(selectedUserId);
+  if (prevPersonRef.current !== selectedUserId) {
+    prevPersonRef.current = selectedUserId;
+    // Setting state during render is the documented React pattern for adjusting
+    // state when a prop/derived value changes; it bails out the in-progress
+    // render and re-runs before paint, so no stale draft is ever shown.
+    setDraft({});
+  }
+
+  // Hydrate the draft from the SELECTED person's already-saved picks so a
+  // refresh (or a person switch) doesn't blank them out. Self loads via the
+  // "me" endpoint; a teammate loads via the per-user endpoint. Runs
+  // independently of the stage fetch so a transient picks-endpoint failure
+  // can't block the matches from rendering — the draft just stays empty.
   useEffect(() => {
     if (!groupId) {
       setDraft({});
       return;
     }
     let cancelled = false;
-    getMyWorldCupPicks(groupId)
+    const loader =
+      selectedUserId == null || selectedUserId === selfId
+        ? getMyWorldCupPicks(groupId)
+        : getUserWorldCupPicks(groupId, selectedUserId);
+    loader
       .then((resp) => {
         if (cancelled) return;
         const next: DraftMap = {};
@@ -131,9 +214,12 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
     return () => {
       cancelled = true;
     };
-  }, [groupId]);
+  }, [groupId, selectedUserId, selfId]);
 
   function pickResult(matchId: number, result: MatchPickResult) {
+    // Airtight guard: a read-only viewer (non-admin looking at a teammate) can
+    // never mutate the draft, even if a disabled control were somehow clicked.
+    if (readOnly) return;
     setDraft((prev) => {
       const next = { ...prev };
       // Re-picking the selected outcome clears it; otherwise set the new outcome.
@@ -163,7 +249,8 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
     [draft],
   );
 
-  const canSubmit = !!groupId && picks.length > 0 && !submitting;
+  // Read-only viewers can never submit; everyone else needs a group + ≥1 pick.
+  const canSubmit = !!groupId && picks.length > 0 && !submitting && !readOnly;
 
   // Multi-select "save to which World Cup groups?" — restores the heritage
   // Svelte PR #37 dropdown UX. We eagerly load the user's groups on mount so
@@ -213,6 +300,40 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
 
   async function submit() {
     if (!groupId || picks.length === 0) return;
+
+    // Editing a teammate is a separate, deliberately narrow path: admins only,
+    // this group only, no multi-group fan-out. The two guards here are belt-and
+    // suspenders — the submit button is already disabled for read-only viewers
+    // and the server independently rejects non-admin cross-member writes.
+    if (!viewingSelf) {
+      if (readOnly || !isAdmin || !selectedUserId) {
+        setToast({
+          open: true,
+          message: 'You can only submit your own picks.',
+          variant: 'error',
+        });
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await submitUserWorldCupPicks(groupId, selectedUserId, picks);
+        setToast({
+          open: true,
+          message: `Saved ${selectedFirstName}'s picks`,
+          variant: 'success',
+        });
+      } catch (err) {
+        setToast({
+          open: true,
+          message: err instanceof Error ? err.message : 'Failed to save picks',
+          variant: 'error',
+        });
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     setSubmitting(true);
     try {
       const targets = Array.from(selectedTargets);
@@ -259,6 +380,52 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
 
   return (
     <div>
+      {/* Top toolbar — the "Picking for" person selector lives here, alongside
+          where context selectors belong (the NFL picker keeps its season/week
+          selectors up top too). We trialled docking it in the bottom submit bar
+          next to the multi-group fan-out, but placing a "whose picks" control
+          right beside a "which groups" control invited exactly the accidental
+          cross-writes this feature must prevent — so the person context sits at
+          the top and the submit bar merely REFLECTS it. Only renders when the
+          roster + caller are known (≥2 members), so the standalone /world-cup
+          page and solo groups are unchanged. */}
+      {showPersonSelector && selfId && selectedUserId && (
+        <div className="mb-md flex flex-wrap items-center gap-sm rounded-md border border-border bg-surface p-sm">
+          <span className="text-sm font-medium text-secondary">Whose picks:</span>
+          <PickPersonSelector
+            members={personOptions}
+            selectedId={selectedUserId}
+            currentUserId={selfId}
+            isAdmin={isAdmin}
+            onChange={setSelectedUserId}
+            disabled={submitting}
+          />
+        </div>
+      )}
+
+      {/* Context banner — makes the active person impossible to miss before any
+          pick is touched. Three states: editing yourself (no banner), an admin
+          editing a teammate (warning), or anyone viewing a teammate read-only. */}
+      {adminEditingOther && (
+        <div
+          role="status"
+          className="mb-md rounded-md border border-warning-500 bg-warning-50 p-sm text-sm text-warning-800 dark:bg-warning-900 dark:text-warning-100"
+        >
+          <span className="font-semibold">Admin override.</span> You are editing{' '}
+          <span className="font-semibold">{selectedName}</span>&apos;s picks. Anything you submit
+          replaces their saved picks for this group only.
+        </div>
+      )}
+      {readOnly && (
+        <div
+          role="status"
+          className="mb-md rounded-md border border-border bg-secondary-50 p-sm text-sm text-secondary dark:bg-secondary-800"
+        >
+          You are viewing <span className="font-semibold">{selectedName}</span>&apos;s picks.
+          They&apos;re read-only — you can only change your own.
+        </div>
+      )}
+
       {/* How scoring works — World Cup pools are flat-per-match (no confidence)
           and the group and knockout stages score differently, so the rules
           aren't obvious from the Home/Draw/Away row alone. */}
@@ -305,7 +472,7 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
                   key={match.id}
                   match={match}
                   pickedResult={draft[match.id] ?? null}
-                  disabled={submitting}
+                  disabled={submitting || readOnly}
                   onPick={(result) => pickResult(match.id, result)}
                 />
               ))}
@@ -328,9 +495,21 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
               <span className="text-sm text-secondary">
+                {/* When editing/viewing a teammate, name them so the count is
+                    never mistaken for the caller's own picks. */}
+                {!viewingSelf && (
+                  <span className="mr-xs font-semibold text-secondary-900 dark:text-neutral-0">
+                    {selectedFirstName}:
+                  </span>
+                )}
                 {picks.length} pick{picks.length === 1 ? '' : 's'} selected
               </span>
-              {groupId && (
+              {/* The multi-group fan-out is ONLY offered when picking for
+                  yourself. An admin override targets one member in one group —
+                  fanning another person's picks across groups they may not even
+                  belong to is never what's intended, so the dropdown is replaced
+                  with a scoped note. */}
+              {groupId && viewingSelf && (
                 <SaveTargetsDropdown
                   groups={myGroups}
                   sourceIdentifier={groupId}
@@ -341,6 +520,9 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
                   disabled={submitting}
                 />
               )}
+              {adminEditingOther && (
+                <span className="text-xs text-secondary">Saved to this group only</span>
+              )}
             </div>
             <div className="relative inline-toast-anchor">
               <InlineToast
@@ -349,19 +531,27 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
                 variant={toast.variant}
                 onClose={() => setToast((t) => ({ ...t, open: false }))}
               />
-              <Button
-                variant="primary"
-                size="md"
-                loading={submitting}
-                disabled={!canSubmit}
-                onClick={submit}
-              >
-                {submitting
-                  ? 'Saving…'
-                  : selectedTargets.size > 1
-                    ? `Submit to ${selectedTargets.size}`
-                    : 'Submit Picks'}
-              </Button>
+              {readOnly ? (
+                // No write affordance at all for a read-only viewer — there is
+                // simply no submit button to click.
+                <span className="text-sm italic text-secondary">View only</span>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="md"
+                  loading={submitting}
+                  disabled={!canSubmit}
+                  onClick={submit}
+                >
+                  {submitting
+                    ? 'Saving…'
+                    : adminEditingOther
+                      ? `Save ${selectedFirstName}'s Picks`
+                      : selectedTargets.size > 1
+                        ? `Submit to ${selectedTargets.size}`
+                        : 'Submit Picks'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
