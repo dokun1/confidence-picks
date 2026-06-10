@@ -16,7 +16,7 @@
     "verify:coverage": "node scripts/check-page-spec-coverage.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1",
+    "@playwright/test": "1.58.2",
     "@tailwindcss/typography": "0.5.16",
     "@testing-library/jest-dom": "^6",
     "@testing-library/react": "^16",
