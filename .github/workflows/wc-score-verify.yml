@@ -53,6 +53,13 @@ jobs:
           NOW=$(date -u '+%Y-%m-%d %H:%M UTC')
           OUT=/tmp/wc-comment.md
 
+          # The cron fires every June 11; this runbook is for the 2026 opener only.
+          # No-op scheduled runs in other years, but always honor a manual dispatch.
+          if [ "$EVENT_NAME" = 'schedule' ] && [ "$(date -u +%Y)" != '2026' ]; then
+            echo 'Scheduled run outside 2026 — nothing to verify, exiting.'
+            exit 0
+          fi
+
           # ---------- P1: public ESPN payload (no auth) ----------
           ESPN=$(curl -sS --max-time 30 "$ESPN_URL" || echo '{}')
           ECOUNT=$(echo "$ESPN" | jq -r '(.events // []) | length' 2>/dev/null || echo '?')
@@ -75,7 +82,7 @@ jobs:
           if [ -n "${WC_REFRESH_TOKEN:-}" ]; then
             ACCESS=$(curl -sS --max-time 30 -X POST "$API/auth/refresh" \
               -H 'Content-Type: application/json' \
-              -d "{\"refreshToken\":\"$WC_REFRESH_TOKEN\"}" 2>/dev/null | jq -r '.accessToken // empty' 2>/dev/null)
+              -d "{\"refreshToken\":\"$WC_REFRESH_TOKEN\"}" 2>/dev/null | jq -r '.accessToken // empty' 2>/dev/null || true)
             if [ -z "${ACCESS:-}" ]; then
               PROD='⚠️ could not get an access token — WC_REFRESH_TOKEN invalid/expired (re-grab it from the browser)'
             else
