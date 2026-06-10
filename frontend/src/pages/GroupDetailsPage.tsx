@@ -219,12 +219,9 @@ export default function GroupDetailsPage() {
           (isWorldCup ? (
             <WorldCupLeaderboardTab identifier={identifier} />
           ) : (
-            <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-              <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-sm">
-                Leaderboard
-              </h2>
-              <p className="text-[var(--color-text-secondary)]">Leaderboard coming soon</p>
-            </div>
+            // Bare placeholder — the active tab already names the section, so no
+            // card wrapper or duplicate "Leaderboard" heading.
+            <p className="text-[var(--color-text-secondary)]">Leaderboard coming soon</p>
           ))}
         {activeTab === 'picks' &&
           (isWorldCup ? (
