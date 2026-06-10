@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GroupDetailsPage from './GroupDetailsPage';
@@ -263,9 +263,11 @@ describe('GroupDetailsPage', () => {
       expect(mockGetWorldCupLeaderboard).toHaveBeenCalledWith('sunday-squad');
       expect(screen.queryByText(/Leaderboard coming soon/i)).not.toBeInTheDocument();
       // The tournament table surfaces the tiebreaker columns and the member row.
+      // (The member name renders in both the desktop table and the mobile list,
+      // so scope the name lookup to the table.)
       expect(await screen.findByText('Wins Correct')).toBeInTheDocument();
       expect(screen.getByText('Draws Incorrect')).toBeInTheDocument();
-      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(within(screen.getByRole('table')).getByText('Alice')).toBeInTheDocument();
     });
 
     it('embeds the World Cup pick-making surface on the Picks tab', async () => {

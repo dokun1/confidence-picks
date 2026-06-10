@@ -156,6 +156,12 @@ export interface MatchPick {
 export interface TournamentLeaderboardRow {
   memberId: string;
   name: string;
+  /**
+   * Member's profile picture URL. Supplied by the backend leaderboard payload
+   * (mapped from users.picture_url); null when the member has no picture, in
+   * which case Avatar falls back to initials.
+   */
+  pictureUrl?: string | null;
   points: number;
   wins_correct: number;
   losses: number;

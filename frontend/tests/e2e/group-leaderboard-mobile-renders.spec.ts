@@ -1,14 +1,16 @@
 import { test, expect } from '@playwright/test'
 
-// A world_cup_2026 group's Leaderboard tab fetches
-// GET /api/picks/group/<id>/world-cup/leaderboard and renders the
-// TournamentLeaderboard table with one row per member, in the order the
-// backend returns (the API owns the tiebreaker comparator). We seed a valid,
-// far-future JWT-shaped accessToken (same pattern as the other authed specs)
-// and stub the group + leaderboard endpoints so the flow never reaches a real
-// backend. The leaderboard is the group page's default tab, so landing on
-// /group-details renders it without a tab click.
-test('world cup group leaderboard tab renders member standings', async ({ page }) => {
+// On a phone-width viewport the World Cup leaderboard drops the bordered table
+// "card" (which forced horizontal scrolling and clipped columns) in favor of a
+// card-free stacked list: one entry per member with rank + avatar + name +
+// emphasized points, and the four tiebreakers below as a 4-up stat-chip grid.
+// The desktop <table> is display:none at this width, and the page must not
+// scroll horizontally. We also prove the member avatar loads (the photo, not
+// the initials fallback). Same auth/stub pattern as the desktop spec.
+test('world cup leaderboard renders a card-free stat grid on mobile', async ({ page }) => {
+  // Phone-width viewport — below the `sm` (640px) breakpoint.
+  await page.setViewportSize({ width: 390, height: 844 })
+
   // Visit the app first so localStorage is writable for this origin.
   await page.goto('/login')
 
@@ -28,8 +30,7 @@ test('world cup group leaderboard tab renders member standings', async ({ page }
   // resolves to an empty object so the test can never reach a real backend.
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
 
-  // Serve a real 1x1 PNG for the avatar URL so the <img> actually loads (and so
-  // we can prove the picture, not the initials fallback, is what renders).
+  // Serve a real 1x1 PNG for the avatar URL so the <img> actually loads.
   await page.route('**/ada.png*', (route) =>
     route.fulfill({
       status: 200,
@@ -41,10 +42,8 @@ test('world cup group leaderboard tab renders member standings', async ({ page }
     }),
   )
 
-  // Leaderboard endpoint: two members, already ordered by the backend
-  // comparator. The shape mirrors the live route's row payload. Ada carries a
-  // pictureUrl so the row avatar renders the photo (regression guard: the
-  // leaderboard used to drop pictureUrl and always show initials).
+  // Leaderboard endpoint: two members. Ada carries a pictureUrl so her row
+  // avatar renders the photo. Values are distinct so each can be located.
   await page.route('**/api/picks/group/**/world-cup/leaderboard', async (route) => {
     await route.fulfill({
       status: 200,
@@ -80,10 +79,7 @@ test('world cup group leaderboard tab renders member standings', async ({ page }
     })
   })
 
-  // Group detail mount fans out to getGroup / getMembers / getMessages. getGroup
-  // must return pool_type='world_cup_2026' so the Leaderboard tab renders the
-  // tournament variant; members/messages return arrays (the catch-all's {}
-  // would break their `.map`).
+  // Group detail mount fans out to getGroup / getMembers / getMessages.
   await page.route('**/api/groups/**', async (route) => {
     const url = route.request().url()
     if (url.includes('/members') || url.includes('/messages')) {
@@ -105,32 +101,36 @@ test('world cup group leaderboard tab renders member standings', async ({ page }
   })
 
   await page.goto('/group-details?group=wc-group')
-
-  // The detail page resolves, lands on the Leaderboard tab, and renders the
-  // tournament table: member rows plus the four tiebreaker column headers.
   await expect(page.getByRole('heading', { name: 'World Cup Squad' })).toBeVisible()
 
-  // The tab itself is the only "Leaderboard" label — the body renders the table
-  // bare, with no card wrapper repeating the heading.
-  await expect(page.getByRole('tab', { name: 'Leaderboard' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Leaderboard' })).toHaveCount(0)
+  // The mobile stacked list is visible; the desktop table is hidden at this
+  // viewport (it carries `hidden sm:block`).
+  const list = page.getByRole('list')
+  await expect(list).toBeVisible()
+  await expect(page.getByRole('table')).toBeHidden()
 
-  await expect(page.getByRole('columnheader', { name: 'Points' })).toBeVisible()
-  await expect(page.getByRole('columnheader', { name: 'Wins Correct' })).toBeVisible()
+  // One list item per member, names visible.
+  await expect(list.getByRole('listitem')).toHaveCount(2)
+  await expect(list.getByText('Ada Lovelace')).toBeVisible()
+  await expect(list.getByText('Grace Hopper')).toBeVisible()
 
-  await expect(page.getByRole('rowheader', { name: /Ada Lovelace/ })).toBeVisible()
-  await expect(page.getByRole('rowheader', { name: /Grace Hopper/ })).toBeVisible()
+  // The stat-chip grid surfaces the tiebreakers with their short labels.
+  await expect(list.getByText('Wins').first()).toBeVisible()
+  await expect(list.getByText('Losses').first()).toBeVisible()
+  // Points emphasis: the "pts" label appears once per member.
+  await expect(list.getByText('pts').first()).toBeVisible()
 
-  // Standings order is the backend's: Ada (5 pts) above Grace (0 pts).
-  const rowheaders = page.locator('tbody th[scope="row"]')
-  await expect(rowheaders.first()).toContainText('Ada Lovelace')
-  await expect(rowheaders.last()).toContainText('Grace Hopper')
-
-  // Ada's row renders her photo (not initials): the table avatar <img> is
-  // visible and the served PNG decoded (naturalWidth > 0).
-  const adaAvatar = page.locator('table img[alt="Ada Lovelace"]')
+  // Ada's avatar is her photo, not initials: the list <img> is visible and the
+  // served PNG decoded (naturalWidth > 0).
+  const adaAvatar = list.getByRole('img', { name: 'Ada Lovelace' })
   await expect(adaAvatar).toBeVisible()
   await expect
     .poll(() => adaAvatar.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0)
+
+  // The mobile layout must not introduce horizontal scrolling.
+  const overflowsX = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  )
+  expect(overflowsX).toBe(false)
 })

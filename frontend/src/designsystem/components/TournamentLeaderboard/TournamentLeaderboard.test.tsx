@@ -9,6 +9,11 @@ import type { TournamentLeaderboardRow } from '../../../lib/types';
 // column, another row, or the 1-based rank the component renders per row. Names
 // are intentionally NOT alphabetical: the supplied order is the rendered order,
 // and these fixtures prove the component never re-sorts.
+//
+// The component now renders TWO layouts simultaneously (a mobile stacked list
+// and a desktop table — CSS, not JS, decides which is visible), so every query
+// is scoped to one layout root via `within(table())` / `within(mobileList())`.
+// An unscoped getByText would match the same value in both layouts and throw.
 
 function makeRow(overrides: Partial<TournamentLeaderboardRow> & Pick<TournamentLeaderboardRow, 'memberId' | 'name'>): TournamentLeaderboardRow {
   return {
@@ -54,16 +59,29 @@ const ADA = makeRow({
 // Supplied order: Zara, Milo, Ada (not sorted by name or points).
 const ROWS: TournamentLeaderboardRow[] = [ZARA, MILO, ADA];
 
-// The member's <tr>, located via its unique name (rendered in a th scope="row").
-function rowFor(name: string): HTMLElement {
-  const tr = screen.getByText(name).closest('tr');
+// Layout roots. The desktop table carries ARIA table semantics; the mobile
+// stacked layout is a plain list.
+const table = () => screen.getByRole('table');
+const mobileList = () => screen.getByRole('list');
+
+// The member's <tr> in the desktop table, located via its unique name (rendered
+// in a th scope="row"). Scoped to the table so the mobile copy never matches.
+function tableRowFor(name: string): HTMLElement {
+  const tr = within(table()).getByText(name).closest('tr');
   expect(tr).not.toBeNull();
   return tr as HTMLElement;
 }
 
+// The member's <li> in the mobile list, located via its unique name.
+function mobileItemFor(name: string): HTMLElement {
+  const li = within(mobileList()).getByText(name).closest('li');
+  expect(li).not.toBeNull();
+  return li as HTMLElement;
+}
+
 describe('TournamentLeaderboard', () => {
-  describe('rows', () => {
-    it('renders exactly one row per entry', () => {
+  describe('desktop table — rows', () => {
+    it('renders exactly one table row per entry', () => {
       render(<TournamentLeaderboard rows={ROWS} />);
       // Each member contributes one row-header (th scope="row").
       expect(screen.getAllByRole('rowheader')).toHaveLength(ROWS.length);
@@ -81,13 +99,13 @@ describe('TournamentLeaderboard', () => {
     });
   });
 
-  describe('points and tiebreaker columns', () => {
+  describe('desktop table — points and tiebreaker columns', () => {
     it('renders points plus all four tiebreaker values for each row', () => {
       render(<TournamentLeaderboard rows={ROWS} />);
       // Scope every assertion to the member's own row so a value can never
       // satisfy the lookup by matching a different member's cell.
       ROWS.forEach(row => {
-        const tr = rowFor(row.name);
+        const tr = tableRowFor(row.name);
         expect(within(tr).getByText(String(row.points))).toBeInTheDocument();
         expect(within(tr).getByText(String(row.wins_correct))).toBeInTheDocument();
         expect(within(tr).getByText(String(row.losses))).toBeInTheDocument();
@@ -100,20 +118,85 @@ describe('TournamentLeaderboard', () => {
       render(<TournamentLeaderboard rows={ROWS} />);
       // Milo's row holds Milo's numbers and none of Ada's — guards against a
       // column-misalignment regression that would cross values between rows.
-      const miloRow = rowFor('Milo');
+      const miloRow = tableRowFor('Milo');
       expect(within(miloRow).getByText(String(MILO.points))).toBeInTheDocument();
       expect(within(miloRow).getByText(String(MILO.wins_correct))).toBeInTheDocument();
       expect(within(miloRow).queryByText(String(ADA.points))).not.toBeInTheDocument();
       expect(within(miloRow).queryByText(String(ADA.wins_correct))).not.toBeInTheDocument();
     });
+
+    it('renders the four tiebreaker column headers', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      expect(screen.getByRole('columnheader', { name: 'Points' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Wins Correct' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Losses' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Draws Correct' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Draws Incorrect' })).toBeInTheDocument();
+    });
+  });
+
+  describe('mobile list — card-free stacked layout', () => {
+    it('renders one list item per entry, in the supplied order', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      const items = within(mobileList()).getAllByRole('listitem');
+      expect(items).toHaveLength(ROWS.length);
+      ROWS.forEach((row, i) => {
+        expect(within(items[i]).getByText(row.name)).toBeInTheDocument();
+      });
+    });
+
+    it('shows points and all four tiebreaker stats for each member', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      ROWS.forEach(row => {
+        const li = mobileItemFor(row.name);
+        expect(within(li).getByText(String(row.points))).toBeInTheDocument();
+        expect(within(li).getByText(String(row.wins_correct))).toBeInTheDocument();
+        expect(within(li).getByText(String(row.losses))).toBeInTheDocument();
+        expect(within(li).getByText(String(row.draws_correct))).toBeInTheDocument();
+        expect(within(li).getByText(String(row.draws_incorrect))).toBeInTheDocument();
+      });
+    });
+
+    it('is a card-free list (no bordered card wrapper)', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      // The mobile root is the <ul>; it carries no border utility classes.
+      const list = mobileList();
+      expect(list.className).not.toMatch(/\bborder\b/);
+      expect(list.className).not.toMatch(/rounded-lg/);
+    });
+  });
+
+  describe('avatars', () => {
+    const WITH_PIC: TournamentLeaderboardRow[] = [
+      makeRow({ memberId: 'm-pic', name: 'Pic Person', pictureUrl: 'https://example.com/p.jpg?sz=100' }),
+    ];
+
+    it('renders the member picture in both layouts when pictureUrl is provided', () => {
+      render(<TournamentLeaderboard rows={WITH_PIC} />);
+      // One <img> in the mobile list, one in the desktop table.
+      const imgs = screen.getAllByRole('img');
+      expect(imgs).toHaveLength(2);
+      imgs.forEach(img => {
+        expect(img).toHaveAttribute('src', 'https://example.com/p.jpg?sz=100');
+        expect(img).toHaveAttribute('alt', 'Pic Person');
+      });
+    });
+
+    it('falls back to initials (no img) when pictureUrl is absent', () => {
+      render(<TournamentLeaderboard rows={[ZARA]} />);
+      expect(screen.queryByRole('img')).toBeNull();
+      // Initials appear once per layout.
+      expect(screen.getAllByText('Z')).toHaveLength(2);
+    });
   });
 
   describe('empty state', () => {
-    it('renders the placeholder message and no data table when rows is empty', () => {
+    it('renders the placeholder message and neither layout when rows is empty', () => {
       render(<TournamentLeaderboard rows={[]} />);
       expect(screen.getByText(/no standings yet/i)).toBeInTheDocument();
-      // The table and all its rows are absent in the empty state.
+      // Both layouts are absent in the empty state.
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.queryByRole('list')).not.toBeInTheDocument();
       expect(screen.queryAllByRole('row')).toHaveLength(0);
       expect(screen.queryAllByRole('rowheader')).toHaveLength(0);
     });
