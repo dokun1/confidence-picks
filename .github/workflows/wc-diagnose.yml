@@ -1,0 +1,91 @@
+name: WC Diagnose (one-off)
+
+# Pinpoints why the live World Cup stage refresh 500s in production. Prints to
+# the job log only (read via the Actions API) — no issue comments. Manual only.
+#
+# 1) Calls the prod stage endpoint with ?refresh=true and prints the raw HTTP
+#    status + response body (on a 500 the route returns {"error": <message>},
+#    which is the thrown error text we can't see in Vercel's first-line logs).
+# 2) Fetches the same ESPN group payload the backend fetches and scans every
+#    event against Game.fromESPNData's field contract, listing any event that
+#    would throw during parse (the leading root-cause hypothesis).
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      API: 'https://api.confidence-picks.com'
+      ESPN_URL: 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260627&limit=200'
+      WC_REFRESH_TOKEN: ${{ secrets.WC_REFRESH_TOKEN }}
+    steps:
+      - name: Probe prod 500 + scan ESPN event shapes
+        run: |
+          set -uo pipefail
+
+          echo '===================== 1. PROD STAGE (forced refresh) ====================='
+          ACCESS=$(curl -sS --max-time 30 -X POST "$API/auth/refresh" \
+            -H 'Content-Type: application/json' \
+            -d "{\"refreshToken\":\"$WC_REFRESH_TOKEN\"}" 2>/dev/null | jq -r '.accessToken // empty' 2>/dev/null || true)
+          if [ -z "${ACCESS:-}" ]; then
+            echo 'FATAL: could not get access token from refresh secret.'
+          else
+            echo 'Got access token. Calling stage/group?refresh=true ...'
+            BODY=$(curl -sS --max-time 45 -w $'\n__HTTP__%{http_code}' \
+              "$API/api/games/world-cup-2026/stage/group?refresh=true" \
+              -H "Authorization: Bearer $ACCESS" 2>&1 || true)
+            HTTP=$(printf '%s' "$BODY" | sed -n 's/.*__HTTP__//p')
+            PAYLOAD=$(printf '%s' "$BODY" | sed 's/__HTTP__[0-9]*$//')
+            echo "HTTP status: $HTTP"
+            echo 'Response body (first 1500 chars):'
+            printf '%s' "$PAYLOAD" | head -c 1500
+            echo ''
+            echo 'Parsed .error (if any):'
+            printf '%s' "$PAYLOAD" | jq -r '.error // "(no .error field)"' 2>/dev/null || echo '(body was not JSON)'
+            echo 'Parsed .count (if any):'
+            printf '%s' "$PAYLOAD" | jq -r '.count // "(no .count field)"' 2>/dev/null || true
+          fi
+
+          echo ''
+          echo '===================== 2. ESPN EVENT-SHAPE SCAN ====================='
+          ESPN=$(curl -sS --max-time 30 "$ESPN_URL" || echo '{}')
+          TOTAL=$(printf '%s' "$ESPN" | jq -r '(.events // []) | length')
+          echo "ESPN returned $TOTAL events for the group window."
+          echo ''
+          echo 'Events that would BREAK Game.fromESPNData (missing competitions[0],'
+          echo 'a home/away competitor, .team, or .id) — the parser throws on these:'
+          printf '%s' "$ESPN" | jq -r '
+            [ (.events // [])[] | . as $g |
+              {
+                id: .id,
+                name: (.shortName // .name),
+                slug: (.season.slug // null),
+                hasComp: (.competitions[0] != null),
+                nCompetitors: ((.competitions[0].competitors // []) | length),
+                home: ((.competitions[0].competitors // []) | map(select(.homeAway=="home")) | .[0]),
+                away: ((.competitions[0].competitors // []) | map(select(.homeAway=="away")) | .[0])
+              }
+              | . + { ok: (
+                  .hasComp
+                  and (.home != null) and (.home.team != null) and (.home.id != null)
+                  and (.away != null) and (.away.team != null) and (.away.id != null)
+                ) }
+              | select(.ok | not)
+              | { id, name, slug, hasComp, nCompetitors,
+                  homeMissing: (.home == null),
+                  homeTeamMissing: (.home != null and .home.team == null),
+                  awayMissing: (.away == null),
+                  awayTeamMissing: (.away != null and .away.team == null) }
+            ]' 2>/dev/null || echo '(scan failed)'
+          echo ''
+          echo 'Distinct season.slug values present in the window (spillover check):'
+          printf '%s' "$ESPN" | jq -r '[(.events // [])[] | .season.slug] | group_by(.) | map({slug: .[0], n: length})' 2>/dev/null || true
+          echo ''
+          echo 'Sample of one event (id + competitor team shape) for reference:'
+          printf '%s' "$ESPN" | jq -r '(.events // [])[0] | {id, slug: .season.slug, competitors: [.competitions[0].competitors[] | {homeAway, id, hasTeam: (.team != null), abbr: .team.abbreviation, score}]}' 2>/dev/null || true
+          echo '===================== END ====================='
