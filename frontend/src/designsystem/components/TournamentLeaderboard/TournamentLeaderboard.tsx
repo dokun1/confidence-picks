@@ -14,6 +14,24 @@ export interface TournamentLeaderboardProps {
 const HEADER_CELL = 'px-sm py-xs text-left text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400';
 const BODY_CELL = 'px-sm py-xs align-middle text-sm text-secondary-900 dark:text-neutral-0 border-t border-secondary-200 dark:border-secondary-700';
 
+// The numeric tiebreaker fields, restricted to exactly the four stat keys so a
+// column can never point at a non-numeric field (name/pictureUrl/…). This keeps
+// `row[col.key]` strongly typed as `number` — no casts — and makes a future
+// typo a compile error.
+type StatKey = 'wins_correct' | 'losses' | 'draws_correct' | 'draws_incorrect';
+
+// The four tiebreaker stats, in tiebreaker order. Shared between the desktop
+// table columns and the mobile stat-chip grid so the two layouts can never
+// drift out of sync. `key` indexes the row; `label` is the human-facing header.
+const STAT_COLUMNS: { key: StatKey; label: string; short: string }[] = [
+  { key: 'wins_correct', label: 'Wins Correct', short: 'Wins' },
+  { key: 'losses', label: 'Losses', short: 'Losses' },
+  { key: 'draws_correct', label: 'Draws Correct', short: 'D ✓' },
+  { key: 'draws_incorrect', label: 'Draws Incorrect', short: 'D ✗' },
+];
+
+const EMPTY_STATE = 'No standings yet — picks will appear here once the tournament begins.';
+
 /**
  * TournamentLeaderboard renders a World Cup pool's standings: one row per member,
  * with total points plus the four tiebreaker columns in tiebreaker order
@@ -22,67 +40,111 @@ const BODY_CELL = 'px-sm py-xs align-middle text-sm text-secondary-900 dark:text
  * It is a pure presentation component — it never fetches. The parent supplies
  * `rows` already ordered by the backend comparator; this component renders them
  * in that order without re-sorting. Composes Avatar for member identity.
+ *
+ * Two layouts, switched purely with Tailwind responsive utilities (no JS / no
+ * window measurement, so it's SSR- and test-stable):
+ *  - `sm` and up: the bordered standings table (unchanged from before).
+ *  - below `sm`: a card-free stacked list — each member is a row with rank +
+ *    avatar + name + emphasized points, and the four tiebreakers below as a
+ *    4-up stat-chip grid. No bordered card and no horizontal scroll on phones.
  */
 export default function TournamentLeaderboard({ rows }: TournamentLeaderboardProps) {
   if (rows.length === 0) {
     return (
       <p className="text-sm text-secondary-500 dark:text-secondary-400 py-lg text-center">
-        No standings yet — picks will appear here once the tournament begins.
+        {EMPTY_STATE}
       </p>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-secondary-200 dark:border-secondary-700">
-      <table className="min-w-full border-collapse bg-neutral-0 dark:bg-secondary-900">
-        <thead>
-          <tr className="bg-secondary-50 dark:bg-secondary-800">
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              #
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Member
-            </th>
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              Points
-            </th>
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              Wins Correct
-            </th>
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              Losses
-            </th>
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              Draws Correct
-            </th>
-            <th scope="col" className={`${HEADER_CELL} text-center`}>
-              Draws Incorrect
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={row.memberId}>
-              <td className={`${BODY_CELL} text-center font-medium text-secondary-500 dark:text-secondary-400 tabular-nums`}>
+    <>
+      {/* Mobile (below sm): card-free stacked list with a stat-chip grid. */}
+      <ul className="sm:hidden divide-y divide-secondary-200 dark:divide-secondary-700">
+        {rows.map((row, index) => (
+          <li key={row.userId} className="py-md">
+            <div className="flex items-center gap-sm">
+              <span className="w-6 shrink-0 text-center text-sm font-medium text-secondary-500 dark:text-secondary-400 tabular-nums">
                 {index + 1}
-              </td>
-              <th scope="row" className={`${BODY_CELL} text-left font-medium`}>
-                <div className="flex items-center gap-xs">
-                  <Avatar name={row.name} variant="md" />
-                  <span>{row.name}</span>
+              </span>
+              <Avatar name={row.name} pictureUrl={row.pictureUrl} variant="md" />
+              <span className="min-w-0 flex-1 truncate font-medium text-secondary-900 dark:text-neutral-0">
+                {row.name}
+              </span>
+              <span className="shrink-0 text-right leading-none">
+                <span className="block text-lg font-semibold tabular-nums text-secondary-900 dark:text-neutral-0">
+                  {row.points}
+                </span>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400">
+                  pts
+                </span>
+              </span>
+            </div>
+            <div className="mt-sm grid grid-cols-4 gap-xs">
+              {STAT_COLUMNS.map((col) => (
+                <div
+                  key={col.key}
+                  className="rounded-base bg-secondary-50 dark:bg-secondary-800 px-xs py-xs text-center"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400">
+                    {col.short}
+                  </div>
+                  <div className="text-sm font-semibold tabular-nums text-secondary-900 dark:text-neutral-0">
+                    {row[col.key]}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop (sm and up): the bordered standings table. */}
+      <div className="hidden sm:block overflow-x-auto rounded-lg border border-secondary-200 dark:border-secondary-700">
+        <table className="min-w-full border-collapse bg-neutral-0 dark:bg-secondary-900">
+          <thead>
+            <tr className="bg-secondary-50 dark:bg-secondary-800">
+              <th scope="col" className={`${HEADER_CELL} text-center`}>
+                #
               </th>
-              <td className={`${BODY_CELL} text-center font-semibold tabular-nums`}>
-                {row.points}
-              </td>
-              <td className={`${BODY_CELL} text-center tabular-nums`}>{row.wins_correct}</td>
-              <td className={`${BODY_CELL} text-center tabular-nums`}>{row.losses}</td>
-              <td className={`${BODY_CELL} text-center tabular-nums`}>{row.draws_correct}</td>
-              <td className={`${BODY_CELL} text-center tabular-nums`}>{row.draws_incorrect}</td>
+              <th scope="col" className={HEADER_CELL}>
+                Member
+              </th>
+              <th scope="col" className={`${HEADER_CELL} text-center`}>
+                Points
+              </th>
+              {STAT_COLUMNS.map((col) => (
+                <th key={col.key} scope="col" className={`${HEADER_CELL} text-center`}>
+                  {col.label}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.userId}>
+                <td className={`${BODY_CELL} text-center font-medium text-secondary-500 dark:text-secondary-400 tabular-nums`}>
+                  {index + 1}
+                </td>
+                <th scope="row" className={`${BODY_CELL} text-left font-medium`}>
+                  <div className="flex items-center gap-xs">
+                    <Avatar name={row.name} pictureUrl={row.pictureUrl} variant="md" />
+                    <span>{row.name}</span>
+                  </div>
+                </th>
+                <td className={`${BODY_CELL} text-center font-semibold tabular-nums`}>
+                  {row.points}
+                </td>
+                {STAT_COLUMNS.map((col) => (
+                  <td key={col.key} className={`${BODY_CELL} text-center tabular-nums`}>
+                    {row[col.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

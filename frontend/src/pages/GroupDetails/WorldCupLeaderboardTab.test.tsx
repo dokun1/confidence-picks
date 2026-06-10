@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import WorldCupLeaderboardTab from './WorldCupLeaderboardTab';
 import type { TournamentLeaderboardRow } from '../../lib/types';
@@ -15,8 +15,11 @@ const identifier = 'wc-group';
 
 const rows: TournamentLeaderboardRow[] = [
   {
-    memberId: 'm1',
+    userId: 1,
     name: 'Alice',
+    pictureUrl: null,
+    rank: 1,
+    tied: false,
     points: 12,
     wins_correct: 4,
     losses: 1,
@@ -24,8 +27,11 @@ const rows: TournamentLeaderboardRow[] = [
     draws_incorrect: 1,
   },
   {
-    memberId: 'm2',
+    userId: 2,
     name: 'Bob',
+    pictureUrl: null,
+    rank: 2,
+    tied: false,
     points: 7,
     wins_correct: 2,
     losses: 2,
@@ -43,9 +49,11 @@ describe('WorldCupLeaderboardTab', () => {
     render(<WorldCupLeaderboardTab identifier={identifier} />);
 
     expect(mockGetWorldCupLeaderboard).toHaveBeenCalledWith(identifier);
-    expect(await screen.findByRole('table')).toBeInTheDocument();
-    expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText('Bob')).toBeInTheDocument();
+    // Names render in both the desktop table and the mobile list, so scope the
+    // lookup to the table to keep the assertion unambiguous.
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Alice')).toBeInTheDocument();
+    expect(within(table).getByText('Bob')).toBeInTheDocument();
   });
 
   it('renders bare — no card wrapper and no duplicate "Leaderboard" heading', async () => {

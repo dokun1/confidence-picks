@@ -150,12 +150,27 @@ export interface MatchPick {
   pickedResult: MatchPickResult;
 }
 
-// One row of the tournament leaderboard. Count fields are snake_case to match
-// the backend leaderboard payload (see worldcup-picks-route.test.js); these are
-// the four tiebreaker columns rendered after points.
+// One row of the tournament leaderboard. The shape mirrors the backend
+// leaderboard payload exactly (see worldCupPicks.js GET .../world-cup/leaderboard
+// and worldcup-picks-route.test.js): the member is keyed by `userId` (not a
+// separate memberId), `rank`/`tied` carry the backend's authoritative tiebreaker
+// resolution, and the count fields stay snake_case to match the wire format.
+// Keeping the type faithful to the payload lets TypeScript catch real contract
+// drift instead of hiding it.
 export interface TournamentLeaderboardRow {
-  memberId: string;
+  /** Backend user id; used as the row key. Mapped from users.id. */
+  userId: number;
   name: string;
+  /**
+   * Member's profile picture URL. Always present in the payload (mapped from
+   * users.picture_url); null when the member has no picture, in which case
+   * Avatar falls back to initials.
+   */
+  pictureUrl: string | null;
+  /** 1-based standing from the backend comparator. */
+  rank: number;
+  /** True when this member shares its rank with an adjacent member. */
+  tied: boolean;
   points: number;
   wins_correct: number;
   losses: number;
