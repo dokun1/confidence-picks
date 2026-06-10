@@ -20,6 +20,7 @@ function renderHome({ isAuthenticated = false } = {}) {
   mockedUseAuth.mockReturnValue({
     isAuthenticated,
     user: null,
+    isRestoring: false,
     setAuthUser: vi.fn(),
     clearAuth: vi.fn(),
   });

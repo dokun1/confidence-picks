@@ -6,6 +6,7 @@ vi.mock('../contexts/AuthContext', () => {
   const mockUseAuth = vi.fn<() => AuthContextValue>(() => ({
     isAuthenticated: false,
     user: null,
+    isRestoring: false,
     setAuthUser: vi.fn(),
     clearAuth: vi.fn(),
   }));
