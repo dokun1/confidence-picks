@@ -64,10 +64,12 @@ export default function ChatTab(props: ChatTabProps) {
     }
   }
 
+  // Rendered bare (no card, no "Chat" heading): the active tab already names
+  // the section, and the message log flows freely with the page instead of
+  // scrolling inside a fixed-height box.
   return (
-    <div className='rounded-md border border-border bg-surface p-lg'>
-      <h2 className='text-lg font-semibold mb-lg'>Chat</h2>
-      <div className='max-h-96 overflow-y-auto space-y-lg'>
+    <div>
+      <div className='space-y-lg'>
         {messages.length === 0 ? (
           <p className='text-secondary'>No messages yet.</p>
         ) : (
