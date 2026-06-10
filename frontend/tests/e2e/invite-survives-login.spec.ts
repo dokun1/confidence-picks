@@ -45,13 +45,22 @@ const USER = {
 }
 
 async function setupMocks(page: import('@playwright/test').Page) {
-  // GET invite details (one path segment after /invites — does not match the
-  // /accept route below, since glob '*' never crosses a slash).
+  // Catch-all so no request escapes to the (absent) real backend — e.g. the
+  // GroupDetailsPage we land on after accepting fires its own /api calls.
+  // Registered first; the specific routes below are registered later and so
+  // take priority (Playwright matches the most-recently-added route first).
+  await page.route('**/api/**', async (route) => {
+    await route.fulfill({ json: {} })
+  })
+
+  // GET invite details.
   await page.route('**/api/invites/*', async (route) => {
     await route.fulfill({ json: INVITE })
   })
 
-  // POST accept → tells InvitePage which group to navigate to.
+  // POST accept → tells InvitePage which group to navigate to. Registered after
+  // the GET route so it wins for the .../accept path regardless of how the glob
+  // '*' treats the slash.
   await page.route('**/api/invites/*/accept', async (route) => {
     await route.fulfill({
       json: { joined: true, alreadyMember: false, groupIdentifier: 'cool-group' },
