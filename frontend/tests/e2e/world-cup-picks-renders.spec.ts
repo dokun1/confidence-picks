@@ -37,37 +37,64 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
   // precedence — the specific stage stub below must win over this catch-all.
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
 
-  // Stub the per-stage endpoint. The page fetches all seven stages; return the
-  // group-stage match only for the group request and an empty list otherwise so
-  // the match renders exactly once.
+  // Stub the per-stage endpoint. The page fetches all seven stages; the group
+  // request returns the playable match, the r32 request returns a knockout
+  // fixture whose away slot is still ESPN's TBD placeholder, and every other
+  // stage returns an empty list so each match renders exactly once.
   await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const isGroup = route.request().url().includes('/stage/group')
-    const games = isGroup
-      ? [
-          {
-            id: 101,
-            stage: 'group',
-            isKnockout: false,
-            status: 'SCHEDULED',
-            homeScore: 0,
-            awayScore: 0,
-            gameDate: '2026-06-11T19:00:00.000Z',
-            winnerTeamId: null,
-            homeTeam: {
-              id: '1',
-              name: 'Mexico',
-              abbreviation: 'MEX',
-              logo: 'https://example.test/mex.png',
-            },
-            awayTeam: {
-              id: '2',
-              name: 'Canada',
-              abbreviation: 'CAN',
-              logo: 'https://example.test/can.png',
-            },
+    const url = route.request().url()
+    let games: object[] = []
+    if (url.includes('/stage/group')) {
+      games = [
+        {
+          id: 101,
+          stage: 'group',
+          isKnockout: false,
+          status: 'SCHEDULED',
+          homeScore: 0,
+          awayScore: 0,
+          gameDate: '2026-06-11T19:00:00.000Z',
+          winnerTeamId: null,
+          homeTeam: {
+            id: '1',
+            name: 'Mexico',
+            abbreviation: 'MEX',
+            logo: 'https://example.test/mex.png',
           },
-        ]
-      : []
+          awayTeam: {
+            id: '2',
+            name: 'Canada',
+            abbreviation: 'CAN',
+            logo: 'https://example.test/can.png',
+          },
+        },
+      ]
+    } else if (url.includes('/stage/r32')) {
+      games = [
+        {
+          id: 201,
+          stage: 'r32',
+          isKnockout: true,
+          status: 'SCHEDULED',
+          homeScore: 0,
+          awayScore: 0,
+          gameDate: '2026-06-29T19:00:00.000Z',
+          winnerTeamId: null,
+          homeTeam: {
+            id: '3',
+            name: 'France',
+            abbreviation: 'FRA',
+            logo: 'https://example.test/fra.png',
+          },
+          awayTeam: {
+            id: 'tbd-1',
+            name: 'TBD',
+            abbreviation: 'TBD',
+            logo: '',
+          },
+        },
+      ]
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -82,10 +109,19 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
   await expect(page.getByRole('heading', { name: 'World Cup 2026 Picks' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
 
-  // MatchPickRow surfaces the three outcomes as buttons keyed by accessible name.
-  await expect(page.getByRole('button', { name: 'Pick Mexico to win' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pick a draw' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pick Canada to win' })).toBeVisible()
+  // MatchPickRow surfaces the three outcomes as buttons keyed by accessible
+  // name; the visible label is just the country code — no "(Home)"/"(Away)".
+  const groupRow = page.getByTestId('match-row-101')
+  await expect(groupRow.getByRole('button', { name: 'Pick Mexico to win' })).toHaveText('MEX')
+  await expect(groupRow.getByRole('button', { name: 'Pick a draw' })).toBeVisible()
+  await expect(groupRow.getByRole('button', { name: 'Pick Canada to win' })).toHaveText('CAN')
+
+  // The r32 fixture's away slot is still TBD, so the whole match is unpickable
+  // until both teams are assigned.
+  const tbdRow = page.getByTestId('match-row-201')
+  await expect(tbdRow.getByRole('button', { name: 'Pick France to win' })).toBeDisabled()
+  await expect(tbdRow.getByRole('button', { name: 'Pick a draw' })).toBeDisabled()
+  await expect(tbdRow.getByRole('button', { name: 'Pick TBD to win' })).toBeDisabled()
 })
 
 // A world_cup_2026 group surfaces the tournament-shaped tabs on its detail page:
