@@ -80,12 +80,27 @@ async function addWorldCupColumns() {
     `);
     console.log('   ✅ groups.pool_type ensured');
 
+    // 4b. games.winner_team_id — the resolved advancing-team id for soccer
+    //     knockout matches. Persisted because ESPN's competitor.winner flag (the
+    //     only signal on a PK shootout) isn't recoverable from a cached row's
+    //     scores alone. Nullable; NFL and group-stage rows leave it NULL. This
+    //     ALTER was originally only in schema.sql, so DBs that never ran a full
+    //     schema sync (e.g. production with INIT_DB unset) were missing it, which
+    //     made every Game.save() — NFL and World Cup alike — fail with
+    //     'column "winner_team_id" of relation "games" does not exist'.
+    console.log('\n4b. Adding games.winner_team_id (varchar nullable)...');
+    await pool.query(`
+      ALTER TABLE games
+      ADD COLUMN IF NOT EXISTS winner_team_id VARCHAR(50)
+    `);
+    console.log('   ✅ games.winner_team_id ensured');
+
     // 5. Verify the columns landed with the expected shape.
     console.log('\n5. Verifying added columns...');
     const verify = await pool.query(`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
-      WHERE (table_name = 'games' AND column_name IN ('league', 'stage'))
+      WHERE (table_name = 'games' AND column_name IN ('league', 'stage', 'winner_team_id'))
          OR (table_name = 'user_picks' AND column_name = 'picked_result')
          OR (table_name = 'groups' AND column_name = 'pool_type')
       ORDER BY table_name, column_name
