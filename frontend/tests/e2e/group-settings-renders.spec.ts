@@ -80,8 +80,6 @@ test('group settings tab renders the member roster outside a card', async ({ pag
   // Enter the Settings tab: the roster, invite, and manage sections render.
   await page.getByRole('tab', { name: 'Settings' }).click()
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible()
-  await expect(page.getByText('ada@example.com')).toBeVisible()
-  await expect(page.getByText('grace@example.com')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Invite Link' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Manage Group' })).toBeVisible()
 

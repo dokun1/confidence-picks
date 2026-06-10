@@ -101,16 +101,13 @@ export default function SettingsTab(props: SettingsTabProps) {
             {members.map(member => (
               <div key={member.id} className='flex items-center gap-md'>
                 <Avatar name={member.name} pictureUrl={member.pictureUrl} />
-                <div className='min-w-0 flex-1'>
-                  <div className='flex items-center gap-md'>
-                    <span className='font-medium'>{member.name}</span>
-                    {member.isOwner && (
-                      <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800'>
-                        Owner
-                      </span>
-                    )}
-                  </div>
-                  <p className='text-sm text-secondary truncate'>{member.email}</p>
+                <div className='min-w-0 flex-1 flex items-center gap-md'>
+                  <span className='font-medium'>{member.name}</span>
+                  {member.isOwner && (
+                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800'>
+                      Owner
+                    </span>
+                  )}
                 </div>
                 <span className='text-xs text-secondary whitespace-nowrap'>
                   Joined {new Date(member.joinedAt).toLocaleDateString()}
