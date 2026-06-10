@@ -38,8 +38,28 @@ jobs:
     - name: Deploy to Vercel
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       working-directory: ./frontend
-      run: pnpm dlx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+      # Retry the deploy: the Vercel upload API intermittently returns a non-JSON
+      # 5xx body (e.g. "Internal Server Error"), which the CLI surfaces as
+      # "FetchError: invalid json response body ... Unexpected token I in JSON at
+      # position 0" and exits 1 — failing an otherwise-healthy build. Retry up to
+      # 3 times with backoff so a transient blip no longer sinks the whole deploy.
+      run: |
+        for attempt in 1 2 3; do
+          echo "::group::Vercel deploy attempt $attempt"
+          if pnpm dlx vercel --prod --token "$VERCEL_TOKEN"; then
+            echo "::endgroup::"
+            exit 0
+          fi
+          echo "::endgroup::"
+          echo "Deploy attempt $attempt failed."
+          if [ "$attempt" -lt 3 ]; then
+            sleep $((attempt * 10))
+          fi
+        done
+        echo "::error::Vercel deploy failed after 3 attempts."
+        exit 1
       env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_FRONTEND_PROJECT_ID }}
         VITE_API_URL: https://api.confidence-picks.com
