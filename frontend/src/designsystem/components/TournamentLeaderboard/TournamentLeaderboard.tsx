@@ -14,10 +14,16 @@ export interface TournamentLeaderboardProps {
 const HEADER_CELL = 'px-sm py-xs text-left text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400';
 const BODY_CELL = 'px-sm py-xs align-middle text-sm text-secondary-900 dark:text-neutral-0 border-t border-secondary-200 dark:border-secondary-700';
 
+// The numeric tiebreaker fields, restricted to exactly the four stat keys so a
+// column can never point at a non-numeric field (name/pictureUrl/…). This keeps
+// `row[col.key]` strongly typed as `number` — no casts — and makes a future
+// typo a compile error.
+type StatKey = 'wins_correct' | 'losses' | 'draws_correct' | 'draws_incorrect';
+
 // The four tiebreaker stats, in tiebreaker order. Shared between the desktop
 // table columns and the mobile stat-chip grid so the two layouts can never
 // drift out of sync. `key` indexes the row; `label` is the human-facing header.
-const STAT_COLUMNS: { key: keyof TournamentLeaderboardRow; label: string; short: string }[] = [
+const STAT_COLUMNS: { key: StatKey; label: string; short: string }[] = [
   { key: 'wins_correct', label: 'Wins Correct', short: 'Wins' },
   { key: 'losses', label: 'Losses', short: 'Losses' },
   { key: 'draws_correct', label: 'Draws Correct', short: 'D ✓' },
@@ -56,7 +62,7 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
       {/* Mobile (below sm): card-free stacked list with a stat-chip grid. */}
       <ul className="sm:hidden divide-y divide-secondary-200 dark:divide-secondary-700">
         {rows.map((row, index) => (
-          <li key={row.memberId} className="py-md">
+          <li key={row.userId} className="py-md">
             <div className="flex items-center gap-sm">
               <span className="w-6 shrink-0 text-center text-sm font-medium text-secondary-500 dark:text-secondary-400 tabular-nums">
                 {index + 1}
@@ -84,7 +90,7 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
                     {col.short}
                   </div>
                   <div className="text-sm font-semibold tabular-nums text-secondary-900 dark:text-neutral-0">
-                    {row[col.key] as number}
+                    {row[col.key]}
                   </div>
                 </div>
               ))}
@@ -116,7 +122,7 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={row.memberId}>
+              <tr key={row.userId}>
                 <td className={`${BODY_CELL} text-center font-medium text-secondary-500 dark:text-secondary-400 tabular-nums`}>
                   {index + 1}
                 </td>
@@ -131,7 +137,7 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
                 </td>
                 {STAT_COLUMNS.map((col) => (
                   <td key={col.key} className={`${BODY_CELL} text-center tabular-nums`}>
-                    {row[col.key] as number}
+                    {row[col.key]}
                   </td>
                 ))}
               </tr>

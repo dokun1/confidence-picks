@@ -15,8 +15,11 @@ const identifier = 'wc-group';
 
 const rows: TournamentLeaderboardRow[] = [
   {
-    memberId: 'm1',
+    userId: 1,
     name: 'Alice',
+    pictureUrl: null,
+    rank: 1,
+    tied: false,
     points: 12,
     wins_correct: 4,
     losses: 1,
@@ -24,8 +27,11 @@ const rows: TournamentLeaderboardRow[] = [
     draws_incorrect: 1,
   },
   {
-    memberId: 'm2',
+    userId: 2,
     name: 'Bob',
+    pictureUrl: null,
+    rank: 2,
+    tied: false,
     points: 7,
     wins_correct: 2,
     losses: 2,

@@ -128,9 +128,11 @@ test('world cup leaderboard renders a card-free stat grid on mobile', async ({ p
     .poll(() => adaAvatar.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0)
 
-  // The mobile layout must not introduce horizontal scrolling.
-  const overflowsX = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  // The mobile layout must not introduce horizontal scrolling. Allow a 1px
+  // tolerance for subpixel rounding (scrollWidth can exceed clientWidth by <1px
+  // on some platforms without any real overflow).
+  const overflowX = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   )
-  expect(overflowsX).toBe(false)
+  expect(overflowX).toBeLessThanOrEqual(1)
 })

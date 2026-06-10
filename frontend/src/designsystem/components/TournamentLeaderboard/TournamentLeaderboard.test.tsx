@@ -15,8 +15,11 @@ import type { TournamentLeaderboardRow } from '../../../lib/types';
 // is scoped to one layout root via `within(table())` / `within(mobileList())`.
 // An unscoped getByText would match the same value in both layouts and throw.
 
-function makeRow(overrides: Partial<TournamentLeaderboardRow> & Pick<TournamentLeaderboardRow, 'memberId' | 'name'>): TournamentLeaderboardRow {
+function makeRow(overrides: Partial<TournamentLeaderboardRow> & Pick<TournamentLeaderboardRow, 'userId' | 'name'>): TournamentLeaderboardRow {
   return {
+    pictureUrl: null,
+    rank: 1,
+    tied: false,
     points: 0,
     wins_correct: 0,
     losses: 0,
@@ -27,7 +30,7 @@ function makeRow(overrides: Partial<TournamentLeaderboardRow> & Pick<TournamentL
 }
 
 const ZARA = makeRow({
-  memberId: 'm-zara',
+  userId: 101,
   name: 'Zara',
   points: 40,
   wins_correct: 11,
@@ -37,7 +40,7 @@ const ZARA = makeRow({
 });
 
 const MILO = makeRow({
-  memberId: 'm-milo',
+  userId: 102,
   name: 'Milo',
   points: 50,
   wins_correct: 13,
@@ -47,7 +50,7 @@ const MILO = makeRow({
 });
 
 const ADA = makeRow({
-  memberId: 'm-ada',
+  userId: 103,
   name: 'Ada',
   points: 60,
   wins_correct: 15,
@@ -168,7 +171,7 @@ describe('TournamentLeaderboard', () => {
 
   describe('avatars', () => {
     const WITH_PIC: TournamentLeaderboardRow[] = [
-      makeRow({ memberId: 'm-pic', name: 'Pic Person', pictureUrl: 'https://example.com/p.jpg?sz=100' }),
+      makeRow({ userId: 200, name: 'Pic Person', pictureUrl: 'https://example.com/p.jpg?sz=100' }),
     ];
 
     it('renders the member picture in both layouts when pictureUrl is provided', () => {

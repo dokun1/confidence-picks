@@ -244,8 +244,11 @@ describe('GroupDetailsPage', () => {
       mockGetWorldCupLeaderboard.mockResolvedValue({
         leaderboard: [
           {
-            memberId: 'm1',
+            userId: 1,
             name: 'Alice',
+            pictureUrl: null,
+            rank: 1,
+            tied: false,
             points: 12,
             wins_correct: 4,
             losses: 1,
