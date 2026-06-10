@@ -165,12 +165,13 @@ router.get('/group/:groupId/world-cup/leaderboard', authenticateToken, async (re
     const group = await ensureMembership(groupId, req.user.id);
 
     // Resolved games for every stage. winnerTeamId is grafted on by GameService
-    // and is the only signal of the advancing side on a PK shootout.
-    const games = [];
-    for (const stage of WORLD_CUP_STAGES) {
-      const stageGames = await GameService.getWorldCupStage(stage);
-      games.push(...stageGames);
-    }
+    // and is the only signal of the advancing side on a PK shootout. The stages
+    // are independent, so fetch them concurrently — sequentially this was seven
+    // back-to-back round trips and dominated the endpoint's latency.
+    const stageSlates = await Promise.all(
+      WORLD_CUP_STAGES.map((stage) => GameService.getWorldCupStage(stage))
+    );
+    const games = stageSlates.flat();
     const gameById = new Map(games.map(g => [g.id, g]));
     const wcGameIds = [...gameById.keys()];
 

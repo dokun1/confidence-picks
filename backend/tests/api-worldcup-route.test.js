@@ -33,7 +33,8 @@ describe('GET /api/games/world-cup-2026/stage/:stage', () => {
   beforeEach(() => {
     process.env.USE_MOCK_ESPN = 'true';
     MockESPNService.configure();
-    mock.method(Game, 'findByESPNId', async () => null);
+    mock.method(Game, 'findByLeagueStage', async () => []);
+    mock.method(Game, 'findByESPNIds', async () => new Map());
     mock.method(Game.prototype, 'save', async function save() {
       this.id = this.id || 1;
       return this;

@@ -26,11 +26,13 @@ describe('Game.fromESPNData league/stage stamping', () => {
     assert.strictEqual(game.stage, 'r16');
   });
 
-  test('leaves league and stage null for an NFL event (no opts)', () => {
+  // League defaults to 'nfl' (not null) so the games.league NOT NULL DEFAULT
+  // isn't bypassed with an explicit NULL on save — see fromESPNData.
+  test("defaults league to 'nfl' and stage to null for an NFL event (no opts)", () => {
     const [nflGame] = generateMockWeek();
     const game = Game.fromESPNData(nflGame);
 
-    assert.strictEqual(game.league, null);
+    assert.strictEqual(game.league, 'nfl');
     assert.strictEqual(game.stage, null);
   });
 
@@ -88,13 +90,13 @@ describe('Game.toJSON surfaces league and stage', () => {
     assert.strictEqual(json.stage, 'group');
   });
 
-  test('includes the fields as null for an NFL game', () => {
+  test("includes league 'nfl' and a null stage for an NFL game", () => {
     const [nflGame] = generateMockWeek();
     const json = Game.fromESPNData(nflGame).toJSON();
 
     assert.ok('league' in json, 'toJSON should always include the league field');
     assert.ok('stage' in json, 'toJSON should always include the stage field');
-    assert.strictEqual(json.league, null);
+    assert.strictEqual(json.league, 'nfl');
     assert.strictEqual(json.stage, null);
   });
 });
