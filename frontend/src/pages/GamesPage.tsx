@@ -328,8 +328,8 @@ export default function GamesPage() {
           point value of a pick isn't obvious from the row UI alone. */}
       <p className="mt-xs text-sm text-secondary">
         Rank each game by confidence: your surest pick is worth the most points (down to 1 for your
-        least sure). Win the game and you bank the points you assigned it; lose and you score
-        nothing. Picks lock at kickoff.
+        least sure). Win the game and you bank the points you assigned it; lose and that many points
+        are subtracted from your score (ties score zero). Picks lock at kickoff.
       </p>
 
       {/* Selector controls */}

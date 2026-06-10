@@ -58,7 +58,7 @@ describe('HomePage', () => {
 
     it('renders all three feature cards', () => {
       renderHome();
-      expect(screen.getByRole('heading', { name: 'Weekly Games' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Games' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Confidence Picks' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Leaderboards' })).toBeInTheDocument();
     });

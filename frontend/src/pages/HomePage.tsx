@@ -20,7 +20,7 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
-    title: 'Weekly Games',
+    title: 'Games',
     description: 'Browse games by week or tournament stage and make a pick for every matchup.',
     iconWrapper: 'bg-primary-100 dark:bg-primary-900',
     iconColor: 'text-primary-600 dark:text-primary-400',
