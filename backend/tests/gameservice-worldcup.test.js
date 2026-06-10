@@ -66,6 +66,42 @@ describe('GameService.getWorldCupStage winner resolution', () => {
   });
 });
 
+describe('GameService.getWorldCupStage persistence resilience', () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+    mock.method(Game, 'findByLeagueStage', async () => []);
+    mock.method(Game, 'findByESPNIds', async () => new Map());
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+  });
+
+  // Regression for the prod incident where the games table was missing the
+  // winner_team_id column: every Game.save() threw, and getWorldCupStage
+  // propagated it as a 500 that blanked the stage list and the leaderboard
+  // mid-match. A write failure must now degrade to serving the live ESPN data
+  // (in-memory, uncached) rather than failing the read.
+  test('a save failure serves live data instead of throwing', async () => {
+    mock.method(Game.prototype, 'save', async () => {
+      throw new Error('column "winner_team_id" of relation "games" does not exist');
+    });
+
+    const games = await GameService.getWorldCupStage('group');
+
+    assert.ok(Array.isArray(games), 'should resolve to a slate, not reject');
+    assert.ok(games.length > 0, 'live ESPN games should still be returned when persistence fails');
+    // The returned objects carry the live scores parsed from ESPN even though
+    // they were never persisted.
+    const draw = games.find(g => g.homeTeam.abbreviation === 'MEX' && g.awayTeam.abbreviation === 'USA');
+    assert.ok(draw, 'live slate should include the MEX vs USA fixture despite the failed save');
+    assert.strictEqual(draw.status, 'FINAL', 'live status should be parsed from ESPN');
+  });
+});
+
 describe('GameService.getWorldCupStage cache behavior', () => {
   // A persisted Game row as the finders would return it. Defaults to a fresh,
   // completed group-stage regulation result (home 2-1).

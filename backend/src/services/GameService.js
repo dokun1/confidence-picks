@@ -223,14 +223,14 @@ export class GameService {
         freshGame.winnerTeamId = GameService.resolveWinnerTeamId(freshGame, stage, winnerHomeAway);
 
         if (!cachedGame) {
-          await freshGame.save();
+          await GameService.persistOrServeLive(freshGame);
           games.push(freshGame);
           continue;
         }
 
         const winnerChanged = freshGame.winnerTeamId !== (cachedGame.winnerTeamId ?? null);
         if (forceRefresh || cachedGame.isStale() || freshGame.isDifferentFrom(cachedGame) || winnerChanged) {
-          await freshGame.save();
+          await GameService.persistOrServeLive(freshGame);
           games.push(freshGame);
         } else {
           games.push(cachedGame);
@@ -251,6 +251,21 @@ export class GameService {
     const competitors = espnEvent?.competitions?.[0]?.competitors || [];
     const flagged = competitors.find(c => c.winner === true);
     return flagged ? flagged.homeAway : null;
+  }
+
+  // Persist a freshly-fetched stage game, but never let a write failure take down
+  // a live read. The returned slate is built from these in-memory Game objects
+  // (already carrying the live ESPN scores + resolved winnerTeamId), so on a
+  // persistence error we log and serve the live data rather than throwing — a 500
+  // here would blank the stage list and the leaderboard mid-match. The canonical
+  // example is a schema drift (e.g. a missing games column): scores still surface
+  // live every refresh; they just aren't cached until the DB is repaired.
+  static async persistOrServeLive(game) {
+    try {
+      await game.save();
+    } catch (error) {
+      console.error(`[getWorldCupStage] persist failed for espnId=${game.espnId}; serving live ESPN data uncached: ${error.message}`);
+    }
   }
 
   // Resolve the winning team's id for a World Cup match, or null when there is
