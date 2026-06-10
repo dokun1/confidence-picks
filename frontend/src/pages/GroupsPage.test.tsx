@@ -145,6 +145,43 @@ describe('GroupsPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/join-group');
   });
 
+  it('filters the visible cards when a filter is applied', async () => {
+    // groupA is owned, groupB is a member.
+    mockGetMyGroups.mockResolvedValue([groupA, groupB]);
+
+    renderPage();
+    await screen.findByRole('heading', { name: groupA.name });
+    expect(screen.getByRole('heading', { name: groupB.name })).toBeInTheDocument();
+
+    // Open the filter popover and restrict to "Groups I own".
+    fireEvent.click(screen.getByRole('button', { name: /filters/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /groups i own/i }));
+
+    // Only the owned group remains; the member group is filtered out.
+    expect(screen.getByRole('heading', { name: groupA.name })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: groupB.name })).toBeNull();
+  });
+
+  it('shows a no-matches message when filters exclude every group', async () => {
+    // Both groups are NFL; filtering to World Cup leaves nothing.
+    mockGetMyGroups.mockResolvedValue([
+      { ...groupA, poolType: 'nfl_weekly' },
+      { ...groupB, poolType: 'nfl_weekly' },
+    ]);
+
+    renderPage();
+    await screen.findByRole('heading', { name: groupA.name });
+
+    fireEvent.click(screen.getByRole('button', { name: /filters/i }));
+    fireEvent.click(screen.getByRole('radio', { name: 'World Cup 2026 Picks' }));
+
+    expect(screen.getByText(/no groups match your search or filters/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: groupA.name })).toBeNull();
+    // Create/Join remain reachable even with no matches.
+    expect(screen.getByRole('button', { name: /create group/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /join group/i })).toBeInTheDocument();
+  });
+
   it('shows a loading indicator before getMyGroups resolves', async () => {
     // A never-resolving promise keeps the page in its loading state.
     mockGetMyGroups.mockReturnValue(new Promise<GroupData[]>(() => {}));
