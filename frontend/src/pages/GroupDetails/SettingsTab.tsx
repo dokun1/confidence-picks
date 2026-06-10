@@ -90,8 +90,9 @@ export default function SettingsTab(props: SettingsTabProps) {
 
   return (
     <div className='space-y-lg'>
-      {/* Member roster */}
-      <section className='rounded-md border border-border bg-surface p-lg'>
+      {/* Member roster — rendered bare (no card) so the list flows with the
+          page; the invite and manage sections below keep their cards. */}
+      <section>
         <h2 className='text-lg font-semibold mb-lg'>Members</h2>
         {members.length === 0 ? (
           <p className='text-secondary'>No members yet.</p>

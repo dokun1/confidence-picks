@@ -107,6 +107,23 @@ describe('SettingsTab member roster', () => {
     // Exactly one member is an owner in the fixture.
     expect(screen.getAllByText('Owner')).toHaveLength(1);
   });
+
+  it('renders the roster bare while Invite Link and Manage Group keep their cards', () => {
+    renderSettings();
+
+    // The member list flows with the page — its section carries no card styling.
+    const membersSection = screen
+      .getByRole('heading', { name: 'Members' })
+      .closest('section') as HTMLElement;
+    expect(membersSection.className).toBe('');
+
+    // The other two sections remain bordered cards.
+    for (const name of ['Invite Link', 'Manage Group']) {
+      const section = screen.getByRole('heading', { name }).closest('section') as HTMLElement;
+      expect(section.className).toContain('border');
+      expect(section.className).toContain('bg-surface');
+    }
+  });
 });
 
 describe('SettingsTab invite link', () => {
