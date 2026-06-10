@@ -1,0 +1,119 @@
+name: WC Score Verify (Jun 11)
+
+# Automated run of the score-update verification runbook (issue #110) for the
+# first World Cup 2026 match day. Each run posts a compact snapshot comment to
+# the issue so the checks (ESPN shape + live prod stage + leaderboard) happen
+# hands-off at the key moments around the opener (RSA @ MEX, kickoff 19:00 UTC).
+#
+# IMPORTANT: scheduled workflows only fire from the repository's DEFAULT branch.
+# This file must be merged to `main` for the cron triggers to run tomorrow.
+#
+# Secrets required for the prod checks (Settings -> Secrets and variables ->
+# Actions). The ESPN (P1) check runs without them.
+#   WC_REFRESH_TOKEN - a 30-day refresh token from your logged-in browser
+#                      (DevTools -> Application -> Local Storage -> key
+#                      `refreshToken`). The job exchanges it for a short-lived
+#                      access token at run time via POST /auth/refresh.
+#   WC_GROUP_ID      - the group identifier (from the group's URL in the app)
+#                      whose World Cup leaderboard to check.
+
+on:
+  workflow_dispatch: {}        # manual run — use this at 2:05 PM CDT for exact timing
+  schedule:
+    # All times UTC. CDT = UTC-5. Opener kicks off 19:00 UTC (2:00 PM CDT).
+    # day-of-month 11 + month 6 => only fires on June 11. GitHub cron can drift
+    # ~5-15 min on shared runners, so these are spread across the match window.
+    - cron: '30 18 11 6 *'     # ~1:30 PM CDT  pre-flight (P2-P4 context)
+    - cron: '5 19 11 6 *'      # ~2:05 PM CDT  D1 kickoff / status flip
+    - cron: '40 19 11 6 *'     # ~2:40 PM CDT  D2 mid-match score
+    - cron: '15 20 11 6 *'     # ~3:15 PM CDT  second half
+    - cron: '55 20 11 6 *'     # ~3:55 PM CDT  A2 full-time + leaderboard
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      ISSUE: '110'
+      API: 'https://api.confidence-picks.com'
+      ESPN_URL: 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260627&limit=200'
+      OPENER_ID: '760415'      # RSA @ MEX, the first match
+      WC_REFRESH_TOKEN: ${{ secrets.WC_REFRESH_TOKEN }}
+      WC_GROUP_ID: ${{ secrets.WC_GROUP_ID }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      EVENT_NAME: ${{ github.event_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Run checks and comment on the runbook issue
+        run: |
+          set -uo pipefail
+          NOW=$(date -u '+%Y-%m-%d %H:%M UTC')
+          OUT=/tmp/wc-comment.md
+
+          # ---------- P1: public ESPN payload (no auth) ----------
+          ESPN=$(curl -sS --max-time 30 "$ESPN_URL" || echo '{}')
+          ECOUNT=$(echo "$ESPN" | jq -r '(.events // []) | length' 2>/dev/null || echo '?')
+          EOPENER=$(echo "$ESPN" | jq -r --arg id "$OPENER_ID" '
+            ((.events // []) | map(select(.id==$id)) | .[0]) as $g
+            | if $g == null then "opener not found"
+              else "\($g.shortName) — slug=\($g.season.slug) state=\($g.competitions[0].status.type.state) " +
+                   "\($g.competitions[0].competitors[0].team.abbreviation) \($g.competitions[0].competitors[0].score)-\($g.competitions[0].competitors[1].score) \($g.competitions[0].competitors[1].team.abbreviation)"
+              end' 2>/dev/null || echo 'parse error')
+          if [ "$ECOUNT" != "0" ] && [ "$ECOUNT" != "?" ] && \
+             echo "$ESPN" | jq -e --arg id "$OPENER_ID" '(.events // []) | any(.id==$id and .season.slug=="group-stage")' >/dev/null 2>&1; then
+            ESPN_VERDICT='✅'
+          else
+            ESPN_VERDICT='⚠️'
+          fi
+
+          # ---------- Prod auth: exchange refresh token for a 15m access token ----------
+          PROD='(skipped — set the WC_REFRESH_TOKEN secret to enable)'
+          LB='(skipped)'
+          if [ -n "${WC_REFRESH_TOKEN:-}" ]; then
+            ACCESS=$(curl -sS --max-time 30 -X POST "$API/auth/refresh" \
+              -H 'Content-Type: application/json' \
+              -d "{\"refreshToken\":\"$WC_REFRESH_TOKEN\"}" 2>/dev/null | jq -r '.accessToken // empty' 2>/dev/null)
+            if [ -z "${ACCESS:-}" ]; then
+              PROD='⚠️ could not get an access token — WC_REFRESH_TOKEN invalid/expired (re-grab it from the browser)'
+            else
+              # ---------- D1/D2: live stage, forced refresh ----------
+              STAGE=$(curl -sS --max-time 30 "$API/api/games/world-cup-2026/stage/group?refresh=true" \
+                -H "Authorization: Bearer $ACCESS" 2>/dev/null || echo '{}')
+              PROD=$(echo "$STAGE" | jq -r --arg id "$OPENER_ID" '
+                ((.games // []) | map(select(.espnId==$id)) | .[0]) as $g
+                | if $g == null then "opener not in slate (stage count=\((.games // []) | length))"
+                  else "status=\($g.status) \($g.homeTeam.abbreviation) \($g.homeScore)-\($g.awayScore) \($g.awayTeam.abbreviation) clock=\($g.displayClock // "-")"
+                  end' 2>/dev/null || echo 'parse error')
+              # ---------- A2: leaderboard scores on-read ----------
+              if [ -n "${WC_GROUP_ID:-}" ]; then
+                LBJSON=$(curl -sS --max-time 30 "$API/api/picks/group/$WC_GROUP_ID/world-cup/leaderboard" \
+                  -H "Authorization: Bearer $ACCESS" 2>/dev/null || echo '{}')
+                LB=$(echo "$LBJSON" | jq -r '
+                  if .leaderboard then
+                    (.leaderboard | sort_by(-(.points // 0)) | .[0] // {}) as $t
+                    | "leader: \($t.name // "?") — \($t.points // 0) pts (\($t.wins_correct // 0)W/\($t.losses // 0)L/\($t.draws_correct // 0)DC/\($t.draws_incorrect // 0)DI), \((.leaderboard | length)) members"
+                  else "error: \(.error // "unknown")" end' 2>/dev/null || echo 'parse error')
+              else
+                LB='(skipped — set the WC_GROUP_ID secret to enable)'
+              fi
+            fi
+          fi
+
+          # ---------- Build and post the snapshot comment ----------
+          {
+            echo "### 🤖 Score-verify snapshot — $NOW"
+            echo ""
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| **P1 ESPN payload** $ESPN_VERDICT | events=$ECOUNT · $EOPENER |"
+            echo "| **D1/D2 prod stage** | $PROD |"
+            echo "| **A2 leaderboard** | $LB |"
+            echo ""
+            echo "<sub>Automated by \`.github/workflows/wc-score-verify.yml\` · trigger: $EVENT_NAME · see the runbook above for what each gate means.</sub>"
+          } > "$OUT"
+
+          cat "$OUT"
+          gh issue comment "$ISSUE" --repo "$REPO" --body-file "$OUT"
