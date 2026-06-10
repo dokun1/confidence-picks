@@ -82,7 +82,7 @@ export default function LoginPage() {
               Login
             </h1>
             <p className="text-lg text-[var(--color-text-secondary)]">
-              Welcome to Confidence Picks — sign in to start making your NFL picks and compete with
+              Welcome to Confidence Picks — sign in to start making your picks and compete with
               friends.
             </p>
           </div>

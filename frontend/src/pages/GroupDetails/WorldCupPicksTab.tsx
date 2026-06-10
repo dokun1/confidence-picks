@@ -259,6 +259,28 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
 
   return (
     <div>
+      {/* How scoring works — World Cup pools are flat-per-match (no confidence)
+          and the group and knockout stages score differently, so the rules
+          aren't obvious from the Home/Draw/Away row alone. */}
+      <div className="mb-lg rounded-md border border-border bg-surface p-sm text-sm text-secondary">
+        <p>
+          Pick an outcome for every match — there&apos;s no confidence ranking, and your score is
+          the sum across every match you pick.
+        </p>
+        <ul className="mt-xs list-disc space-y-xxs pl-lg">
+          <li>
+            <span className="font-medium text-secondary-900 dark:text-neutral-0">Group stage:</span>{' '}
+            winning team = 3 pts · a team that draws = 1 · pick &ldquo;Draw&rdquo; = 2 if it draws (1
+            if a team wins) · losing team = 0.
+          </li>
+          <li>
+            <span className="font-medium text-secondary-900 dark:text-neutral-0">Knockout:</span>{' '}
+            the team that advances = 3 pts, everyone else = 0. Penalties still count as advancing, so
+            &ldquo;Draw&rdquo; is disabled.
+          </li>
+        </ul>
+      </div>
+
       {/* Match list, grouped by stage */}
       <div className="space-y-lg">
         {fetchState.loading ? (

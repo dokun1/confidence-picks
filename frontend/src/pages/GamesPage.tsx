@@ -324,6 +324,14 @@ export default function GamesPage() {
     <div className="mx-auto max-w-4xl px-sm py-lg sm:p-lg">
       <h1 className="text-2xl font-bold text-secondary-900 dark:text-neutral-0">NFL Games</h1>
 
+      {/* How scoring works — confidence pools assign each game a rank, so the
+          point value of a pick isn't obvious from the row UI alone. */}
+      <p className="mt-xs text-sm text-secondary">
+        Rank each game by confidence: your surest pick is worth the most points (down to 1 for your
+        least sure). Win the game and you bank the points you assigned it; lose and you score
+        nothing. Picks lock at kickoff.
+      </p>
+
       {/* Selector controls */}
       <div className="mt-md flex flex-wrap items-end gap-md rounded-md border border-border bg-surface p-md">
         <label className="flex flex-col gap-xxs text-sm">
