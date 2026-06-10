@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthService from '../lib/authService.js';
 import { useAuth, type User } from '../contexts/AuthContext';
+import { consumePostLoginRedirect } from '../lib/postLoginRedirect';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -40,7 +41,12 @@ export default function AuthCallback() {
           // context's User requires it. Mirror the cast already used in
           // AuthContext.tsx where getUser() is widened to User.
           setAuthUser(user as User);
-          navigate('/', { replace: true });
+          // If the user arrived via a guarded link (e.g. an invite), LoginPage
+          // stashed where they were headed before the OAuth round-trip. Return
+          // them there so the invite reappears for them to accept; otherwise
+          // fall back to the home page.
+          const redirect = consumePostLoginRedirect();
+          navigate(redirect ?? '/', { replace: true });
         } else {
           navigate('/login', {
             replace: true,
