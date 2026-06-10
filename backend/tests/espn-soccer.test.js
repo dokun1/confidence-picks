@@ -37,18 +37,28 @@ describe('ESPNService.fetchSoccerWeek', () => {
       assert.ok(lastUrl.startsWith(SOCCER_SCOREBOARD), `URL should target the fifa.world scoreboard, got ${lastUrl}`);
     });
 
-    test('maps a group stage key to ?groups=1', async () => {
+    // Known stage keys fetch by tournament date window (+ limit=200 so the group
+    // slate clears ESPN's default 25-event cap) — the `?groups=` filter only
+    // returns today's matches, so it can't serve a whole-stage fetch.
+    test('maps a group stage key to its tournament date window', async () => {
       stubFetch();
       await ESPNService.fetchSoccerWeek('fifa.world', 'group');
-      assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?groups=1`);
+      assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?dates=20260611-20260627&limit=200`);
     });
 
-    test('maps knockout stage keys to their groups value', async () => {
-      const expected = { r32: '2', r16: '3', qf: '4', sf: '5', third: '6', final: '7' };
-      for (const [stage, groups] of Object.entries(expected)) {
+    test('maps knockout stage keys to their date windows', async () => {
+      const expected = {
+        r32: '20260628-20260703',
+        r16: '20260704-20260707',
+        qf: '20260709-20260711',
+        sf: '20260714-20260715',
+        third: '20260718-20260718',
+        final: '20260719-20260719',
+      };
+      for (const [stage, dates] of Object.entries(expected)) {
         stubFetch();
         await ESPNService.fetchSoccerWeek('fifa.world', stage);
-        assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?groups=${groups}`, `${stage} should map to groups=${groups}`);
+        assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?dates=${dates}&limit=200`, `${stage} should map to dates=${dates}`);
       }
     });
 
@@ -67,7 +77,7 @@ describe('ESPNService.fetchSoccerWeek', () => {
     test('supports a date-only fetch with no group filter', async () => {
       stubFetch();
       await ESPNService.fetchSoccerWeek('fifa.world', { dates: '20260611' });
-      assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?dates=20260611`);
+      assert.strictEqual(lastUrl, `${SOCCER_SCOREBOARD}?dates=20260611&limit=200`);
     });
   });
 

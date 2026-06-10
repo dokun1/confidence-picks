@@ -16,9 +16,10 @@ describe('GameService.getWorldCupStage winner resolution', () => {
     process.env.USE_MOCK_ESPN = 'true';
     MockESPNService.configure(); // enables the mock + seeds mockGames
 
-    // Stub persistence: treat every event as new (no cache) and make save a no-op
-    // that returns the Game unchanged, so no DB connection is needed.
-    mock.method(Game, 'findByESPNId', async () => null);
+    // Stub persistence: an empty stage cache (forces the ESPN refresh path),
+    // no per-event cache hits, and a no-op save, so no DB connection is needed.
+    mock.method(Game, 'findByLeagueStage', async () => []);
+    mock.method(Game, 'findByESPNIds', async () => new Map());
     mock.method(Game.prototype, 'save', async function save() {
       this.id = this.id || 1;
       return this;
@@ -62,6 +63,129 @@ describe('GameService.getWorldCupStage winner resolution', () => {
     assert.ok(pk, 'knockout slate should include the MEX vs USA shootout');
     assert.strictEqual(pk.homeScore, pk.awayScore, 'PK match should be level after regulation');
     assert.strictEqual(pk.winnerTeamId, WORLD_CUP_2026_TEAMS.USA.id, 'away advances on the ESPN winner flag');
+  });
+});
+
+describe('GameService.getWorldCupStage cache behavior', () => {
+  // A persisted Game row as the finders would return it. Defaults to a fresh,
+  // completed group-stage regulation result (home 2-1).
+  const cachedGame = (overrides = {}) => new Game({
+    id: 1,
+    espnId: '760601',
+    homeTeam: { id: WORLD_CUP_2026_TEAMS.MEX.id, abbreviation: 'MEX' },
+    awayTeam: { id: WORLD_CUP_2026_TEAMS.USA.id, abbreviation: 'USA' },
+    gameDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    status: 'FINAL',
+    homeScore: 2,
+    awayScore: 1,
+    week: 1,
+    season: 2026,
+    seasonType: 1,
+    league: 'world_cup',
+    stage: 'group',
+    lastUpdated: new Date(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+    mock.method(Game, 'findByESPNIds', async () => new Map());
+    mock.method(Game.prototype, 'save', async function save() {
+      this.id = this.id || 1;
+      return this;
+    });
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+  });
+
+  test('serves a fresh cached slate without touching ESPN', async () => {
+    const cached = cachedGame();
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    const games = await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 0, 'fresh cache must not hit ESPN');
+    assert.strictEqual(games.length, 1);
+    assert.strictEqual(games[0], cached, 'the cached Game is returned as-is');
+    // No stored winner (pre-migration row): a completed regulation result still
+    // resolves from the persisted scores.
+    assert.strictEqual(games[0].winnerTeamId, WORLD_CUP_2026_TEAMS.MEX.id);
+  });
+
+  test('prefers the persisted winner for a cached PK-shootout knockout', async () => {
+    // Level 90' scoreline — only the stored winner_team_id knows who advanced.
+    const cached = cachedGame({
+      stage: 'r16',
+      homeScore: 1,
+      awayScore: 1,
+      winnerTeamId: WORLD_CUP_2026_TEAMS.USA.id,
+    });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    const games = await GameService.getWorldCupStage('r16');
+
+    assert.strictEqual(espn.mock.callCount(), 0);
+    assert.strictEqual(games[0].winnerTeamId, WORLD_CUP_2026_TEAMS.USA.id);
+  });
+
+  test('an in-progress slate older than 60s refreshes from ESPN', async () => {
+    const cached = cachedGame({
+      status: 'IN_PROGRESS',
+      lastUpdated: new Date(Date.now() - 2 * 60 * 1000),
+    });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 1, 'stale live slate must refresh');
+  });
+
+  test('a SCHEDULED game at/past its start time forces a refresh', async () => {
+    const cached = cachedGame({
+      status: 'SCHEDULED',
+      gameDate: new Date(Date.now() - 5 * 60 * 1000), // kicked off 5 minutes ago
+      lastUpdated: new Date(Date.now() - 10 * 60 * 1000),
+    });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 1, 'an unstarted-but-due slate must refresh');
+  });
+
+  test('forceRefresh skips the cache entirely', async () => {
+    const finder = mock.method(Game, 'findByLeagueStage', async () => [cachedGame()]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    await GameService.getWorldCupStage('group', true);
+
+    assert.strictEqual(finder.mock.callCount(), 0, 'forceRefresh must not read the stage cache');
+    assert.strictEqual(espn.mock.callCount(), 1);
+  });
+
+  test('the refresh path persists the resolved winner with the row', async () => {
+    mock.method(Game, 'findByLeagueStage', async () => []);
+    const savedWinners = new Map();
+    mock.method(Game.prototype, 'save', async function save() {
+      savedWinners.set(`${this.homeTeam.abbreviation}-${this.awayTeam.abbreviation}`, this.winnerTeamId);
+      this.id = this.id || 1;
+      return this;
+    });
+
+    await GameService.getWorldCupStage('r16');
+
+    // Fixture: MEX 1-1 USA decided on penalties — the winner must already be on
+    // the Game at save time, otherwise a cached read can never score the match.
+    assert.strictEqual(savedWinners.get('MEX-USA'), WORLD_CUP_2026_TEAMS.USA.id);
   });
 });
 

@@ -33,6 +33,10 @@ export class Game {
     // League/stage carry soccer awareness. NFL games leave these null/undefined.
     this.league = data.league;
     this.stage = data.stage;
+    // Resolved match winner (soccer knockouts). Persisted because ESPN's
+    // competitor.winner flag — the only signal on a PK shootout — is not
+    // recoverable from a cached row's scores alone.
+    this.winnerTeamId = data.winnerTeamId ?? null;
     this.lastUpdated = data.lastUpdated;
     this.createdAt = data.createdAt;
   }
@@ -46,11 +50,7 @@ static fromESPNData(espnGame, opts = {}) {
   // with an explicit NULL (which is what landed pre-fix and 500'd every NFL save).
   const { league = 'nfl', stage = null } = opts;
 
-  console.log('ESPN Game Data:', JSON.stringify(espnGame, null, 2));
-  
   const competition = espnGame.competitions[0];
-  console.log('Competition:', JSON.stringify(competition, null, 2));
-  
   const competitors = competition.competitors;
   
   const homeTeam = competitors.find(c => c.homeAway === 'home');
@@ -198,8 +198,8 @@ async save() {
       espn_id, home_team, away_team, game_date, status,
       period, display_clock, status_detail,
       home_score, away_score, week, season, season_type, odds, probability, last_updated,
-      league, stage
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      league, stage, winner_team_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     ON CONFLICT (espn_id)
     DO UPDATE SET
       home_team = $2,
@@ -218,16 +218,10 @@ async save() {
       probability = $15,
       last_updated = $16,
       league = $17,
-      stage = $18
+      stage = $18,
+      winner_team_id = $19
     RETURNING *
   `;
-
-  // Add debugging
-  console.log('Saving game with values:');
-  console.log('homeTeam:', this.homeTeam);
-  console.log('awayTeam:', this.awayTeam);
-  console.log('homeTeam JSON:', JSON.stringify(this.homeTeam));
-  console.log('awayTeam JSON:', JSON.stringify(this.awayTeam));
 
   const values = [
     this.espnId,
@@ -247,7 +241,8 @@ async save() {
     JSON.stringify(this.probability || null),
     this.lastUpdated,
     this.league || null,
-    this.stage || null
+    this.stage || null,
+    this.winnerTeamId || null
   ];
 
   const result = await pool.query(query, values);
@@ -255,65 +250,10 @@ async save() {
   return this;
 }
 
-// Find game by ESPN ID
-static async findByESPNId(espnId) {
-  const query = 'SELECT * FROM games WHERE espn_id = $1';
-  const result = await pool.query(query, [espnId]);
-  
-  if (result.rows.length === 0) return null;
-  
-  const row = result.rows[0];
-  
-  // Add debugging to see what's in the database
-  console.log('Raw database row:', row);
-  console.log('home_team type:', typeof row.home_team);
-  console.log('home_team value:', row.home_team);
-  console.log('away_team type:', typeof row.away_team);
-  console.log('away_team value:', row.away_team);
-  
-  // Safe JSON parsing
-  let homeTeam, awayTeam;
-  try {
-    homeTeam = typeof row.home_team === 'string' ? JSON.parse(row.home_team) : row.home_team;
-    awayTeam = typeof row.away_team === 'string' ? JSON.parse(row.away_team) : row.away_team;
-  } catch (error) {
-    console.error('JSON parsing error:', error);
-    console.error('home_team:', row.home_team);
-    console.error('away_team:', row.away_team);
-    throw new Error('Failed to parse team data from database');
-  }
-  
+// Build a Game from a raw games-table row, shared by every finder so they all
+// parse JSONB columns and carry winner_team_id identically.
+static fromDbRow(row) {
   return new Game({
-    id: row.id,
-    espnId: row.espn_id,
-    homeTeam: homeTeam,
-    awayTeam: awayTeam,
-    gameDate: new Date(row.game_date),
-  status: row.status, // already normalized after migration; if legacy, frontend can still interpret
-  rawStatus: row.status, // fallback
-  period: row.period,
-  displayClock: row.display_clock,
-  statusDetail: row.status_detail,
-    homeScore: row.home_score,
-  odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
-  probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
-    awayScore: row.away_score,
-    week: row.week,
-    season: row.season,
-    seasonType: row.season_type,
-    league: row.league,
-    stage: row.stage,
-    lastUpdated: new Date(row.last_updated),
-    createdAt: new Date(row.created_at)
-  });
-}
-
-// Find all games for a given week/season/seasonType
-static async findByWeekSeason(season, seasonType, week) {
-  const query = `SELECT * FROM games WHERE season = $1 AND season_type = $2 AND week = $3`;
-  const result = await pool.query(query, [season, seasonType, week]);
-  if (result.rows.length === 0) return [];
-  return result.rows.map(row => new Game({
     id: row.id,
     espnId: row.espn_id,
     homeTeam: typeof row.home_team === 'string' ? JSON.parse(row.home_team) : row.home_team,
@@ -321,21 +261,60 @@ static async findByWeekSeason(season, seasonType, week) {
     gameDate: new Date(row.game_date),
     status: row.status,
     rawStatus: row.status,
-  period: row.period,
-  displayClock: row.display_clock,
-  statusDetail: row.status_detail,
+    period: row.period,
+    displayClock: row.display_clock,
+    statusDetail: row.status_detail,
     homeScore: row.home_score,
-  odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
-  probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
+    odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
+    probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
     awayScore: row.away_score,
     week: row.week,
     season: row.season,
     seasonType: row.season_type,
     league: row.league,
     stage: row.stage,
+    winnerTeamId: row.winner_team_id ?? null,
     lastUpdated: new Date(row.last_updated),
     createdAt: new Date(row.created_at)
-  }));
+  });
+}
+
+// Find game by ESPN ID
+static async findByESPNId(espnId) {
+  const query = 'SELECT * FROM games WHERE espn_id = $1';
+  const result = await pool.query(query, [espnId]);
+
+  if (result.rows.length === 0) return null;
+
+  return Game.fromDbRow(result.rows[0]);
+}
+
+// Batch variant of findByESPNId: one query for a whole slate of ESPN ids.
+// Returns a Map keyed by espn_id (string). Replaces the per-event lookup loop
+// in the World Cup refresh path, which issued one query per match.
+static async findByESPNIds(espnIds) {
+  const byId = new Map();
+  if (!Array.isArray(espnIds) || espnIds.length === 0) return byId;
+  const query = 'SELECT * FROM games WHERE espn_id = ANY($1::varchar[])';
+  const result = await pool.query(query, [espnIds.map(String)]);
+  for (const row of result.rows) {
+    byId.set(String(row.espn_id), Game.fromDbRow(row));
+  }
+  return byId;
+}
+
+// Find all games for a given week/season/seasonType
+static async findByWeekSeason(season, seasonType, week) {
+  const query = `SELECT * FROM games WHERE season = $1 AND season_type = $2 AND week = $3`;
+  const result = await pool.query(query, [season, seasonType, week]);
+  return result.rows.map(row => Game.fromDbRow(row));
+}
+
+// Find the persisted slate for a tournament stage (cache-first stage reads).
+static async findByLeagueStage(league, stage) {
+  const query = `SELECT * FROM games WHERE league = $1 AND stage = $2 ORDER BY game_date ASC, id ASC`;
+  const result = await pool.query(query, [league, stage]);
+  return result.rows.map(row => Game.fromDbRow(row));
 }
 
   toJSON() {
@@ -364,6 +343,7 @@ static async findByWeekSeason(season, seasonType, week) {
       seasonType: this.seasonType,
       league: this.league,
       stage: this.stage,
+      winnerTeamId: this.winnerTeamId ?? null,
       lastUpdated: this.lastUpdated,
       createdAt: this.createdAt
     };

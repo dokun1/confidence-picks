@@ -318,6 +318,23 @@ BEGIN
   END IF;
 END $$;
 
+-- Persisted match winner. ESPN's competitor.winner flag is the only signal of the
+-- advancing side on a knockout PK shootout and was previously lost between fetches,
+-- forcing every leaderboard read through the live ESPN API. Stored on refresh so
+-- cached stage reads can score knockouts without a network call.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'games' AND column_name = 'winner_team_id'
+  ) THEN
+    ALTER TABLE games ADD COLUMN winner_team_id VARCHAR(50) NULL;
+  END IF;
+END $$;
+
+-- Serves the cache-first stage reads in GameService.getWorldCupStage.
+CREATE INDEX IF NOT EXISTS idx_games_league_stage ON games(league, stage);
+
 -- Fix duplicate confidence constraint issue (remove incorrect constraint that lacks group_id)
 DO $$
 BEGIN
