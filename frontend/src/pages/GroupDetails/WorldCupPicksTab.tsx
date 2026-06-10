@@ -72,26 +72,38 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', variant: 'info' });
 
-  const fetchMatches = useCallback(async () => {
-    setFetchState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      // Fetch every stage in parallel; flatten into one list and group by stage
-      // at render time so the sections follow WORLD_CUP_STAGES order.
-      const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
-      const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
-      setFetchState({ loading: false, error: '', matches });
-    } catch (err) {
-      setFetchState((s) => ({
-        ...s,
-        loading: false,
-        error: `Failed to fetch matches: ${err instanceof Error ? err.message : 'unknown error'}`,
-      }));
-    }
-  }, []);
+  // Bumping reloadKey re-runs the fetch effect with a fresh cancelled guard
+  // (mirrors PicksTab); this is what the Try Again button triggers. The guard
+  // matters here because this component unmounts on every tab switch — a
+  // mid-flight stage fetch must not set state after the user leaves the tab.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    fetchMatches();
-  }, [fetchMatches]);
+    let cancelled = false;
+    setFetchState((s) => ({ ...s, loading: true, error: '' }));
+    (async () => {
+      try {
+        // Fetch every stage in parallel; flatten into one list and group by stage
+        // at render time so the sections follow WORLD_CUP_STAGES order.
+        const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
+        if (cancelled) return;
+        const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+        setFetchState({ loading: false, error: '', matches });
+      } catch (err) {
+        if (cancelled) return;
+        setFetchState((s) => ({
+          ...s,
+          loading: false,
+          error: `Failed to fetch matches: ${err instanceof Error ? err.message : 'unknown error'}`,
+        }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const fetchMatches = useCallback(() => setReloadKey((k) => k + 1), []);
 
   // Hydrate the draft from the user's already-saved picks on this group so
   // a refresh doesn't blank them out. Runs independently of the stage fetch
@@ -161,6 +173,14 @@ export default function WorldCupPicksTab({ identifier }: WorldCupPicksTabProps) 
   const [selectedTargets, setSelectedTargets] = useState<Set<string>>(
     () => new Set(groupId ? [groupId] : []),
   );
+
+  // Re-seed the fan-out targets whenever the group changes. Without this, a
+  // deep-link navigation between /world-cup?group=… URLs (same mounted
+  // component, new identifier) would keep the previous group(s) selected and
+  // submit picks to the wrong group.
+  useEffect(() => {
+    setSelectedTargets(new Set(groupId ? [groupId] : []));
+  }, [groupId]);
 
   useEffect(() => {
     let cancelled = false;

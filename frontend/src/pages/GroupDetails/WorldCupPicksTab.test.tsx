@@ -242,6 +242,37 @@ describe('WorldCupPicksTab', () => {
     );
   });
 
+  it('re-seeds the fan-out targets when the identifier changes', async () => {
+    // Both groups exist; the user starts on la-crew and adds work-pool as a
+    // fan-out target. When the identifier prop switches to work-pool (deep-link
+    // navigation without a remount), the stale la-crew selection must be
+    // dropped — submitting should hit ONLY the new group.
+    mockGetMyGroups.mockResolvedValue([
+      { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026' },
+      { id: 2, identifier: 'work-pool', name: 'Work Pool', poolType: 'world_cup_2026' },
+    ] as any);
+    mockSubmitPicks.mockResolvedValue({});
+
+    const { rerender } = renderTab('la-crew');
+    await screen.findByTestId('match-row-10');
+
+    fireEvent.click(
+      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Work Pool' }));
+    expect(screen.getByRole('button', { name: 'Submit to 2' })).toBeInTheDocument();
+
+    rerender(<WorldCupPicksTab identifier="work-pool" />);
+
+    // The selection collapsed back to just the (new) source group.
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+    await waitFor(() => expect(mockSubmitPicks).toHaveBeenCalledTimes(1));
+    expect(mockSubmitPicks).toHaveBeenCalledWith('work-pool', [
+      { gameId: 10, pickedResult: 'home' },
+    ]);
+  });
+
   it('toggles a pick off when the selected result is clicked again', async () => {
     renderTab();
     await screen.findByTestId('match-row-10');
