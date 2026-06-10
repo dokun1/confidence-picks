@@ -1,10 +1,13 @@
 import Button from '../Button';
+import { hasBothTeamsAssigned } from '../../../lib/teamUtils';
 import type { MatchPickResult, TeamData, WorldCupMatch } from '../../../lib/types';
 
 // Soccer sibling of GamePickRow. A World Cup pick is one of three outcomes —
 // Home / Draw / Away — with NO confidence selector (World Cup scoring is
 // flat-per-match). The Draw button is disabled for knockout matches, where a
-// match always resolves to an advancing team (see world-cup-picks-rules.md).
+// match always resolves to an advancing team (see world-cup-picks-rules.md),
+// and every outcome is disabled until both slots hold real teams (knockout
+// fixtures are scheduled with TBD placeholders before participants are known).
 // This row is presentational: it surfaces the three choices and emits intent
 // up via `onPick`. The parent owns the draft and persistence; the row never
 // fetches.
@@ -69,7 +72,10 @@ export default function MatchPickRow({
   const status = deriveStatus(match.status);
   // Once a match leaves the scheduled state it can no longer be picked.
   const locked = status !== 'not started';
-  const editable = !locked && !disabled;
+  // Knockout fixtures appear in the schedule before their participants are
+  // decided; until both slots hold real teams there is nothing to pick.
+  const teamsAssigned = hasBothTeamsAssigned(match);
+  const editable = !locked && !disabled && teamsAssigned;
   const dateLabel = formatGameDate(match.gameDate);
 
   function pickButton(result: MatchPickResult, label: string, ariaLabel: string, extraDisabled = false) {
@@ -121,9 +127,9 @@ export default function MatchPickRow({
       </div>
 
       <div className="flex items-stretch gap-xs" role="group" aria-label="Select match result">
-        {pickButton('home', `${homeLabel} (Home)`, `Pick ${match.homeTeam.name} to win`)}
+        {pickButton('home', homeLabel, `Pick ${match.homeTeam.name} to win`)}
         {pickButton('draw', 'Draw', 'Pick a draw', match.isKnockout)}
-        {pickButton('away', `${awayLabel} (Away)`, `Pick ${match.awayTeam.name} to win`)}
+        {pickButton('away', awayLabel, `Pick ${match.awayTeam.name} to win`)}
       </div>
     </div>
   );

@@ -44,6 +44,14 @@ describe('MatchPickRow', () => {
     expect(screen.getByRole('button', { name: 'Pick United States to win' })).toBeInTheDocument();
   });
 
+  it('labels the team buttons with just the country code — no "(Home)"/"(Away)" suffix', () => {
+    render(<MatchPickRow {...baseProps()} />);
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toHaveTextContent(/^MEX$/);
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).toHaveTextContent(
+      /^USA$/
+    );
+  });
+
   it('disables the Draw button for a knockout match', () => {
     render(<MatchPickRow {...baseProps()} match={knockoutMatch()} />);
     expect(screen.getByRole('button', { name: 'Pick a draw' })).toBeDisabled();
@@ -107,6 +115,25 @@ describe('MatchPickRow', () => {
     render(<MatchPickRow {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
     expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  it('disables every outcome while a team slot is an unassigned TBD placeholder', () => {
+    const tbd: TeamData = { id: 'tbd-1', name: 'TBD', abbreviation: 'TBD', logo: '' };
+    const props = { ...baseProps(), match: knockoutMatch({ awayTeam: tbd }) };
+    render(<MatchPickRow {...props} />);
+
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pick a draw' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pick TBD to win' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
+    expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  it('keeps picks enabled once both knockout slots hold real teams', () => {
+    render(<MatchPickRow {...baseProps()} match={knockoutMatch()} />);
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).toBeEnabled();
   });
 
   it('locks all picks once the match is final', () => {
