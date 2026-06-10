@@ -1,9 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMyGroups, leaveGroup, deleteGroup } from '../lib/groupsService.js';
 import GroupsList from '../designsystem/components/GroupsList';
 import type { GroupData } from '../designsystem/components/GroupCard/GroupCard';
 import Button from '../designsystem/components/Button';
+import GroupsSearchFilter, {
+  filterGroups,
+  EMPTY_FILTERS,
+  type GroupFilters,
+} from '../designsystem/components/GroupsSearchFilter';
 
 // Ported from GroupsPage.svelte (commit d6b2566^). Lists the signed-in user's
 // groups via getMyGroups. Navigation lives in Layout, so this page never renders
@@ -17,6 +22,11 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Search + filter selections from the GroupsSearchFilter bar. Applied to the
+  // loaded groups to produce the visible subset; an empty filter set shows all.
+  const [filters, setFilters] = useState<GroupFilters>(EMPTY_FILTERS);
+  const visibleGroups = useMemo(() => filterGroups(groups, filters), [groups, filters]);
 
   // Bumping refreshKey re-runs the load effect. reload() is a stable callback so
   // it can be handed to Retry / onRefresh without re-creating on every render.
@@ -132,18 +142,42 @@ export default function GroupsPage() {
             </div>
           </div>
         ) : (
-          /* Populated state */
-          <GroupsList
-            groups={groups}
-            showHeader={false}
-            onCreateNew={() => navigate('/create-group')}
-            onJoinExisting={() => navigate('/join-group')}
-            onViewGroup={(group) => navigate(`/group-details?group=${group.identifier}`)}
-            onEditGroup={(group) => navigate(`/edit-group/${group.identifier}`)}
-            onLeaveGroup={handleLeaveGroup}
-            onDeleteGroup={handleDeleteGroup}
-            onRefresh={reload}
-          />
+          /* Populated state: search/filter bar, then the (filtered) list. The
+             Create/Join actions are rendered by GroupsList directly below the
+             bar, matching the layout: my groups → search → create → join. */
+          <div className="space-y-lg">
+            <GroupsSearchFilter onChange={setFilters} />
+
+            {visibleGroups.length === 0 ? (
+              <>
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-sm">
+                  <Button variant="primary" onClick={() => navigate('/create-group')}>
+                    Create Group
+                  </Button>
+                  <Button variant="secondary" onClick={() => navigate('/join-group')}>
+                    Join Group
+                  </Button>
+                </div>
+                <div className="text-center py-12">
+                  <p className="text-[var(--color-text-secondary)]">
+                    No groups match your search or filters.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <GroupsList
+                groups={visibleGroups}
+                showHeader={false}
+                onCreateNew={() => navigate('/create-group')}
+                onJoinExisting={() => navigate('/join-group')}
+                onViewGroup={(group) => navigate(`/group-details?group=${group.identifier}`)}
+                onEditGroup={(group) => navigate(`/edit-group/${group.identifier}`)}
+                onLeaveGroup={handleLeaveGroup}
+                onDeleteGroup={handleDeleteGroup}
+                onRefresh={reload}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>
