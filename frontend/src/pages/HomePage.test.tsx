@@ -51,7 +51,9 @@ describe('HomePage', () => {
 
     it('renders the tagline', () => {
       renderHome();
-      expect(screen.getByText(/Your destination for NFL confidence picks/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Your home for sports pick.?em pools/)
+      ).toBeInTheDocument();
     });
 
     it('renders all three feature cards', () => {

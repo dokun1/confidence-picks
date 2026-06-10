@@ -21,7 +21,7 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     title: 'Weekly Games',
-    description: 'Browse NFL games by week and make your confidence picks for each matchup.',
+    description: 'Browse games by week or tournament stage and make a pick for every matchup.',
     iconWrapper: 'bg-primary-100 dark:bg-primary-900',
     iconColor: 'text-primary-600 dark:text-primary-400',
     iconPath:
@@ -37,7 +37,7 @@ const FEATURES: Feature[] = [
   },
   {
     title: 'Leaderboards',
-    description: 'Compete with friends and track your ranking throughout the season.',
+    description: 'Compete with friends and track your ranking all season — or all tournament — long.',
     iconWrapper: 'bg-warning-100 dark:bg-warning-900',
     iconColor: 'text-warning-600 dark:text-warning-400',
     iconPath:
@@ -57,8 +57,8 @@ export default function HomePage() {
             Welcome to Confidence Picks!
           </h1>
           <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-            Your destination for NFL confidence picks. Compete with friends, track your
-            performance, and climb the leaderboard.
+            Your home for sports pick&apos;em pools — from NFL confidence picks to the World Cup.
+            Compete with friends, track your performance, and climb the leaderboard.
           </p>
         </header>
 
