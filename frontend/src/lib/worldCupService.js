@@ -55,6 +55,36 @@ export async function getMyWorldCupPicks(groupId) {
   return res.json();
 }
 
+/**
+ * Read ANOTHER member's World Cup picks for a group. Returns
+ * `{ picks: [{ gameId, pickedResult }], canEdit }`. `canEdit` is true only when
+ * the caller is an admin — the picker uses it to decide whether the loaded
+ * member's picks render read-only or editable. Any member may read; only admins
+ * may write (see submitUserWorldCupPicks).
+ */
+export async function getUserWorldCupPicks(groupId, userId) {
+  const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup/user/${userId}`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load member World Cup picks');
+  }
+  return res.json();
+}
+
+/**
+ * Submit World Cup picks on behalf of another member. ADMIN ONLY — the backend
+ * rejects non-admins with 403. Scoped to a single group (no fan-out): an admin
+ * override edits one member in the one group they administer.
+ */
+export async function submitUserWorldCupPicks(groupId, userId, picks) {
+  const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup/user/${userId}`, { method: 'POST', body: JSON.stringify({ picks }) });
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to submit member World Cup picks');
+  }
+  return res.json();
+}
+
 export async function getWorldCupLeaderboard(groupId) {
   const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup/leaderboard`);
   if (!res.ok) {

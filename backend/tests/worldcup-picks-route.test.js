@@ -221,4 +221,172 @@ describe('World Cup picks router', () => {
       assert.strictEqual(res.status, 404);
     });
   });
+
+  // The cross-member view/edit routes. The contract under test: ANY member may
+  // READ another member's picks (with a canEdit flag that is admin-only), but
+  // only an ADMIN may WRITE them. Non-admin writes must be rejected before any
+  // persistence so nobody can change another person's picks by guessing a userId.
+  describe('GET /group/:groupId/world-cup/user/:userId', () => {
+    test('lets a non-admin member view a teammate read-only (canEdit=false)', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM user_picks/.test(sql)) {
+          return { rows: [{ game_id: 101, picked_result: 'home' }] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.canEdit, false);
+      assert.deepStrictEqual(data.picks, [{ gameId: 101, pickedResult: 'home' }]);
+    });
+
+    test('reports canEdit=true for an admin viewer', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM user_picks/.test(sql)) return { rows: [] };
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.canEdit, true);
+    });
+
+    test('returns 404 when the target user is not a member of the group', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [] }; // not a member
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/999`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 404);
+    });
+
+    test('returns 403 when the caller is not a group member', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: null }));
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 403);
+    });
+
+    test('returns 400 for a non-numeric userId', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/abc`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 400);
+    });
+  });
+
+  describe('POST /group/:groupId/world-cup/user/:userId', () => {
+    test('rejects an unauthenticated request', async () => {
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ picks: [] }),
+      });
+      assert.strictEqual(res.status, 401);
+    });
+
+    test('FORBIDS a non-admin from writing a teammate (403, no persistence)', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      // Membership check should never even be reached, but stub it defensively.
+      mock.method(pool, 'query', async () => ({ rows: [{ '?column?': 1 }] }));
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.match(data.error, /admins/i);
+      assert.strictEqual(upsert.mock.callCount(), 0, 'a non-admin write must never persist');
+    });
+
+    test('rejects an invalid pickedResult with 400 before any auth/DB work', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'tie' }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('returns 404 when the target user is not a member', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [] };
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/999`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 404);
+    });
+
+    test('lets an admin persist picks for the TARGET user (keyed to targetUserId)', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM games/.test(sql)) {
+          return { rows: [{ id: 101, season: 2026, season_type: 1, week: 1 }] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      let seenUserId = null;
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ userId, picks }) => {
+        seenUserId = userId;
+        return picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }));
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(upsert.mock.callCount(), 1);
+      assert.strictEqual(seenUserId, 2, 'picks must be written under the TARGET user id, not the caller');
+      assert.strictEqual(data.isAdminOverride, true);
+      assert.strictEqual(data.targetUserId, 2);
+      assert.deepStrictEqual(data.picks, [{ gameId: 101, pickedResult: 'home' }]);
+    });
+
+    test('rejects a gameId that is not a World Cup game', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM games/.test(sql)) return { rows: [] }; // not a WC game
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 999, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Invalid gameId/);
+    });
+  });
 });

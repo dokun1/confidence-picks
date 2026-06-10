@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
 import Button from '../designsystem/components/Button';
@@ -59,6 +60,7 @@ export default function GroupDetailsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const identifier = searchParams.get('group');
+  const { user } = useAuth();
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -228,8 +230,14 @@ export default function GroupDetailsPage() {
             // Embedded pick-making surface. Rendered bare (no bordered card) so
             // its sticky submit bar can pin to the viewport bottom and span the
             // page gutters; the bar mounts with this tab and unmounts when the
-            // user switches away.
-            <WorldCupPicksTab identifier={identifier} />
+            // user switches away. members + caller id + admin flag drive the
+            // "Picking for" person selector (view teammates; admins edit them).
+            <WorldCupPicksTab
+              identifier={identifier}
+              members={members}
+              currentUserId={user?.id ?? null}
+              isAdmin={isOwner}
+            />
           ) : (
             <PicksTab identifier={identifier} members={members} />
           ))}
