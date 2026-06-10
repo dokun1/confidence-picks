@@ -44,7 +44,7 @@ function renderNav(opts: RenderOptions = {}) {
     showThemeToggle = true,
   } = opts;
 
-  const auth = { isAuthenticated, user, clearAuth: vi.fn(), setAuthUser: vi.fn() };
+  const auth = { isAuthenticated, user, isRestoring: false, clearAuth: vi.fn(), setAuthUser: vi.fn() };
   const theme = { isDark, toggle: vi.fn() };
   mockedUseAuth.mockReturnValue(auth);
   mockedUseDarkMode.mockReturnValue(theme);

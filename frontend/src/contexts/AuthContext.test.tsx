@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
 import type { User } from './AuthContext';
@@ -7,11 +7,19 @@ import type { User } from './AuthContext';
 vi.mock('../lib/authService.js', () => ({
   default: {
     getUser: vi.fn(),
+    getRefreshToken: vi.fn(),
+    refreshToken: vi.fn(),
+    getCurrentUser: vi.fn(),
+    clearTokens: vi.fn(),
   },
 }));
 
 import AuthService from '../lib/authService.js';
 const mockGetUser = vi.mocked(AuthService.getUser);
+const mockGetRefreshToken = vi.mocked(AuthService.getRefreshToken);
+const mockRefreshToken = vi.mocked(AuthService.refreshToken);
+const mockGetCurrentUser = vi.mocked(AuthService.getCurrentUser);
+const mockClearTokens = vi.mocked(AuthService.clearTokens);
 
 const testUser: User = {
   id: 1,
@@ -99,6 +107,83 @@ describe('AuthContext', () => {
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user?.pictureUrl).toBeNull();
+  });
+
+  // Silent session restore on mount (expired access token + valid refresh token)
+
+  it('silently refreshes and restores the session when the access token is expired but a refresh token exists', async () => {
+    // First getUser() call (state init) sees an expired access token; after a
+    // successful refresh the second call returns the user again.
+    mockGetUser.mockReturnValueOnce(null).mockReturnValue(testUser as any);
+    mockGetRefreshToken.mockReturnValue('valid-refresh-token');
+    mockRefreshToken.mockResolvedValue('new-access-token');
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    // Refresh is in flight: not yet authenticated, but flagged as restoring
+    // so route guards don't redirect to /login.
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isRestoring).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+    expect(result.current.user).toEqual(testUser);
+    expect(result.current.isRestoring).toBe(false);
+    expect(mockRefreshToken).toHaveBeenCalledTimes(1);
+    expect(mockClearTokens).not.toHaveBeenCalled();
+  });
+
+  it('falls back to getCurrentUser() when getUser() is still null after refresh', async () => {
+    mockGetUser.mockReturnValue(null);
+    mockGetRefreshToken.mockReturnValue('valid-refresh-token');
+    mockRefreshToken.mockResolvedValue('new-access-token');
+    mockGetCurrentUser.mockResolvedValue(testUser as any);
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+    expect(result.current.user).toEqual(testUser);
+    expect(mockGetCurrentUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears tokens and stays unauthenticated when the silent refresh fails', async () => {
+    mockGetUser.mockReturnValue(null);
+    mockGetRefreshToken.mockReturnValue('revoked-refresh-token');
+    mockRefreshToken.mockRejectedValue(new Error('Failed to refresh token'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    await waitFor(() => {
+      expect(result.current.isRestoring).toBe(false);
+    });
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.user).toBeNull();
+    expect(mockClearTokens).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not attempt a refresh when there is no refresh token', () => {
+    mockGetUser.mockReturnValue(null);
+    mockGetRefreshToken.mockReturnValue(null);
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    expect(result.current.isRestoring).toBe(false);
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(mockRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt a refresh when the access token is still valid', () => {
+    mockGetUser.mockReturnValue(testUser as any);
+    mockGetRefreshToken.mockReturnValue('valid-refresh-token');
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    expect(result.current.isRestoring).toBe(false);
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(mockRefreshToken).not.toHaveBeenCalled();
   });
 
   it('setAuthUser followed by clearAuth returns to unauthenticated state', () => {
