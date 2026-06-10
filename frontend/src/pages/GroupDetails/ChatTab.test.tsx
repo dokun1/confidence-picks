@@ -56,6 +56,19 @@ describe('ChatTab', () => {
     vi.clearAllMocks();
   });
 
+  it('renders bare — no card wrapper, no duplicate "Chat" heading, no scroll box', () => {
+    const { container } = renderChat();
+
+    // The tab label already says "Chat"; the body must not repeat it.
+    expect(screen.queryByRole('heading', { name: 'Chat' })).not.toBeInTheDocument();
+
+    // The tab root is an unstyled div, not a bordered/padded card, and the
+    // message log flows with the page instead of a max-height scroll container.
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toBe('');
+    expect(container.querySelector('.max-h-96')).toBeNull();
+  });
+
   it('renders each seeded message author and content from initialMessages', () => {
     renderChat();
     for (const msg of initialMessages) {
