@@ -30,7 +30,10 @@
       "Bash(brain:*)",
       "Bash(find /Users/davidokun/Developer/brain/brain-sdk/src -name \"*.ts\" -exec wc -l {})",
       "Bash(for module:*)",
-      "Bash(do echo:*)"
+      "Bash(do echo:*)",
+      "mcp__868e3bd8-5c02-43d5-acb0-b5367605b1b3__get_runtime_logs",
+      "mcp__868e3bd8-5c02-43d5-acb0-b5367605b1b3__list_deployments",
+      "mcp__868e3bd8-5c02-43d5-acb0-b5367605b1b3__deploy_to_vercel"
     ],
     "deny": [],
     "ask": []
