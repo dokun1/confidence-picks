@@ -62,10 +62,14 @@ describe('ChatTab', () => {
     // The tab label already says "Chat"; the body must not repeat it.
     expect(screen.queryByRole('heading', { name: 'Chat' })).not.toBeInTheDocument();
 
-    // The tab root is an unstyled div, not a bordered/padded card, and the
-    // message log flows with the page instead of a max-height scroll container.
+    // The tab root must not be a bordered/padded card (assert the specific card
+    // classes are absent rather than requiring an empty class attribute, so
+    // unrelated layout classes can be added later without breaking this), and
+    // the message log flows with the page instead of a max-height scroll box.
     const root = container.firstElementChild as HTMLElement;
-    expect(root.className).toBe('');
+    for (const cardClass of ['border', 'rounded-md', 'bg-surface', 'p-lg']) {
+      expect(root).not.toHaveClass(cardClass);
+    }
     expect(container.querySelector('.max-h-96')).toBeNull();
   });
 
