@@ -7,6 +7,7 @@ import PicksTab from './GroupDetails/PicksTab';
 import ChatTab from './GroupDetails/ChatTab';
 import SettingsTab from './GroupDetails/SettingsTab';
 import WorldCupLeaderboardTab from './GroupDetails/WorldCupLeaderboardTab';
+import WorldCupPicksTab from './GroupDetails/WorldCupPicksTab';
 
 // Ported from GroupDetailsPage.svelte (commit d6b2566^). This is the page shell:
 // it resolves the group identifier, runs the parallel mount fetch, and owns the
@@ -16,9 +17,10 @@ import WorldCupLeaderboardTab from './GroupDetails/WorldCupLeaderboardTab';
 //
 // World Cup pools (poolType === 'world_cup_2026') render the tournament-shaped
 // variant of the same two tabs: the Leaderboard tab swaps the placeholder for
-// the fetched TournamentLeaderboard, and the Picks tab links out to the
-// WorldCupPicksPage route instead of embedding the NFL week matrix. NFL pools
-// (poolType absent or 'nfl_weekly') are UNCHANGED.
+// the fetched TournamentLeaderboard, and the Picks tab embeds the full
+// pick-making surface (WorldCupPicksTab: stage list + sticky submit bar) so
+// members pick without leaving the group. NFL pools (poolType absent or
+// 'nfl_weekly') are UNCHANGED.
 //
 // The route is param-less ('/group-details'); the identifier comes from the
 // `group` query param, NOT a route param — App.tsx is intentionally untouched.
@@ -226,20 +228,11 @@ export default function GroupDetailsPage() {
           ))}
         {activeTab === 'picks' &&
           (isWorldCup ? (
-            <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg space-y-md">
-              <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
-                Picks
-              </h2>
-              <p className="text-[var(--color-text-secondary)]">
-                World Cup picks are made on the tournament stage list — Home / Draw / Away for
-                every match, no confidence.
-              </p>
-              <Button
-                onClick={() => navigate(`/world-cup?group=${encodeURIComponent(identifier)}`)}
-              >
-                Make World Cup Picks
-              </Button>
-            </div>
+            // Embedded pick-making surface. Rendered bare (no bordered card) so
+            // its sticky submit bar can pin to the viewport bottom and span the
+            // page gutters; the bar mounts with this tab and unmounts when the
+            // user switches away.
+            <WorldCupPicksTab identifier={identifier} />
           ) : (
             <PicksTab identifier={identifier} members={members} />
           ))}

@@ -89,12 +89,15 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
 })
 
 // A world_cup_2026 group surfaces the tournament-shaped tabs on its detail page:
-// the Picks tab links out to the WorldCupPicksPage (/world-cup) instead of the
-// NFL week matrix. This test drives the navigation FROM the group detail page TO
-// the stage list, reusing the same stage stub as above. The group's pool_type is
-// the only thing flipping the tab variant, so we stub getGroup to return
-// pool_type='world_cup_2026'.
-test('navigates from a world cup group detail page to the stage picks list', async ({ page }) => {
+// the Picks tab embeds the SAME pick-making surface the standalone /world-cup
+// route renders (stage list + sticky submit bar) — no link-out to a separate
+// page. This test drives the whole in-group flow: enter the Picks tab, see the
+// match list and the save bar appear, make a pick, submit it to the group's
+// world-cup picks endpoint, then switch tabs and watch the save bar disappear.
+// The group's pool_type is the only thing flipping the tab variant, so we stub
+// getGroup to return pool_type='world_cup_2026'. (/world-cup-picks is the
+// filename-derived route the coverage check matches.)
+test('makes world cup picks inline on the group detail Picks tab', async ({ page }) => {
   await page.goto('/login')
 
   await page.evaluate(() => {
@@ -112,6 +115,22 @@ test('navigates from a world cup group detail page to the stage picks list', asy
   // Catch-all safety net first (lowest precedence). Any unstubbed API call
   // resolves to an empty object so the test never reaches a real backend.
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
+
+  // The embedded picks tab loads the user's saved picks (hydrate) and submits
+  // new ones through the group's world-cup endpoint. GET returns no saved
+  // picks; POST records the submitted body for the assertion below.
+  let submittedBody: { picks?: { gameId: number; pickedResult: string }[] } | null = null
+  await page.route('**/api/picks/group/**/world-cup/me', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ picks: [] }) }),
+  )
+  await page.route('**/api/picks/group/wc-group/world-cup', async (route) => {
+    submittedBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ picks: submittedBody?.picks ?? [] }),
+    })
+  })
 
   // Group detail mount fans out to getGroup / getMembers / getMessages, all under
   // /api/groups/<identifier>. getGroup must return pool_type='world_cup_2026' to
@@ -177,18 +196,40 @@ test('navigates from a world cup group detail page to the stage picks list', asy
 
   await page.goto('/group-details?group=wc-group')
 
-  // The detail page resolves and shows the group header.
+  // The detail page resolves and shows the group header. The default tab is
+  // the Leaderboard — no save bar anywhere yet.
   await expect(page.getByRole('heading', { name: 'World Cup Squad' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Submit Picks' })).toHaveCount(0)
 
-  // Switch to the Picks tab and follow the link to the World Cup picks page
-  // (/world-cup-picks is the filename-derived route the coverage check matches).
+  // Entering the Picks tab renders the stage list inline — we stay on
+  // /group-details, no separate page.
   await page.getByRole('tab', { name: 'Picks' }).click()
-  await page.getByRole('button', { name: 'Make World Cup Picks' }).click()
-
-  // We land on the stage list with the Home / Draw / Away buttons.
-  await expect(page.getByRole('heading', { name: 'World Cup 2026 Picks' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Pick Mexico to win' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Pick a draw' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Pick Canada to win' })).toBeVisible()
+  await expect(page).toHaveURL(/\/group-details\?group=wc-group/)
+
+  // The sticky save bar mounted with the tab; submit is gated on having picks.
+  const submit = page.getByRole('button', { name: 'Submit Picks' })
+  await expect(submit).toBeVisible()
+  await expect(submit).toBeDisabled()
+  await expect(page.getByText('0 picks selected')).toBeVisible()
+
+  // Make a pick and submit it straight from the tab.
+  await page.getByRole('button', { name: 'Pick Mexico to win' }).click()
+  await expect(page.getByText('1 pick selected')).toBeVisible()
+  await expect(submit).toBeEnabled()
+  await submit.click()
+
+  // The POST hit the group's world-cup endpoint with the home pick, and the
+  // success toast confirms the save without leaving the group page.
+  await expect(page.getByText('Picks saved')).toBeVisible()
+  expect(submittedBody).toEqual({ picks: [{ gameId: 101, pickedResult: 'home' }] })
+  await expect(page).toHaveURL(/\/group-details\?group=wc-group/)
+
+  // Leaving the Picks tab unmounts the surface — the save bar disappears.
+  await page.getByRole('tab', { name: 'Leaderboard' }).click()
+  await expect(page.getByRole('button', { name: 'Submit Picks' })).toHaveCount(0)
+  await expect(page.getByText('1 pick selected')).toHaveCount(0)
 })
