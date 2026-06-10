@@ -82,12 +82,14 @@ beforeEach(() => {
 });
 
 describe('SettingsTab member roster', () => {
-  it('renders each member name, email, avatar, and a localized joined date', () => {
+  it('renders each member name, avatar, and a localized joined date — but not their email', () => {
     renderSettings();
 
     for (const member of members) {
       expect(screen.getByText(member.name)).toBeInTheDocument();
-      expect(screen.getByText(member.email)).toBeInTheDocument();
+      // Emails were intentionally removed from the roster for privacy (#105);
+      // assert they never leak back in.
+      expect(screen.queryByText(member.email)).not.toBeInTheDocument();
     }
 
     // Avatar with a picture URL renders an <img> whose alt is the member name.
