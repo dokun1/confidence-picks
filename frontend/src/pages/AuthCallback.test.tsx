@@ -2,6 +2,7 @@ import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AuthCallback from './AuthCallback';
+import { POST_LOGIN_REDIRECT_KEY } from '../lib/postLoginRedirect';
 
 // Mock AuthService so the test is not coupled to localStorage or the network.
 vi.mock('../lib/authService.js', () => ({
@@ -40,6 +41,7 @@ const testUser = {
 describe('AuthCallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it('persists tokens, hydrates the user, and redirects home on success', async () => {
@@ -56,6 +58,44 @@ describe('AuthCallback', () => {
 
     expect(mockSetTokens).toHaveBeenCalledWith('A', 'B');
     expect(mockSetAuthUser).toHaveBeenCalledWith(testUser);
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  // The core fix: a user who started from a guarded invite link must land back
+  // on the invite (so it reappears to accept/reject) rather than the home page.
+  // LoginPage stashed the destination in sessionStorage before the OAuth hop.
+  it('returns the user to the stashed post-login redirect after a successful sign-in', async () => {
+    sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, '/invite/tok-123');
+    window.history.pushState({}, '', '/auth/callback?token=A&refresh=B');
+    mockGetCurrentUser.mockResolvedValue(testUser as any);
+
+    render(
+      <MemoryRouter>
+        <AuthCallback />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+
+    expect(mockSetAuthUser).toHaveBeenCalledWith(testUser);
+    expect(mockNavigate).toHaveBeenCalledWith('/invite/tok-123', { replace: true });
+    // The stash is consumed so a later, unrelated sign-in won't be hijacked.
+    expect(sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY)).toBeNull();
+  });
+
+  it('ignores an unsafe stashed redirect and falls back home (open-redirect guard)', async () => {
+    sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, 'https://evil.com');
+    window.history.pushState({}, '', '/auth/callback?token=A&refresh=B');
+    mockGetCurrentUser.mockResolvedValue(testUser as any);
+
+    render(
+      <MemoryRouter>
+        <AuthCallback />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
   });
 

@@ -3,6 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AuthService from '../lib/authService.js';
 import AppleSignInButton from '../components/AppleSignInButton';
+import {
+  safeRedirectPath,
+  stashPostLoginRedirect,
+} from '../lib/postLoginRedirect';
 
 // Maps the `?error=` code the OAuth callback appends on failure to a friendly
 // message. Unknown codes fall back to a generic line so a new backend error
@@ -24,24 +28,28 @@ export default function LoginPage() {
     ? ERROR_MESSAGES[errorParam] ?? 'An error occurred during authentication.'
     : '';
 
-  // Already signed in? Skip the login screen.
+  // Where a guarded link wants the user to land after sign-in. Guarded CTAs use
+  // `next` (e.g. InvitePage's "Sign in to join" → /login?next=/invite/:token);
+  // `redirect` is accepted as a legacy alias. Validated to an in-app path so a
+  // crafted query can't turn this into an open redirect.
+  const redirectTarget =
+    safeRedirectPath(searchParams.get('next')) ??
+    safeRedirectPath(searchParams.get('redirect'));
+
+  // Already signed in? Skip the login screen — and honor the requested
+  // destination so an authenticated user who opens an invite link still lands
+  // on the invite rather than the home page.
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/', { replace: true });
+      navigate(redirectTarget ?? '/', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, redirectTarget]);
 
   // Stash where the user was headed (if they arrived via a guarded link) so the
   // post-OAuth callback can return them there. Best-effort: a blocked
   // sessionStorage must not stop sign-in.
   function captureRedirect() {
-    const redirect = searchParams.get('redirect');
-    if (!redirect) return;
-    try {
-      sessionStorage.setItem('postLoginRedirect', decodeURIComponent(redirect));
-    } catch {
-      /* sessionStorage unavailable (private mode, etc.) — proceed without it */
-    }
+    stashPostLoginRedirect(redirectTarget);
   }
 
   function handleGoogleSignIn() {
