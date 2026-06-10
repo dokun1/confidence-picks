@@ -94,7 +94,11 @@ test('world cup group leaderboard tab renders member standings', async ({ page }
   // The detail page resolves, lands on the Leaderboard tab, and renders the
   // tournament table: member rows plus the four tiebreaker column headers.
   await expect(page.getByRole('heading', { name: 'World Cup Squad' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible()
+
+  // The tab itself is the only "Leaderboard" label — the body renders the table
+  // bare, with no card wrapper repeating the heading.
+  await expect(page.getByRole('tab', { name: 'Leaderboard' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Leaderboard' })).toHaveCount(0)
 
   await expect(page.getByRole('columnheader', { name: 'Points' })).toBeVisible()
   await expect(page.getByRole('columnheader', { name: 'Wins Correct' })).toBeVisible()

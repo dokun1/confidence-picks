@@ -34,11 +34,10 @@ export default function WorldCupLeaderboardTab({ identifier }: WorldCupLeaderboa
     load();
   }, [load]);
 
+  // Rendered bare (no card, no "Leaderboard" heading): the active tab already
+  // names the section, and the table spans the page container's full width.
   return (
-    <div className="bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-lg p-lg">
-      <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)] mb-sm">
-        Leaderboard
-      </h2>
+    <div>
       {loading ? (
         <p className="text-[var(--color-text-secondary)]">Loading leaderboard…</p>
       ) : error ? (
