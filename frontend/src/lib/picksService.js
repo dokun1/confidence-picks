@@ -32,6 +32,20 @@ export async function getClosestWeek(groupIdentifier, season, seasonType) {
   return res.json();
 }
 
+/**
+ * Seasons with stored pick data for the group, newest first. The group page
+ * defaults its season selector to the latest entry so an old group's picks and
+ * scores stay reachable once the calendar rolls into a new season.
+ */
+export async function getPickSeasons(groupIdentifier) {
+  const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks/seasons`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load seasons');
+  }
+  return res.json();
+}
+
 export async function getPicks(groupIdentifier, { season, seasonType, week }) {
   const params = new URLSearchParams({ season, seasonType, week });
   const res = await authFetch(`${apiBase()}/${groupIdentifier}/picks?${params}`);

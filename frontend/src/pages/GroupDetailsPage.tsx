@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
 import Button from '../designsystem/components/Button';
+import LeaderboardTab from './GroupDetails/LeaderboardTab';
 import PicksTab from './GroupDetails/PicksTab';
 import ChatTab from './GroupDetails/ChatTab';
 import SettingsTab from './GroupDetails/SettingsTab';
@@ -12,9 +13,8 @@ import WorldCupPicksTab from './GroupDetails/WorldCupPicksTab';
 
 // Ported from GroupDetailsPage.svelte (commit d6b2566^). This is the page shell:
 // it resolves the group identifier, runs the parallel mount fetch, and owns the
-// header + tab navigation. The tab bodies (picks/chat/settings) are delegated to
-// child components; the leaderboard tab is a deferred placeholder (no
-// getScoreboard wiring per the task scope).
+// header + tab navigation. The tab bodies (leaderboard/picks/chat/settings) are
+// delegated to child components.
 //
 // World Cup pools (poolType === 'world_cup_2026') render the tournament-shaped
 // variant of the same two tabs: the Leaderboard tab swaps the placeholder for
@@ -221,9 +221,7 @@ export default function GroupDetailsPage() {
           (isWorldCup ? (
             <WorldCupLeaderboardTab identifier={identifier} />
           ) : (
-            // Bare placeholder — the active tab already names the section, so no
-            // card wrapper or duplicate "Leaderboard" heading.
-            <p className="text-[var(--color-text-secondary)]">Leaderboard coming soon</p>
+            <LeaderboardTab identifier={identifier} />
           ))}
         {activeTab === 'picks' &&
           (isWorldCup ? (

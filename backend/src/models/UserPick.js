@@ -78,6 +78,21 @@ export class UserPick {
     return rows.map(r => new UserPick(r));
   }
 
+  static async findForGroupWeek({ groupId, season, seasonType, week }) {
+    const q = `SELECT * FROM user_picks WHERE group_id=$1 AND season=$2 AND season_type=$3 AND week=$4`;
+    const { rows } = await pool.query(q, [groupId, season, seasonType, week]);
+    return rows.map(r => new UserPick(r));
+  }
+
+  // Seasons that have any stored pick data for a group, newest first. Lets the
+  // frontend default its season selector to the latest season with history so
+  // old groups stay readable after the calendar rolls into a new season.
+  static async findSeasonsForGroup(groupId) {
+    const q = `SELECT DISTINCT season FROM user_picks WHERE group_id=$1 ORDER BY season DESC`;
+    const { rows } = await pool.query(q, [groupId]);
+    return rows.map(r => r.season);
+  }
+
   static async bulkUpsert({ userId, groupId, season, seasonType, week, picks }) {
     if (!picks || picks.length === 0) return [];
   console.log('[user_picks] bulkUpsert incoming', { userId, groupId, season, seasonType, week, picks });

@@ -31,11 +31,13 @@ async function computeClosestWeek(seasonYear, seasonType) {
   return rows[rows.length - 1].week; // all final -> last week (could be 0)
 }
 
+// Pre-game statuses: games in these states are editable and other members'
+// picks on them stay hidden (legacy/alternate spellings included, e.g. NOT_STARTED).
+const PRE_STATUSES = new Set(['SCHEDULED','NOT_STARTED','PRE','PREGAME']);
+
 function deriveGamePickMeta(gameJson, pick) {
   const status = gameJson.status;
-  // Treat legacy/alternate pre-game statuses as editable (e.g., NOT_STARTED)
-  const preStatuses = new Set(['SCHEDULED','NOT_STARTED','PRE','PREGAME']);
-  const lock = !preStatuses.has(status);
+  const lock = !PRE_STATUSES.has(status);
   const inProgress = status === 'IN_PROGRESS';
   return {
     locked: lock,
@@ -43,6 +45,25 @@ function deriveGamePickMeta(gameJson, pick) {
     inProgress,
     final: status === 'FINAL'
   };
+}
+
+// Grade a pick in memory against a FINAL game when no points are stored yet.
+// Mirrors the persisted on-demand scoring above but never writes — used for the
+// group-wide picks payload where another member's pick may predate grading.
+function gradeAgainstFinal(gameJson, pick) {
+  if (pick.points != null || gameJson.status !== 'FINAL' || pick.confidence == null || !pick.pickedTeamId) return pick;
+  let winnerTeamId = null;
+  if (gameJson.homeScore > gameJson.awayScore) winnerTeamId = gameJson.homeTeam.id;
+  else if (gameJson.awayScore > gameJson.homeScore) winnerTeamId = gameJson.awayTeam.id;
+  if (winnerTeamId == null) {
+    pick.points = 0;
+    pick.won = null;
+  } else {
+    const won = String(winnerTeamId) === String(pick.pickedTeamId);
+    pick.won = won;
+    pick.points = won ? pick.confidence : -pick.confidence;
+  }
+  return pick;
 }
 
 /**
@@ -228,8 +249,37 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     const availableConfidences = Array.from({ length: totalGames }, (_, i) => i + 1).filter(n => !usedConfidences.includes(n));
     const weekPoints = picks.reduce((sum, p) => sum + (p.points || 0), 0);
 
+    // Group-wide picks for the member matrix, keyed by member id. A member's
+    // pick on a game that hasn't kicked off is withheld from everyone but its
+    // owner server-side so picks can't be read off the wire before lockout.
+    // Queried after the persist block above so freshly graded points are read
+    // back; anything still ungraded (e.g. old seasons graded for other members
+    // only) is graded in memory against the FINAL game.
+    const groupPicks = await UserPick.findForGroupWeek({ groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+    const gameJsonById = new Map(games.map(g => [g.id, normalizeGame(g)]));
+    const memberPicksMap = new Map();
+    for (const p of groupPicks) {
+      const gameJson = gameJsonById.get(p.gameId);
+      if (!gameJson) continue;
+      if (p.userId !== req.user.id && PRE_STATUSES.has(gameJson.status)) continue;
+      gradeAgainstFinal(gameJson, p);
+      if (!memberPicksMap.has(p.userId)) memberPicksMap.set(p.userId, []);
+      memberPicksMap.get(p.userId).push({
+        gameId: p.gameId,
+        pickedTeamId: p.pickedTeamId,
+        confidence: p.confidence,
+        won: p.won,
+        points: p.points
+      });
+    }
+    const memberPicks = [...memberPicksMap.entries()].map(([memberId, memberPickList]) => ({
+      memberId: String(memberId),
+      picks: memberPickList
+    }));
+
     res.json({
       games: payloadGames,
+      picks: memberPicks,
       availableConfidences,
       totalGames,
       pickedCount: usedConfidences.length,
@@ -256,6 +306,24 @@ router.get('/:identifier/picks/closest', authenticateToken, async (req, res) => 
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
     res.status(500).json({ error: 'Failed to compute closest week' });
+  }
+});
+
+// Seasons with stored pick data for this group, newest first. The group page
+// defaults its season selector to the latest entry so groups from prior
+// seasons keep their picks and scores reachable after the calendar rolls into
+// a new (still empty) season.
+router.get('/:identifier/picks/seasons', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const group = await ensureMembership(identifier, req.user.id);
+    const seasons = await UserPick.findSeasonsForGroup(group.id);
+    res.json({ seasons });
+  } catch (e) {
+    if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
+    if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
+    console.error('GET picks seasons error', e);
+    res.status(500).json({ error: 'Failed to load seasons' });
   }
 });
 
