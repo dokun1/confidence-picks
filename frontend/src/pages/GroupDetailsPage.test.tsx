@@ -7,6 +7,7 @@ import type {
   GroupMember,
   GroupMessage,
 } from '../lib/groupsService';
+import type { WorldCupMatch, WorldCupStage } from '../lib/types';
 
 // Mock the groups service so the three mount fetches are controllable per test
 // without touching the network or auth tokens.
@@ -14,6 +15,7 @@ vi.mock('../lib/groupsService.js', () => ({
   getGroup: vi.fn(),
   getMembers: vi.fn(),
   getMessages: vi.fn(),
+  getMyGroups: vi.fn(),
 }));
 
 // PicksTab owns its own fetch (season -> closest week -> picks). Mock those so the
@@ -25,11 +27,15 @@ vi.mock('../lib/picksService.js', () => ({
   getPicks: vi.fn(),
 }));
 
-// World Cup pools fetch a tournament-shaped leaderboard. Mock the service so the
-// WC-branch tests control the rows without a network call; the real
-// TournamentLeaderboard component renders them.
+// World Cup pools fetch a tournament-shaped leaderboard, and their Picks tab
+// embeds WorldCupPicksTab (stage fetches + saved-picks hydrate + the groups
+// fan-out dropdown). Mock the whole service surface so the WC-branch tests
+// control every fetch without a network call; the real components render.
 vi.mock('../lib/worldCupService.js', () => ({
   getWorldCupLeaderboard: vi.fn(),
+  getStageMatches: vi.fn(),
+  submitWorldCupPicks: vi.fn(),
+  getMyWorldCupPicks: vi.fn(),
 }));
 
 // Keep the real react-router exports (MemoryRouter, useSearchParams), stub only
@@ -40,14 +46,21 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
+import { getGroup, getMembers, getMessages, getMyGroups } from '../lib/groupsService.js';
 import { getClosestWeek } from '../lib/picksService.js';
-import { getWorldCupLeaderboard } from '../lib/worldCupService.js';
+import {
+  getWorldCupLeaderboard,
+  getStageMatches,
+  getMyWorldCupPicks,
+} from '../lib/worldCupService.js';
 const mockGetGroup = vi.mocked(getGroup);
 const mockGetMembers = vi.mocked(getMembers);
 const mockGetMessages = vi.mocked(getMessages);
+const mockGetMyGroups = vi.mocked(getMyGroups);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
+const mockGetStageMatches = vi.mocked(getStageMatches);
+const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
 
 const ownerGroup: GroupDetail = {
   id: '1',
@@ -203,6 +216,24 @@ describe('GroupDetailsPage', () => {
   });
 
   describe('World Cup pool', () => {
+    // One group-stage match for the embedded WorldCupPicksTab; every other
+    // stage resolves empty so the match renders exactly once.
+    const wcMatch: WorldCupMatch = {
+      id: 10,
+      stage: 'group',
+      homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: '' },
+      awayTeam: { id: '2', name: 'United States', abbreviation: 'USA', logo: '' },
+      homeScore: 0,
+      awayScore: 0,
+      status: 'SCHEDULED',
+      isKnockout: false,
+      gameDate: '2026-06-11T20:00:00.000Z',
+    };
+    const stageResponder = (stage: WorldCupStage) => {
+      const games = stage === 'group' ? [wcMatch] : [];
+      return Promise.resolve({ games, count: games.length, cached: false });
+    };
+
     beforeEach(() => {
       mockGetGroup.mockResolvedValue(worldCupGroup);
       mockGetMembers.mockResolvedValue(members);
@@ -237,20 +268,56 @@ describe('GroupDetailsPage', () => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
-    it('links the Picks tab to the World Cup picks page for a world_cup_2026 pool', async () => {
+    it('embeds the World Cup pick-making surface on the Picks tab', async () => {
       mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetStageMatches.mockImplementation(stageResponder);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
+      mockGetMyGroups.mockResolvedValue([
+        { id: 1, identifier: 'sunday-squad', name: 'World Cup Squad', poolType: 'world_cup_2026' },
+      ] as any);
 
       renderPage();
       await screen.findByRole('heading', { name: worldCupGroup.name });
 
       fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
-      // The WC Picks tab links out to the dedicated page rather than embedding
-      // the NFL week matrix, so the picks loader never appears here.
-      expect(screen.queryByText('Loading picks…')).not.toBeInTheDocument();
 
-      const goToPicks = screen.getByRole('button', { name: /make world cup picks/i });
-      fireEvent.click(goToPicks);
-      expect(mockNavigate).toHaveBeenCalledWith('/world-cup?group=sunday-squad');
+      // The match list and its outcome buttons render inline — no link-out to
+      // a separate page, and no NFL picks loader.
+      expect(await screen.findByTestId('match-row-10')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Group Stage' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /make world cup picks/i })).not.toBeInTheDocument();
+      expect(screen.queryByText('Loading picks…')).not.toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+
+      // The picks are submitted against the SAME group the page resolved.
+      expect(mockGetMyWorldCupPicks).toHaveBeenCalledWith('sunday-squad');
+    });
+
+    it('shows the save bar on the Picks tab and removes it when switching away', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetStageMatches.mockImplementation(stageResponder);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
+      mockGetMyGroups.mockResolvedValue([
+        { id: 1, identifier: 'sunday-squad', name: 'World Cup Squad', poolType: 'world_cup_2026' },
+      ] as any);
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      // Leaderboard (default tab): no save bar anywhere.
+      expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
+
+      // Entering the Picks tab mounts the surface and its sticky save bar.
+      fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
+      await screen.findByTestId('match-row-10');
+      expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeInTheDocument();
+      expect(screen.getByText('0 picks selected')).toBeInTheDocument();
+
+      // Leaving the tab unmounts the surface — the save bar disappears.
+      fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
+      expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
+      expect(screen.queryByText('0 picks selected')).not.toBeInTheDocument();
     });
   });
 });
