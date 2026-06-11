@@ -1,5 +1,7 @@
 import Avatar from '../Avatar';
 import Button from '../Button';
+import Card from '../Card';
+import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import type { GameData, GroupMember, MemberPicks, PickData } from '../../../lib/types';
 
 export interface GroupPicksProps {
@@ -78,6 +80,13 @@ function rowCorrectness(game: GameData, picksByMember: Map<string, Map<number, P
   return { correct, graded };
 }
 
+/** Human-readable status line for a game, shared by the table and mobile cards. */
+function statusLabel(game: GameData): string {
+  if (game.status === 'FINAL') return `Final ${game.awayScore}-${game.homeScore}`;
+  if (game.status === 'IN_PROGRESS') return game.statusDetail || 'In progress';
+  return 'Scheduled';
+}
+
 const HEADER_CELL = 'px-sm py-xs text-left text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400';
 const BODY_CELL = 'px-sm py-xs align-top text-sm text-secondary-900 dark:text-neutral-0 border-t border-secondary-200 dark:border-secondary-700';
 const PLACEHOLDER = 'text-secondary-400 dark:text-secondary-500 italic';
@@ -105,6 +114,10 @@ export default function GroupPicks({ games, picks, members, onRefresh }: GroupPi
 
   const hasFinal = games.some(game => game.status === 'FINAL');
 
+  // Below `md`, the member-per-column table can't fit — render a card per game
+  // instead (one layout mounts at a time so screen readers don't read both).
+  const isMobile = useMediaQuery('(max-width: 767px)');
+
   return (
     <div className="space-y-md">
       {/* Header */}
@@ -123,6 +136,56 @@ export default function GroupPicks({ games, picks, members, onRefresh }: GroupPi
         <p className="text-sm text-secondary-500 dark:text-secondary-400 py-lg text-center">
           {games.length === 0 ? 'No games available for this week.' : 'No members to display.'}
         </p>
+      ) : isMobile ? (
+        /* Mobile: one card per game, members listed inside. */
+        <div className="space-y-sm">
+          {games.map(game => {
+            const { correct, graded } = rowCorrectness(game, picksByMember, members);
+            return (
+              <Card key={game.id} padding="md" className="space-y-sm">
+                <div className="flex items-start justify-between gap-sm">
+                  <div className="min-w-0">
+                    <div className="font-heading font-semibold text-secondary-900 dark:text-neutral-0">
+                      {game.awayTeam.abbreviation} @ {game.homeTeam.abbreviation}
+                    </div>
+                    <div className="text-xs text-secondary-500 dark:text-secondary-400">
+                      {statusLabel(game)}
+                    </div>
+                  </div>
+                  {hasFinal && game.status === 'FINAL' && (
+                    <span className="shrink-0 rounded-full bg-secondary-100 dark:bg-secondary-800 px-xs py-xxxs text-xs font-medium text-secondary-700 dark:text-secondary-300">
+                      {correct}/{graded} correct
+                    </span>
+                  )}
+                </div>
+                <ul className="divide-y divide-secondary-200 dark:divide-secondary-700">
+                  {members.map(member => {
+                    const pick = picksByMember.get(member.id)?.get(game.id);
+                    const state = cellState(game, pick);
+                    return (
+                      <li key={member.id} className="flex items-center justify-between gap-sm py-xs">
+                        <div className="flex min-w-0 items-center gap-xs">
+                          <Avatar
+                            name={member.name}
+                            email={member.email}
+                            pictureUrl={member.pictureUrl}
+                            variant="sm"
+                          />
+                          <span className="truncate text-sm font-medium text-secondary-700 dark:text-secondary-300">
+                            {member.name || member.email}
+                          </span>
+                        </div>
+                        <div className="shrink-0 text-right text-sm text-secondary-900 dark:text-neutral-0">
+                          {renderCell(game, pick, state)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            );
+          })}
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-secondary-200 dark:border-secondary-700">
           <table className="min-w-full border-collapse bg-neutral-0 dark:bg-secondary-900">
@@ -163,11 +226,7 @@ export default function GroupPicks({ games, picks, members, onRefresh }: GroupPi
                         {game.awayTeam.abbreviation} @ {game.homeTeam.abbreviation}
                       </span>
                       <span className="block text-xs font-normal text-secondary-500 dark:text-secondary-400">
-                        {game.status === 'FINAL'
-                          ? `Final ${game.awayScore}-${game.homeScore}`
-                          : game.status === 'IN_PROGRESS'
-                            ? game.statusDetail || 'In progress'
-                            : 'Scheduled'}
+                        {statusLabel(game)}
                       </span>
                     </th>
 
