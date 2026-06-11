@@ -335,6 +335,23 @@ END $$;
 -- Serves the cache-first stage reads in GameService.getWorldCupStage.
 CREATE INDEX IF NOT EXISTS idx_games_league_stage ON games(league, stage);
 
+-- Persisted goal/card timeline. ESPN exposes a per-match `competition.details`
+-- array (each entry a goal/card with its minute, player, and side); we flatten it
+-- to { type, minute, player, side, teamAbbr } and store it so the World Cup pick
+-- card can render a match timeline from a cached read — no live ESPN call per view.
+-- NULL means "not yet parsed" (a row cached before this column existed); [] means
+-- "parsed, no events". GameService treats a started match still holding NULL as
+-- stale so the next refresh backfills it.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'games' AND column_name = 'events'
+  ) THEN
+    ALTER TABLE games ADD COLUMN events JSONB NULL;
+  END IF;
+END $$;
+
 -- Fix duplicate confidence constraint issue (remove incorrect constraint that lacks group_id)
 DO $$
 BEGIN

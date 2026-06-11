@@ -37,6 +37,12 @@ export class Game {
     // competitor.winner flag — the only signal on a PK shootout — is not
     // recoverable from a cached row's scores alone.
     this.winnerTeamId = data.winnerTeamId ?? null;
+    // Goal/card timeline (soccer). An array of { type, minute, player, side,
+    // teamAbbr } parsed from ESPN's competition.details. `null` is meaningful:
+    // it marks a row cached before the events column existed (never parsed), which
+    // GameService uses to force a one-time backfill. An ESPN-sourced Game always
+    // carries a concrete array ([] when the match has no goals/cards yet).
+    this.events = data.events ?? null;
     this.lastUpdated = data.lastUpdated;
     this.createdAt = data.createdAt;
   }
@@ -56,7 +62,9 @@ static fromESPNData(espnGame, opts = {}) {
   const homeTeam = competitors.find(c => c.homeAway === 'home');
   const awayTeam = competitors.find(c => c.homeAway === 'away');
 
-  
+  // Goal/card timeline. Always an array (possibly empty) for an ESPN-sourced game.
+  const events = Game.parseMatchEvents(competition, homeTeam, awayTeam);
+
   const weekData = competition.week || espnGame.week || {};
   let week = weekData.number || 1;
 
@@ -167,12 +175,61 @@ static fromESPNData(espnGame, opts = {}) {
     seasonType: seasonType,
     league,
     stage,
+    events,
     lastUpdated: new Date()
   });
 }
 
+// Flatten ESPN's `competition.details` into the timeline shape the World Cup pick
+// card renders: { type, minute, player, side, teamAbbr }. ESPN lists every match
+// detail — goals, cards, substitutions, VAR reviews — each tagged with the minute
+// (clock.displayValue), the involved athlete, and the team. We keep only goals and
+// bookings and resolve the team to a home/away side. A penalty goal carries
+// scoringPlay; an own goal is flagged separately so the UI can mark it. Returns []
+// when ESPN provides no details (a scheduled match, or a kickoff with nothing yet).
+static parseMatchEvents(competition, homeComp, awayComp) {
+  const details = competition && competition.details;
+  if (!Array.isArray(details) || details.length === 0) return [];
+
+  const homeId = homeComp && homeComp.id != null ? String(homeComp.id) : null;
+  const awayId = awayComp && awayComp.id != null ? String(awayComp.id) : null;
+
+  const sideFor = (teamId) => {
+    const id = teamId != null ? String(teamId) : null;
+    if (id && id === homeId) return { side: 'home', teamAbbr: homeComp.team?.abbreviation ?? null };
+    if (id && id === awayId) return { side: 'away', teamAbbr: awayComp.team?.abbreviation ?? null };
+    return null;
+  };
+
+  const classify = (d) => {
+    if (d?.ownGoal === true) return 'own-goal';
+    if (d?.scoringPlay === true || (d?.type?.text || '').toLowerCase().includes('goal')) return 'goal';
+    if (d?.redCard === true) return 'red-card';
+    if (d?.yellowCard === true) return 'yellow-card';
+    return null; // substitution, VAR, etc. — not shown on the timeline
+  };
+
+  const events = [];
+  for (const d of details) {
+    const type = classify(d);
+    if (!type) continue;
+    const where = sideFor(d?.team?.id);
+    if (!where) continue;
+    const minute = d?.clock?.displayValue ?? null;
+    const player = d?.athletesInvolved?.[0]?.displayName ?? null;
+    if (!minute || !player) continue; // a malformed detail is dropped, not rendered blank
+    events.push({ type, minute, player, side: where.side, teamAbbr: where.teamAbbr });
+  }
+  return events;
+}
+
   // Check if this game data is different from another game
   isDifferentFrom(otherGame) {
+    // Event-count fingerprint. Match feeds are append-only, so a new goal/card
+    // grows the count. `null` (never-parsed cached row) maps to -1 so a first
+    // parse — even to an empty [] — reads as a change and gets persisted, which
+    // is what backfills the events column for pre-existing rows.
+    const eventCount = (g) => (Array.isArray(g.events) ? g.events.length : -1);
     return (
       this.gameDate.getTime() !== otherGame.gameDate.getTime() ||
   this.status !== otherGame.status ||
@@ -180,7 +237,8 @@ static fromESPNData(espnGame, opts = {}) {
   this.awayScore !== otherGame.awayScore ||
   this.period !== otherGame.period ||
   this.displayClock !== otherGame.displayClock ||
-  this.statusDetail !== otherGame.statusDetail
+  this.statusDetail !== otherGame.statusDetail ||
+  eventCount(this) !== eventCount(otherGame)
     );
   }
 
@@ -198,8 +256,8 @@ async save() {
       espn_id, home_team, away_team, game_date, status,
       period, display_clock, status_detail,
       home_score, away_score, week, season, season_type, odds, probability, last_updated,
-      league, stage, winner_team_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      league, stage, winner_team_id, events
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
     ON CONFLICT (espn_id)
     DO UPDATE SET
       home_team = $2,
@@ -219,7 +277,8 @@ async save() {
       last_updated = $16,
       league = $17,
       stage = $18,
-      winner_team_id = $19
+      winner_team_id = $19,
+      events = $20
     RETURNING *
   `;
 
@@ -242,7 +301,10 @@ async save() {
     this.lastUpdated,
     this.league || null,
     this.stage || null,
-    this.winnerTeamId || null
+    this.winnerTeamId || null,
+    // Persist [] (not NULL) once parsed, so a genuinely eventless match reads as
+    // "parsed, none" rather than re-triggering the backfill refresh every request.
+    JSON.stringify(this.events ?? [])
   ];
 
   const result = await pool.query(query, values);
@@ -274,6 +336,9 @@ static fromDbRow(row) {
     league: row.league,
     stage: row.stage,
     winnerTeamId: row.winner_team_id ?? null,
+    // Preserve NULL as null (never-parsed) vs [] (parsed, empty) — the distinction
+    // drives the one-time events backfill in GameService.isStageCacheFresh.
+    events: row.events == null ? null : (typeof row.events === 'string' ? JSON.parse(row.events) : row.events),
     lastUpdated: new Date(row.last_updated),
     createdAt: new Date(row.created_at)
   });
@@ -344,6 +409,8 @@ static async findByLeagueStage(league, stage) {
       league: this.league,
       stage: this.stage,
       winnerTeamId: this.winnerTeamId ?? null,
+      // The client always wants a concrete array; a never-parsed null collapses to [].
+      events: this.events ?? [],
       lastUpdated: this.lastUpdated,
       createdAt: this.createdAt
     };

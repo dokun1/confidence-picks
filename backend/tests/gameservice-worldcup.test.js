@@ -119,6 +119,10 @@ describe('GameService.getWorldCupStage cache behavior', () => {
     seasonType: 1,
     league: 'world_cup',
     stage: 'group',
+    // A row written by the current code has its events parsed (empty here). NULL
+    // would mark a pre-events-column row and deliberately force a backfill refresh
+    // — that path has its own tests below.
+    events: [],
     lastUpdated: new Date(),
     ...overrides,
   });
@@ -196,6 +200,36 @@ describe('GameService.getWorldCupStage cache behavior', () => {
     await GameService.getWorldCupStage('group');
 
     assert.strictEqual(espn.mock.callCount(), 1, 'an unstarted-but-due slate must refresh');
+  });
+
+  test('a started cached game with un-parsed (NULL) events backfills from ESPN', async () => {
+    // A FINAL row cached before the events column existed. The one-time backfill
+    // must refresh it so its goal/card timeline populates, even though it is
+    // otherwise fresh by every other rule (recently updated, completed).
+    const cached = cachedGame({ events: null });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 1, 'a started NULL-events row must refresh once');
+  });
+
+  test('a SCHEDULED game with NULL events does NOT force a backfill', async () => {
+    // Unstarted matches legitimately have no events yet — they must not be pulled
+    // into the backfill refresh (that is the "scheduled games keep a long TTL" rule).
+    const cached = cachedGame({
+      status: 'SCHEDULED',
+      gameDate: new Date(Date.now() + 6 * 60 * 60 * 1000), // kicks off in 6h
+      events: null,
+    });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    const games = await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 0, 'a scheduled NULL-events row stays cached');
+    assert.strictEqual(games[0], cached);
   });
 
   test('forceRefresh skips the cache entirely', async () => {

@@ -19,6 +19,7 @@ import {
   submitUserWorldCupPicks,
 } from '../../lib/worldCupService.js';
 import { getMyGroups } from '../../lib/groupsService.js';
+import { pollIntervalFor } from '../../lib/matchPolling';
 import SaveTargetsDropdown, { type SaveTarget } from '../../components/SaveTargetsDropdown';
 import PickPersonSelector, { type PickPersonOption } from '../../components/PickPersonSelector';
 
@@ -167,6 +168,39 @@ export default function WorldCupPicksTab({
   }, [reloadKey]);
 
   const fetchMatches = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Live updates: re-pull every stage in the background and swap in the fresh
+  // matches WITHOUT toggling the loading flag (which would blank the list) and
+  // WITHOUT touching the draft. A transient failure is swallowed so the last-good
+  // slate stays on screen. This is what feeds new scores, statuses, and goal/card
+  // events into the rows (and their timelines) while a match is live.
+  const refreshMatchesSilently = useCallback(async () => {
+    try {
+      const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
+      const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+      setFetchState((s) => ({ ...s, matches }));
+    } catch {
+      // Keep the existing slate; the next tick retries.
+    }
+  }, []);
+
+  // Status-aware cadence: fast while any match is live, slow while matches are
+  // only upcoming (to catch kickoff), and stopped once everything is final. The
+  // effect keys off the interval NUMBER, so it only re-subscribes when the tier
+  // actually changes — a same-tier data refresh doesn't reset the timer.
+  const pollInterval = useMemo(
+    () => pollIntervalFor(fetchState.matches),
+    [fetchState.matches],
+  );
+  useEffect(() => {
+    if (pollInterval == null) return;
+    const id = setInterval(() => {
+      // Don't poll a backgrounded tab — resume on the next tick once it's visible.
+      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshMatchesSilently();
+    }, pollInterval);
+    return () => clearInterval(id);
+  }, [pollInterval, refreshMatchesSilently]);
 
   // Clear the draft SYNCHRONOUSLY the instant the selected person changes, so
   // one member's in-progress picks can never linger on screen — and be

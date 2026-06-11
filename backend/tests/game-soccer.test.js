@@ -2,7 +2,11 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { Game } from '../src/models/Game.js';
 import { generateMockWeek } from '../src/mocks/espnGameData.js';
-import { generateMockWorldCupStage } from '../src/mocks/espnWorldCupData.js';
+import {
+  generateMockWorldCupStage,
+  buildMockWorldCupEvent,
+  WORLD_CUP_2026_TEAMS,
+} from '../src/mocks/espnWorldCupData.js';
 
 // These tests focus on the pure fromESPNData / toJSON behavior — the league/stage
 // stamping and the shared competitor parsing — without touching the database. The
@@ -98,5 +102,82 @@ describe('Game.toJSON surfaces league and stage', () => {
     assert.ok('stage' in json, 'toJSON should always include the stage field');
     assert.strictEqual(json.league, 'nfl');
     assert.strictEqual(json.stage, null);
+  });
+});
+
+describe('Game.fromESPNData match events (goals/cards)', () => {
+  const { MEX, USA } = WORLD_CUP_2026_TEAMS;
+
+  function eventMatch(events, overrides = {}) {
+    return buildMockWorldCupEvent({
+      id: '900',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 2,
+      awayScore: 1,
+      status: 'final',
+      stage: 'group',
+      events,
+      ...overrides,
+    });
+  }
+
+  test('flattens ESPN details into { type, minute, player, side, teamAbbr }', () => {
+    const game = Game.fromESPNData(
+      eventMatch([
+        { type: 'goal', minute: "9'", player: 'J. Quiñones', side: 'home' },
+        { type: 'yellow-card', minute: "17'", player: 'T. Mokoena', side: 'away' },
+        { type: 'red-card', minute: "49'", player: 'S. Sithole', side: 'away' },
+      ]),
+      { league: 'world_cup', stage: 'group' },
+    );
+
+    assert.strictEqual(game.events.length, 3);
+    assert.deepStrictEqual(game.events[0], {
+      type: 'goal',
+      minute: "9'",
+      player: 'J. Quiñones',
+      side: 'home',
+      teamAbbr: MEX.abbreviation,
+    });
+    assert.strictEqual(game.events[1].type, 'yellow-card');
+    assert.strictEqual(game.events[1].side, 'away');
+    assert.strictEqual(game.events[1].teamAbbr, USA.abbreviation);
+    assert.strictEqual(game.events[2].type, 'red-card');
+  });
+
+  test('classifies an own goal distinctly from a regular goal', () => {
+    const game = Game.fromESPNData(
+      eventMatch([{ type: 'own-goal', minute: "30'", player: 'A. Defender', side: 'home' }]),
+      { league: 'world_cup', stage: 'group' },
+    );
+    assert.strictEqual(game.events[0].type, 'own-goal');
+  });
+
+  test('returns [] for a scheduled match with no details, and toJSON exposes an array', () => {
+    const game = Game.fromESPNData(
+      buildMockWorldCupEvent({
+        id: '901',
+        date: new Date('2026-07-01T18:00:00Z'),
+        homeTeam: MEX,
+        awayTeam: USA,
+        homeScore: 0,
+        awayScore: 0,
+        status: 'scheduled',
+        stage: 'group',
+      }),
+      { league: 'world_cup', stage: 'group' },
+    );
+    assert.deepStrictEqual(game.events, []);
+    assert.ok(Array.isArray(game.toJSON().events));
+  });
+
+  test('drops a detail whose team matches neither competitor', () => {
+    const ev = eventMatch([{ type: 'goal', minute: "9'", player: 'Ghost', side: 'home' }]);
+    // Re-point the lone detail at an unknown team id; the parser can't resolve a side.
+    ev.competitions[0].details[0].team = { id: '99999' };
+    const game = Game.fromESPNData(ev, { league: 'world_cup', stage: 'group' });
+    assert.deepStrictEqual(game.events, []);
   });
 });
