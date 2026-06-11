@@ -166,6 +166,14 @@ export class GameService {
   static isStageCacheFresh(cachedSet, now = Date.now()) {
     if (cachedSet.length === 0) return false;
 
+    // One-time events backfill: a started match (IN_PROGRESS or FINAL) whose
+    // events column is still NULL was cached before goal/card parsing existed.
+    // Force a refresh so its timeline populates. Once persisted as [] or a real
+    // array it reads as fresh, so this fires at most once per such row. Scheduled
+    // matches legitimately have no events yet, so they never trigger it.
+    const needsEventsBackfill = cachedSet.some(g => g.status !== 'SCHEDULED' && g.events == null);
+    if (needsEventsBackfill) return false;
+
     const startWindowMs = 2 * 60 * 1000;
     const needStartRefresh = cachedSet.some(g => {
       try {

@@ -79,7 +79,8 @@ export function buildMockWorldCupEvent({
   odds = null,
   probability = null,
   winner = null,
-  shootout = null
+  shootout = null,
+  events = null
 }) {
   const statusConfig = {
     scheduled: { state: 'pre', name: 'STATUS_SCHEDULED', description: 'Scheduled', detail: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }), completed: false },
@@ -164,6 +165,34 @@ export function buildMockWorldCupEvent({
     return competitor;
   };
 
+  // ESPN exposes goals/cards under competition.details. Build that array from a
+  // compact descriptor list — { type: 'goal'|'own-goal'|'yellow-card'|'red-card',
+  // minute: "9'", player, side: 'home'|'away' } — mirroring the real payload's
+  // boolean flags (scoringPlay/ownGoal/yellowCard/redCard), clock, team ref, and
+  // athletesInvolved so Game.parseMatchEvents has realistic input to flatten.
+  const DETAIL_TYPE = {
+    goal: { id: '70', text: 'Goal' },
+    'own-goal': { id: '97', text: 'Own Goal' },
+    'yellow-card': { id: '94', text: 'Yellow Card' },
+    'red-card': { id: '93', text: 'Red Card' }
+  };
+  const matchDetails = Array.isArray(events)
+    ? events.map((e) => {
+        const team = e.side === 'home' ? homeTeam : awayTeam;
+        return {
+          type: DETAIL_TYPE[e.type] || { id: '0', text: e.type },
+          clock: { value: 0, displayValue: e.minute },
+          team: { id: team.id },
+          scoringPlay: e.type === 'goal' || e.type === 'own-goal',
+          ownGoal: e.type === 'own-goal',
+          penaltyKick: false,
+          yellowCard: e.type === 'yellow-card',
+          redCard: e.type === 'red-card',
+          athletesInvolved: [{ displayName: e.player }]
+        };
+      })
+    : [];
+
   return {
     id,
     uid: `s:600~l:606~e:${id}`,
@@ -193,6 +222,7 @@ export function buildMockWorldCupEvent({
         buildCompetitor(homeTeam, 'home', homeScore, 0),
         buildCompetitor(awayTeam, 'away', awayScore, 1)
       ],
+      details: matchDetails,
       notes: [],
       status: statusBlock,
       broadcasts: [],
