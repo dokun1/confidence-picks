@@ -16,9 +16,9 @@ function groupMatch(overrides: Partial<WorldCupMatch> = {}): WorldCupMatch {
     awayScore: 0,
     status: 'SCHEDULED',
     isKnockout: false,
-    // Far future so "scheduled, not yet kicked off" stays editable whenever the
+    // Tomorrow so "scheduled, not yet kicked off" stays editable whenever the
     // suite runs. Past-kickoff locking is covered by its own test below.
-    gameDate: '2099-06-11T20:00:00.000Z',
+    gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }
@@ -156,7 +156,7 @@ describe('MatchPickRow', () => {
   it('locks a SCHEDULED match whose kickoff time has already passed', () => {
     const props = {
       ...baseProps(),
-      match: groupMatch({ status: 'SCHEDULED', gameDate: '2000-01-01T00:00:00.000Z' }),
+      match: groupMatch({ status: 'SCHEDULED', gameDate: new Date(Date.now() - 60 * 60 * 1000).toISOString() }),
     };
     render(<MatchPickRow {...props} />);
     expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeDisabled();

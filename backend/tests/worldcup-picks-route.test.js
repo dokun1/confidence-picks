@@ -118,10 +118,10 @@ describe('World Cup picks router', () => {
       mock.method(pool, 'query', async (sql) => {
         if (/FROM games/.test(sql)) {
           return { rows: [
-            // Kickoff long past -> locked, must never reach the upsert.
-            { id: 101, season: 2026, season_type: 1, week: 1, game_date: '2000-01-01T00:00:00.000Z' },
-            // Kickoff far future -> still open.
-            { id: 102, season: 2026, season_type: 1, week: 1, game_date: '2099-01-01T00:00:00.000Z' },
+            // Kickoff an hour ago -> locked, must never reach the upsert.
+            { id: 101, season: 2026, season_type: 1, week: 1, game_date: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+            // Kickoff tomorrow -> still open.
+            { id: 102, season: 2026, season_type: 1, week: 1, game_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() },
           ] };
         }
         throw new Error(`unexpected query: ${sql}`);
