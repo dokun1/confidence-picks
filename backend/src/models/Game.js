@@ -249,48 +249,62 @@ static parseMatchEvents(competition, homeComp, awayComp) {
     return new Date(this.lastUpdated) < twentyFourHoursAgo;
   }
 
-// Save to database
-async save() {
-  const query = `
-    INSERT INTO games (
-      espn_id, home_team, away_team, game_date, status,
-      period, display_clock, status_detail,
-      home_score, away_score, week, season, season_type, odds, probability, last_updated,
-      league, stage, winner_team_id, events
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-    ON CONFLICT (espn_id)
-    DO UPDATE SET
-      home_team = $2,
-      away_team = $3,
-      game_date = $4,
-  status = $5,
-      period = $6,
-      display_clock = $7,
-      status_detail = $8,
-      home_score = $9,
-      away_score = $10,
-      week = $11,
-      season = $12,
-      season_type = $13,
-      odds = $14,
-      probability = $15,
-      last_updated = $16,
-      league = $17,
-      stage = $18,
-      winner_team_id = $19,
-      events = $20
-    RETURNING *
-  `;
+// Whether the live database has the games.events column. It ships with the
+// match-timeline feature and is added by the INIT_DB schema sync — which on
+// production runs only when explicitly enabled, so a deploy can be live for a
+// while before the column exists. A save() that blindly writes a missing column
+// throws, returns no row, and leaves the Game without an id; an id-less Game then
+// silently breaks the pick↔game join the leaderboard and picks page rely on
+// (every pick referencing that game scores nothing and renders unselected). So we
+// detect the column's absence once and stop emitting it until the process
+// restarts against a migrated schema. See [[worldcup-backend-gaps]].
+static eventsColumnAvailable = true;
 
+// Postgres "undefined_column" (42703), scoped to the events column so a genuinely
+// malformed query still surfaces instead of being silently swallowed + retried.
+static isMissingEventsColumnError(err) {
+  return !!err && err.code === '42703' && /\bevents\b/i.test(err.message || '');
+}
+
+// Save to database. Resilient to an un-migrated schema: if the events column is
+// absent we persist every other field anyway (the id, scores, status, and winner
+// MUST land) and drop only the timeline.
+async save() {
+  try {
+    return await this.upsert(Game.eventsColumnAvailable);
+  } catch (err) {
+    if (Game.eventsColumnAvailable && Game.isMissingEventsColumnError(err)) {
+      Game.eventsColumnAvailable = false;
+      console.warn(
+        '[Game.save] games.events column is missing — persisting without it. ' +
+        'Run the INIT_DB schema sync to enable the match timeline.'
+      );
+      return await this.upsert(false);
+    }
+    throw err;
+  }
+}
+
+// Build and run the upsert. `includeEvents` toggles the one column that may not
+// exist yet; every other column is always written. ON CONFLICT updates every
+// column except the espn_id conflict key (EXCLUDED.* = the values we just tried
+// to insert), so adding/removing the trailing events column needs no re-numbering.
+async upsert(includeEvents) {
+  const columns = [
+    'espn_id', 'home_team', 'away_team', 'game_date', 'status',
+    'period', 'display_clock', 'status_detail',
+    'home_score', 'away_score', 'week', 'season', 'season_type',
+    'odds', 'probability', 'last_updated', 'league', 'stage', 'winner_team_id',
+  ];
   const values = [
     this.espnId,
     JSON.stringify(this.homeTeam),
     JSON.stringify(this.awayTeam),
     this.gameDate,
-  this.status, // normalized (SCHEDULED | IN_PROGRESS | FINAL)
-  this.period,
-  this.displayClock,
-  this.statusDetail,
+    this.status, // normalized (SCHEDULED | IN_PROGRESS | FINAL)
+    this.period,
+    this.displayClock,
+    this.statusDetail,
     this.homeScore,
     this.awayScore,
     this.week,
@@ -302,10 +316,22 @@ async save() {
     this.league || null,
     this.stage || null,
     this.winnerTeamId || null,
+  ];
+  if (includeEvents) {
+    columns.push('events');
     // Persist [] (not NULL) once parsed, so a genuinely eventless match reads as
     // "parsed, none" rather than re-triggering the backfill refresh every request.
-    JSON.stringify(this.events ?? [])
-  ];
+    values.push(JSON.stringify(this.events ?? []));
+  }
+
+  const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+  const updates = columns.slice(1).map((c) => `${c} = EXCLUDED.${c}`).join(', ');
+  const query = `
+    INSERT INTO games (${columns.join(', ')})
+    VALUES (${placeholders})
+    ON CONFLICT (espn_id) DO UPDATE SET ${updates}
+    RETURNING *
+  `;
 
   const result = await pool.query(query, values);
   this.id = result.rows[0].id;

@@ -171,7 +171,14 @@ export class GameService {
     // Force a refresh so its timeline populates. Once persisted as [] or a real
     // array it reads as fresh, so this fires at most once per such row. Scheduled
     // matches legitimately have no events yet, so they never trigger it.
-    const needsEventsBackfill = cachedSet.some(g => g.status !== 'SCHEDULED' && g.events == null);
+    //
+    // Gated on the column actually existing: if the events column is missing the
+    // refresh can never persist events, so the NULL never clears and this would
+    // re-fetch every stage from ESPN on every request — turning the leaderboard
+    // and picks page slow. When the column is absent we leave the cached slate
+    // fresh and skip the backfill entirely.
+    const needsEventsBackfill =
+      Game.eventsColumnAvailable && cachedSet.some(g => g.status !== 'SCHEDULED' && g.events == null);
     if (needsEventsBackfill) return false;
 
     const startWindowMs = 2 * 60 * 1000;
@@ -238,7 +245,12 @@ export class GameService {
 
         const winnerChanged = freshGame.winnerTeamId !== (cachedGame.winnerTeamId ?? null);
         if (forceRefresh || cachedGame.isStale() || freshGame.isDifferentFrom(cachedGame) || winnerChanged) {
-          await GameService.persistOrServeLive(freshGame);
+          const persisted = await GameService.persistOrServeLive(freshGame);
+          // If the row couldn't be persisted (e.g. an un-migrated schema), the
+          // fresh Game has no id. Borrow the cached row's id so the live data is
+          // still joinable — an id-less game silently drops every pick that
+          // references it from the leaderboard and the picks page.
+          if (!persisted && freshGame.id == null) freshGame.id = cachedGame.id;
           games.push(freshGame);
         } else {
           games.push(cachedGame);
@@ -268,11 +280,17 @@ export class GameService {
   // here would blank the stage list and the leaderboard mid-match. The canonical
   // example is a schema drift (e.g. a missing games column): scores still surface
   // live every refresh; they just aren't cached until the DB is repaired.
+  //
+  // Returns true when the row was persisted (so it carries a real id), false when
+  // it was served live-but-uncached — the caller uses that to keep the slate
+  // joinable by falling back to a cached id.
   static async persistOrServeLive(game) {
     try {
       await game.save();
+      return true;
     } catch (error) {
       console.error(`[getWorldCupStage] persist failed for espnId=${game.espnId}; serving live ESPN data uncached: ${error.message}`);
+      return false;
     }
   }
 

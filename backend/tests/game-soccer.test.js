@@ -1,5 +1,6 @@
-import { test, describe } from 'node:test';
+import { test, describe, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
+import pool from '../src/config/database.js';
 import { Game } from '../src/models/Game.js';
 import { generateMockWeek } from '../src/mocks/espnGameData.js';
 import {
@@ -179,5 +180,85 @@ describe('Game.fromESPNData match events (goals/cards)', () => {
     ev.competitions[0].details[0].team = { id: '99999' };
     const game = Game.fromESPNData(ev, { league: 'world_cup', stage: 'group' });
     assert.deepStrictEqual(game.events, []);
+  });
+});
+
+// Regression for the events-column sev: on an un-migrated production schema the
+// games.events column is absent. save() MUST still persist the row (and set the
+// id) — a failed save returns no id, and an id-less Game breaks the pick↔game
+// join the leaderboard + picks page depend on. The pg pool is mocked so this
+// runs without a live Postgres.
+describe('Game.save events-column resilience', () => {
+  const { MEX, USA } = WORLD_CUP_2026_TEAMS;
+  const finalMatch = () =>
+    Game.fromESPNData(
+      buildMockWorldCupEvent({
+        id: '900',
+        date: new Date('2026-06-11T18:00:00Z'),
+        homeTeam: MEX,
+        awayTeam: USA,
+        homeScore: 2,
+        awayScore: 1,
+        status: 'final',
+        stage: 'group',
+        events: [{ type: 'goal', minute: "9'", player: 'J. Q', side: 'home' }],
+      }),
+      { league: 'world_cup', stage: 'group' },
+    );
+
+  afterEach(() => {
+    mock.restoreAll();
+    Game.eventsColumnAvailable = true; // never leak the flag between tests
+  });
+
+  test('writes the events column in a single upsert when it is available', async () => {
+    Game.eventsColumnAvailable = true;
+    const queries = [];
+    mock.method(pool, 'query', async (text) => {
+      queries.push(text);
+      return { rows: [{ id: 5 }] };
+    });
+
+    const g = finalMatch();
+    await g.save();
+
+    assert.strictEqual(queries.length, 1, 'single upsert, no retry');
+    assert.match(queries[0], /events/, 'the upsert includes the events column');
+    assert.strictEqual(g.id, 5);
+  });
+
+  test('retries without events — still setting the id — when the column is missing', async () => {
+    Game.eventsColumnAvailable = true;
+    const queries = [];
+    mock.method(pool, 'query', async (text) => {
+      queries.push(text);
+      if (queries.length === 1) {
+        const err = new Error('column "events" of relation "games" does not exist');
+        err.code = '42703';
+        throw err;
+      }
+      return { rows: [{ id: 77 }] };
+    });
+
+    const g = finalMatch();
+    await g.save();
+
+    assert.strictEqual(g.id, 77, 'id is still set from the retry — the row persists');
+    assert.strictEqual(Game.eventsColumnAvailable, false, 'the flag flips so later saves skip events upfront');
+    assert.strictEqual(queries.length, 2, 'first attempt + one retry');
+    assert.match(queries[0], /events/, 'first attempt included events');
+    assert.doesNotMatch(queries[1], /events/, 'retry omitted events');
+  });
+
+  test('does not swallow an unrelated column error', async () => {
+    Game.eventsColumnAvailable = true;
+    mock.method(pool, 'query', async () => {
+      const err = new Error('null value in column "status" violates not-null constraint');
+      err.code = '23502';
+      throw err;
+    });
+
+    await assert.rejects(() => finalMatch().save(), /status/);
+    assert.strictEqual(Game.eventsColumnAvailable, true, 'an unrelated failure must not disable events');
   });
 });
