@@ -18,13 +18,16 @@ vi.mock('../lib/groupsService.js', () => ({
   getMyGroups: vi.fn(),
 }));
 
-// PicksTab owns its own fetch (season -> closest week -> picks). Mock those so the
-// picks tab renders deterministically; getClosestWeek is left pending in the tab-
-// switching test so the tab sits in its loading state.
+// PicksTab and LeaderboardTab own their own fetches (seasons -> closest week ->
+// picks / scoreboard). Mock those so the tabs render deterministically;
+// getClosestWeek is left pending in the tab-switching test so the picks tab
+// sits in its loading state.
 vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2025) }));
 vi.mock('../lib/picksService.js', () => ({
   getClosestWeek: vi.fn(),
   getPicks: vi.fn(),
+  getPickSeasons: vi.fn(),
+  getScoreboard: vi.fn(),
 }));
 
 // World Cup pools fetch a tournament-shaped leaderboard, and their Picks tab
@@ -60,7 +63,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 import { getGroup, getMembers, getMessages, getMyGroups } from '../lib/groupsService.js';
-import { getClosestWeek } from '../lib/picksService.js';
+import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
 import {
   getWorldCupLeaderboard,
   getStageMatches,
@@ -71,6 +74,8 @@ const mockGetMembers = vi.mocked(getMembers);
 const mockGetMessages = vi.mocked(getMessages);
 const mockGetMyGroups = vi.mocked(getMyGroups);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
+const mockGetPickSeasons = vi.mocked(getPickSeasons);
+const mockGetScoreboard = vi.mocked(getScoreboard);
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
 const mockGetStageMatches = vi.mocked(getStageMatches);
 const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
@@ -131,6 +136,10 @@ describe('GroupDetailsPage', () => {
     // Hold the picks fetch open so the picks tab stays in its loading state for
     // the tab-switching assertions (this suite covers navigation, not picks data).
     mockGetClosestWeek.mockReturnValue(new Promise(() => {}));
+    // The NFL leaderboard/picks tabs resolve the group's seasons on mount; an
+    // empty list defaults them to the (mocked) current season.
+    mockGetPickSeasons.mockResolvedValue({ seasons: [] });
+    mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
   });
 
   it('renders the group name as the heading once the parallel fetch resolves', async () => {
@@ -158,8 +167,9 @@ describe('GroupDetailsPage', () => {
     await screen.findByRole('heading', { name: ownerGroup.name });
 
     expect(screen.getByText('Owner')).toBeInTheDocument();
-    // Default tab is leaderboard.
-    expect(screen.getByText(/Leaderboard coming soon/i)).toBeInTheDocument();
+    // Default tab is leaderboard: the NFL LeaderboardTab fetches the scoreboard
+    // (empty here) and renders its empty state.
+    expect(await screen.findByText(/No points yet/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
     // PicksTab owns its fetch; with getClosestWeek pending it shows the loader.
@@ -172,6 +182,39 @@ describe('GroupDetailsPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: /settings/i }));
     // SettingsTab leads with the Members roster section.
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument();
+  });
+
+  it('renders the NFL leaderboard for the season that has pick data (old group)', async () => {
+    mockGetGroup.mockResolvedValue(memberGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+    // Old group: pick data only exists for 2024 while the (mocked) current
+    // season is 2025. The leaderboard must request the season that actually
+    // has data, not the empty current one — this is the regression that hid
+    // old groups' scores after the season rolled over.
+    mockGetPickSeasons.mockResolvedValue({ seasons: [2024] });
+    mockGetScoreboard.mockResolvedValue({
+      season: 2024,
+      seasonType: 2,
+      weeks: [1, 2],
+      users: [
+        { userId: 1, name: 'Alice', pictureUrl: null, weekly: [{ week: 1, points: 10 }, { week: 2, points: 5 }], totalPoints: 15 },
+        { userId: 2, name: 'Bob', pictureUrl: null, weekly: [{ week: 1, points: 3 }, { week: 2, points: 4 }], totalPoints: 7 },
+      ],
+    });
+
+    renderPage();
+    await screen.findByRole('heading', { name: memberGroup.name });
+
+    // Standings render with season totals (Alice leads).
+    expect(await screen.findAllByText('15')).not.toHaveLength(0);
+    expect(screen.getAllByText('Alice').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Bob').length).toBeGreaterThan(0);
+    // Weekly breakdown columns for the weeks with data.
+    expect(screen.getByRole('columnheader', { name: 'W1' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'W2' })).toBeInTheDocument();
+    // The scoreboard was fetched for the old season with data, not the current one.
+    expect(mockGetScoreboard).toHaveBeenCalledWith('sunday-squad', { season: 2024, seasonType: 2 });
   });
 
   it('hides the Owner badge for a non-admin member', async () => {

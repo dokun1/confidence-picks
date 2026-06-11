@@ -95,3 +95,44 @@ export function savePicks(
   groupIdentifier: string,
   body: SavePicksBody,
 ): Promise<GetPicksResponse>;
+
+/** Response shape of GET /:identifier/picks/seasons — seasons with pick data, newest first. */
+export interface PickSeasonsResponse {
+  seasons: number[];
+}
+
+/**
+ * Fetch the seasons that have stored pick data for the group. The group tabs
+ * default their season selector to the latest entry so old groups keep their
+ * history visible during the offseason.
+ */
+export function getPickSeasons(groupIdentifier: string): Promise<PickSeasonsResponse>;
+
+/** One member's points for a single week in the scoreboard payload. */
+export interface ScoreboardWeekly {
+  week: number;
+  points: number;
+}
+
+/** One member's scoreboard row: weekly points plus the season total. */
+export interface ScoreboardUser {
+  userId: number;
+  name: string;
+  pictureUrl: string | null;
+  weekly: ScoreboardWeekly[];
+  totalPoints: number;
+}
+
+/** Response shape of GET /:identifier/scoreboard. */
+export interface ScoreboardResponse {
+  season: number;
+  seasonType: number;
+  weeks: number[];
+  users: ScoreboardUser[];
+}
+
+/** Fetch the per-member weekly/total points for a season. */
+export function getScoreboard(
+  groupIdentifier: string,
+  query: { season: number; seasonType: number },
+): Promise<ScoreboardResponse>;
