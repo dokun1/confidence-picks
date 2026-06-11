@@ -53,7 +53,7 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
           status: 'SCHEDULED',
           homeScore: 0,
           awayScore: 0,
-          gameDate: '2026-06-11T19:00:00.000Z',
+          gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           winnerTeamId: null,
           homeTeam: {
             id: '1',
@@ -78,7 +78,7 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
           status: 'SCHEDULED',
           homeScore: 0,
           awayScore: 0,
-          gameDate: '2026-06-29T19:00:00.000Z',
+          gameDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           winnerTeamId: null,
           homeTeam: {
             id: '3',
@@ -206,7 +206,7 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
             status: 'SCHEDULED',
             homeScore: 0,
             awayScore: 0,
-            gameDate: '2026-06-11T19:00:00.000Z',
+            gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             winnerTeamId: null,
             homeTeam: {
               id: '1',
