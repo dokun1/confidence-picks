@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { GameService } from '../src/services/GameService.js';
 import { Game } from '../src/models/Game.js';
 import { MockESPNService } from '../src/mocks/MockESPNService.js';
-import { WORLD_CUP_2026_TEAMS } from '../src/mocks/espnWorldCupData.js';
+import { WORLD_CUP_2026_TEAMS, buildMockWorldCupEvent } from '../src/mocks/espnWorldCupData.js';
 
 // These tests exercise GameService.getWorldCupStage and resolveWinnerTeamId
 // against the MockESPNService + generateMockWorldCupStage fixtures. The DB layer
@@ -256,6 +256,108 @@ describe('GameService.getWorldCupStage cache behavior', () => {
     // Fixture: MEX 1-1 USA decided on penalties — the winner must already be on
     // the Game at save time, otherwise a cached read can never score the match.
     assert.strictEqual(savedWinners.get('MEX-USA'), WORLD_CUP_2026_TEAMS.USA.id);
+  });
+});
+
+// Regression for the events-column sev: a deploy can be live before the
+// games.events column is migrated in. The stage read must degrade gracefully —
+// never re-fetch every request, and never return an id-less game (an id-less
+// game silently drops every pick that references it from the leaderboard and the
+// picks page, which read as "scores gone" / "picks gone").
+describe('GameService.getWorldCupStage events-column resilience', () => {
+  // A persisted, completed group game with a real id, as findByLeagueStage
+  // returns it. events: null mimics a row from before the events column existed.
+  const cachedGame = (overrides = {}) => new Game({
+    id: 1,
+    espnId: '760601',
+    homeTeam: { id: WORLD_CUP_2026_TEAMS.MEX.id, abbreviation: 'MEX' },
+    awayTeam: { id: WORLD_CUP_2026_TEAMS.USA.id, abbreviation: 'USA' },
+    gameDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    status: 'FINAL',
+    homeScore: 2,
+    awayScore: 1,
+    week: 1,
+    season: 2026,
+    seasonType: 1,
+    league: 'world_cup',
+    stage: 'group',
+    events: null,
+    lastUpdated: new Date(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+    Game.eventsColumnAvailable = true; // never leak the flag between tests
+  });
+
+  test('skips the events backfill when the column is unavailable (no ESPN re-fetch loop)', () => {
+    Game.eventsColumnAvailable = false;
+    assert.strictEqual(
+      GameService.isStageCacheFresh([cachedGame()]),
+      true,
+      'a started NULL-events row stays fresh when there is no column to backfill into'
+    );
+    Game.eventsColumnAvailable = true;
+    assert.strictEqual(
+      GameService.isStageCacheFresh([cachedGame()]),
+      false,
+      'with the column present the one-time backfill still fires'
+    );
+  });
+
+  test('serves cached group games WITH their ids when the column is missing', async () => {
+    Game.eventsColumnAvailable = false;
+    const cached = cachedGame();
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek');
+
+    const games = await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(espn.mock.callCount(), 0, 'must not re-fetch from ESPN every request');
+    assert.strictEqual(games.length, 1);
+    assert.strictEqual(games[0].id, 1, 'the served game keeps its id so the pick join resolves');
+  });
+
+  test('a refresh whose persist fails still returns a game carrying the cached id', async () => {
+    // Force the live refresh path (in-progress > 60s) and make every save throw,
+    // simulating a persistence failure mid-match. The live score must still
+    // surface, but the game MUST carry the cached id so picks remain joined.
+    const cached = cachedGame({
+      status: 'IN_PROGRESS',
+      lastUpdated: new Date(Date.now() - 2 * 60 * 1000),
+      events: [],
+    });
+    const espnEvent = buildMockWorldCupEvent({
+      id: '760601',
+      date: new Date(cached.gameDate),
+      homeTeam: WORLD_CUP_2026_TEAMS.MEX,
+      awayTeam: WORLD_CUP_2026_TEAMS.USA,
+      homeScore: 1,
+      awayScore: 0,
+      status: 'inProgress',
+      stage: 'group',
+    });
+    mock.method(Game, 'findByLeagueStage', async () => [cached]);
+    mock.method(Game, 'findByESPNIds', async () => new Map([['760601', cached]]));
+    mock.method(MockESPNService, 'fetchSoccerWeek', async () => [espnEvent]);
+    mock.method(Game.prototype, 'save', async () => {
+      throw new Error('persist boom');
+    });
+
+    const games = await GameService.getWorldCupStage('group');
+
+    assert.strictEqual(games.length, 1);
+    assert.ok(games[0].id != null, 'never return an id-less game when a cached id exists');
+    assert.strictEqual(games[0].id, 1);
+    assert.strictEqual(games[0].homeScore, 1, 'and it carries the live score, not the stale cached one');
   });
 });
 
