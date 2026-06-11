@@ -1,4 +1,5 @@
 import Button from '../Button';
+import MatchTimeline from '../MatchTimeline';
 import { hasBothTeamsAssigned } from '../../../lib/teamUtils';
 import type { MatchPickResult, TeamData, WorldCupMatch } from '../../../lib/types';
 
@@ -132,6 +133,12 @@ export default function MatchPickRow({
         <span className="text-xs font-semibold uppercase text-content-muted">vs</span>
         <TeamLabel team={match.awayTeam} score={match.awayScore} showScore={locked} align="right" />
       </div>
+
+      {locked && match.events && match.events.length > 0 && (
+        <div className="border-t border-border pt-xs">
+          <MatchTimeline events={match.events} />
+        </div>
+      )}
 
       <div className="flex items-stretch gap-xs" role="group" aria-label="Select match result">
         {pickButton('home', homeLabel, `Pick ${match.homeTeam.name} to win`)}

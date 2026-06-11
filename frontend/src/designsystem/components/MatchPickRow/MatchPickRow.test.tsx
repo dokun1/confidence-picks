@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MatchPickRow from './MatchPickRow';
-import type { TeamData, WorldCupMatch } from '../../../lib/types';
+import type { MatchEvent, TeamData, WorldCupMatch } from '../../../lib/types';
 
 const mexico: TeamData = { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: '' };
 const usa: TeamData = { id: '2', name: 'United States', abbreviation: 'USA', logo: '' };
@@ -164,5 +164,34 @@ describe('MatchPickRow', () => {
     expect(screen.getByRole('button', { name: 'Pick United States to win' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
     expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  describe('match timeline', () => {
+    const EVENTS: MatchEvent[] = [
+      { type: 'goal', minute: "9'", player: 'J. Quiñones', side: 'home', teamAbbr: 'MEX' },
+      { type: 'red-card', minute: "49'", player: 'S. Sithole', side: 'away', teamAbbr: 'USA' },
+    ];
+
+    it('renders the goal/card timeline once a started match has events', () => {
+      const match = groupMatch({ status: 'FINAL', events: EVENTS });
+      render(<MatchPickRow {...baseProps()} match={match} />);
+      expect(screen.getByText("9'")).toBeInTheDocument();
+      expect(screen.getByText('J. Quiñones')).toBeInTheDocument();
+      expect(screen.getByText('S. Sithole')).toBeInTheDocument();
+    });
+
+    it('hides the timeline before kickoff even when events are present', () => {
+      // Default groupMatch is SCHEDULED with a future kickoff → not locked.
+      const match = groupMatch({ events: EVENTS });
+      render(<MatchPickRow {...baseProps()} match={match} />);
+      expect(screen.queryByText("9'")).not.toBeInTheDocument();
+      expect(screen.queryByText('J. Quiñones')).not.toBeInTheDocument();
+    });
+
+    it('renders no timeline when a started match has no events', () => {
+      const match = groupMatch({ status: 'FINAL' });
+      render(<MatchPickRow {...baseProps()} match={match} />);
+      expect(screen.queryByText('J. Quiñones')).not.toBeInTheDocument();
+    });
   });
 });
