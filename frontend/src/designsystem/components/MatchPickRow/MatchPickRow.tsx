@@ -70,8 +70,15 @@ export default function MatchPickRow({
   disabled = false,
 }: MatchPickRowProps) {
   const status = deriveStatus(match.status);
-  // Once a match leaves the scheduled state it can no longer be picked.
-  const locked = status !== 'not started';
+  // A pick locks at kickoff and STAYS locked. We key off the scheduled kickoff
+  // time (match.gameDate), not just match.status: ESPN occasionally serves a
+  // stale pre-kickoff snapshot mid-match that flaps status back to SCHEDULED,
+  // and a status-only lock would briefly re-open an in-progress match's pick.
+  // The kickoff timestamp is stable, so once it passes the row stays locked no
+  // matter how status flaps. The backend enforces the same kickoff rule.
+  const kickoffPassed =
+    match.gameDate != null && new Date(match.gameDate).getTime() <= Date.now();
+  const locked = status !== 'not started' || kickoffPassed;
   // Knockout fixtures appear in the schedule before their participants are
   // decided; until both slots hold real teams there is nothing to pick.
   const teamsAssigned = hasBothTeamsAssigned(match);

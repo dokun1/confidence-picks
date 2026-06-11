@@ -113,6 +113,41 @@ describe('World Cup picks router', () => {
       ]);
     });
 
+    test('locks picks for matches past kickoff, persisting only the open ones', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            // Kickoff long past -> locked, must never reach the upsert.
+            { id: 101, season: 2026, season_type: 1, week: 1, game_date: '2000-01-01T00:00:00.000Z' },
+            // Kickoff far future -> still open.
+            { id: 102, season: 2026, season_type: 1, week: 1, game_date: '2099-01-01T00:00:00.000Z' },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [
+          { gameId: 101, pickedResult: 'home' }, // started -> dropped
+          { gameId: 102, pickedResult: 'draw' }, // open -> saved
+        ] }),
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.deepStrictEqual(data.lockedGameIds, [101], 'the started match is reported as locked');
+      assert.deepStrictEqual(data.picks, [{ gameId: 102, pickedResult: 'draw' }], 'only the open pick saves');
+      // The locked game id must never be handed to the persistence layer.
+      const upsertedIds = upsert.mock.calls[0].arguments[0].picks.map((p) => p.gameId);
+      assert.deepStrictEqual(upsertedIds, [102], 'upsert receives only the open game');
+    });
+
     test('rejects a gameId that is not a World Cup game', async () => {
       mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
       mock.method(pool, 'query', async () => ({ rows: [] })); // no matching WC games
