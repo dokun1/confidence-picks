@@ -55,7 +55,10 @@ export default function MatchTimeline({ events, className = '' }: MatchTimelineP
   return (
     <div
       aria-label="Match timeline"
-      className={`relative grid grid-cols-[1fr_auto_1fr] items-center gap-x-sm gap-y-xs text-xs ${className}`.trim()}
+      // `isolate` scopes the minute chips' z-10 to this grid: without it the
+      // chips leak into the root stacking context and paint OVER the page's
+      // sticky submit bar as the row scrolls under it.
+      className={`relative isolate grid grid-cols-[1fr_auto_1fr] items-center gap-x-sm gap-y-xs text-xs ${className}`.trim()}
     >
       {/* Central spine — the minute chips mask it where they sit. */}
       <span
@@ -83,8 +86,10 @@ export default function MatchTimeline({ events, className = '' }: MatchTimelineP
               <span />
             )}
 
-            {/* Minute, on the spine. */}
-            <span className="relative z-10 rounded-full bg-surface px-xs font-semibold tabular-nums text-content-muted">
+            {/* Minute, centered ON the spine so its background masks the line —
+                otherwise the spine peeks out beside the (left-aligned) number as
+                a stray grey tick. */}
+            <span className="relative z-10 justify-self-center rounded-full bg-surface px-xs text-center font-semibold tabular-nums text-content-muted">
               {ev.minute}
             </span>
 

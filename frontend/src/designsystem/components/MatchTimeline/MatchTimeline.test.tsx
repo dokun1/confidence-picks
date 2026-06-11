@@ -42,6 +42,14 @@ describe('MatchTimeline', () => {
     expect(awayMinute.nextElementSibling?.textContent).toContain('T. Mokoena');
   });
 
+  it('isolates its own stacking context so the minute chips never paint over page chrome', () => {
+    // The chips use z-10 to sit above the spine; `isolate` confines that z-index
+    // to this grid. Without it the chips leak into the root stacking context and
+    // render OVER the page's sticky submit bar as the row scrolls under it.
+    const { container } = render(<MatchTimeline events={EVENTS} />);
+    expect(container.firstChild).toHaveClass('isolate');
+  });
+
   it('keeps the glyph adjacent to the player name (no flex-fill gap)', () => {
     render(<MatchTimeline events={EVENTS} />);
     // The away player and its glyph live in the same flex group, so the player
