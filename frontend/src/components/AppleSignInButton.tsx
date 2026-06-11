@@ -20,7 +20,7 @@ const BUTTON_TEXT: Record<AppleSignInVariant, string> = {
 };
 
 const BASE_CLASSES =
-  'w-full inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+  'w-full inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 const SIZE_CLASSES: Record<AppleSignInSize, string> = {
   small: 'h-8 px-3 text-sm',
@@ -29,9 +29,9 @@ const SIZE_CLASSES: Record<AppleSignInSize, string> = {
 };
 
 const THEME_CLASSES: Record<AppleSignInTheme, string> = {
-  black: 'bg-black text-white hover:bg-gray-800 border-black',
-  white: 'bg-white text-black hover:bg-gray-50 border-gray-300',
-  'white-outline': 'bg-white text-black hover:bg-gray-50 border-black border-2',
+  black: 'bg-neutral-1000 text-neutral-0 hover:bg-neutral-800 border-neutral-1000',
+  white: 'bg-neutral-0 text-neutral-1000 hover:bg-neutral-50 border-neutral-300',
+  'white-outline': 'bg-neutral-0 text-neutral-1000 hover:bg-neutral-50 border-neutral-1000 border-2',
 };
 
 // Apple logo (official Apple design). Inlined as JSX so it inherits currentColor

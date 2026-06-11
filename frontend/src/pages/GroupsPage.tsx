@@ -4,6 +4,9 @@ import { getMyGroups, leaveGroup, deleteGroup } from '../lib/groupsService.js';
 import GroupsList from '../designsystem/components/GroupsList';
 import type { GroupData } from '../designsystem/components/GroupCard/GroupCard';
 import Button from '../designsystem/components/Button';
+import PageContainer from '../designsystem/components/PageContainer';
+import PageHeader from '../designsystem/components/PageHeader';
+import Spinner from '../designsystem/components/Spinner';
 import GroupsSearchFilter, {
   filterGroups,
   EMPTY_FILTERS,
@@ -78,22 +81,16 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-6xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
-        <header className="space-y-sm">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
-            My Groups
-          </h1>
-          <p className="text-[var(--color-text-secondary)]">
-            Manage your confidence picks groups and track your performance.
-          </p>
-        </header>
+    <PageContainer width="wide" className="space-y-lg">
+        <PageHeader
+          title="My Groups"
+          description="Manage your confidence picks groups and track your performance."
+        />
 
         {loading ? (
           /* Loading state */
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-            <span className="ml-3 text-[var(--color-text-secondary)]">Loading groups...</span>
+          <div className="flex justify-center py-12">
+            <Spinner size="md" label="Loading groups..." />
           </div>
         ) : error ? (
           /* Error state */
@@ -129,7 +126,7 @@ export default function GroupsPage() {
         ) : groups.length === 0 ? (
           /* Empty state */
           <div className="text-center py-12 space-y-md">
-            <p className="text-[var(--color-text-secondary)]">
+            <p className="text-content-muted">
               No groups yet — Create or Join one
             </p>
             <div className="flex flex-col sm:flex-row gap-sm justify-center">
@@ -159,7 +156,7 @@ export default function GroupsPage() {
                   </Button>
                 </div>
                 <div className="text-center py-12">
-                  <p className="text-[var(--color-text-secondary)]">
+                  <p className="text-content-muted">
                     No groups match your search or filters.
                   </p>
                 </div>
@@ -179,7 +176,6 @@ export default function GroupsPage() {
             )}
           </div>
         )}
-      </div>
-    </div>
+    </PageContainer>
   );
 }

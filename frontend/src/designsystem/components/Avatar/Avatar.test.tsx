@@ -102,14 +102,14 @@ describe('Avatar', () => {
       expect(screen.getByText('?')).toBeInTheDocument();
     });
 
-    it('applies bg-primary-500 to initials div', () => {
+    it('applies bg-accent to initials div', () => {
       const { container } = render(<Avatar name="Jane" />);
-      expect(container.firstChild).toHaveClass('bg-primary-500');
+      expect(container.firstChild).toHaveClass('bg-accent');
     });
 
-    it('applies text-neutral-0 and font-medium to initials div', () => {
+    it('applies text-accent-fg and font-medium to initials div', () => {
       const { container } = render(<Avatar name="Jane" />);
-      expect(container.firstChild).toHaveClass('text-neutral-0');
+      expect(container.firstChild).toHaveClass('text-accent-fg');
       expect(container.firstChild).toHaveClass('font-medium');
     });
 

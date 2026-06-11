@@ -119,11 +119,11 @@ describe('SettingsTab member roster', () => {
       .closest('section') as HTMLElement;
     expect(membersSection.className).toBe('');
 
-    // The other two sections remain bordered cards.
+    // The other two sections remain bordered cards (now the shared Card primitive).
     for (const name of ['Invite Link', 'Manage Group']) {
       const section = screen.getByRole('heading', { name }).closest('section') as HTMLElement;
       expect(section.className).toContain('border');
-      expect(section.className).toContain('bg-surface');
+      expect(section.className).toContain('bg-neutral-0');
     }
   });
 });

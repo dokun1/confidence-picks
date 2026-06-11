@@ -64,7 +64,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="mx-auto w-full max-w-md px-sm py-lg sm:px-lg">
+      <div className="mx-auto w-full max-w-md">
         <div className="space-y-lg text-center">
           {/* Logo */}
           <div className="space-y-md">
@@ -86,10 +86,10 @@ export default function LoginPage() {
             </div>
             {/* Heading text is exactly "Login" — App.test.tsx and the e2e smoke
                 spec resolve this page via getByRole('heading', { name: 'Login' }). */}
-            <h1 className="font-heading text-3xl font-bold text-[var(--color-text-primary)]">
+            <h1 className="font-heading text-3xl font-bold text-content">
               Login
             </h1>
-            <p className="text-lg text-[var(--color-text-secondary)]">
+            <p className="text-lg text-content-muted">
               Welcome to Confidence Picks — sign in to start making your picks and compete with
               friends.
             </p>
@@ -107,7 +107,7 @@ export default function LoginPage() {
 
           {/* Sign In Options */}
           <div className="space-y-md">
-            <h2 className="font-heading text-xl font-semibold text-[var(--color-text-primary)]">
+            <h2 className="font-heading text-xl font-semibold text-content">
               Choose your sign in method
             </h2>
 
@@ -143,7 +143,7 @@ export default function LoginPage() {
           </div>
 
           {/* Terms */}
-          <p className="text-sm text-[var(--color-text-secondary)]">
+          <p className="text-sm text-content-muted">
             By signing in, you agree to our Terms of Service and Privacy Policy.
           </p>
 

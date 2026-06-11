@@ -15,12 +15,12 @@ import WorldCupPicksTab from './GroupDetails/WorldCupPicksTab';
 function GroupNotFound({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg">
+      <div className="max-w-4xl mx-auto">
         <div className="text-center space-y-md">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-3xl font-heading font-bold text-content">
             Group Not Found
           </h1>
-          <p className="text-[var(--color-text-secondary)]">{message}</p>
+          <p className="text-content-muted">{message}</p>
           <Button onClick={onBack}>Back to Groups</Button>
         </div>
       </div>
@@ -41,7 +41,7 @@ export default function WorldCupPicksPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-sm py-lg sm:p-lg">
+    <div className="mx-auto max-w-4xl">
       <h1 className="mb-lg text-2xl font-bold text-secondary-900 dark:text-neutral-0">
         World Cup 2026 Picks
       </h1>

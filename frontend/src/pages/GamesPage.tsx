@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import Button from '../designsystem/components/Button';
+import Card from '../designsystem/components/Card';
+import EmptyState from '../designsystem/components/EmptyState';
+import Spinner from '../designsystem/components/Spinner';
 import InlineToast from '../designsystem/components/InlineToast';
 import type { ToastVariant } from '../designsystem/components/InlineToast/InlineToast';
 import GamePickRow, { type DraftPick, type PickGame } from '../components/GamePickRow';
@@ -321,21 +324,21 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-sm py-lg sm:p-lg">
+    <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-bold text-secondary-900 dark:text-neutral-0">NFL Games</h1>
 
       {/* How scoring works — confidence pools assign each game a rank, so the
           point value of a pick isn't obvious from the row UI alone. */}
-      <p className="mt-xs text-sm text-secondary">
+      <p className="mt-xs text-sm text-content-muted">
         Rank each game by confidence: your surest pick is worth the most points (down to 1 for your
         least sure). Win the game and you bank the points you assigned it; lose and you score
         nothing. Picks lock at kickoff.
       </p>
 
       {/* Selector controls */}
-      <div className="mt-md flex flex-wrap items-end gap-md rounded-md border border-border bg-surface p-md">
+      <Card padding="md" className="mt-md flex flex-wrap items-end gap-md">
         <label className="flex flex-col gap-xxs text-sm">
-          <span className="font-medium text-secondary">Year</span>
+          <span className="font-medium text-content-muted">Year</span>
           <select
             aria-label="Year"
             value={year}
@@ -351,7 +354,7 @@ export default function GamesPage() {
         </label>
 
         <label className="flex flex-col gap-xxs text-sm">
-          <span className="font-medium text-secondary">Season</span>
+          <span className="font-medium text-content-muted">Season</span>
           <select
             aria-label="Season type"
             value={seasonType}
@@ -367,7 +370,7 @@ export default function GamesPage() {
         </label>
 
         <label className="flex flex-col gap-xxs text-sm">
-          <span className="font-medium text-secondary">Week</span>
+          <span className="font-medium text-content-muted">Week</span>
           <select
             aria-label="Week"
             value={week}
@@ -402,7 +405,7 @@ export default function GamesPage() {
         >
           <ArrowPathIcon className="h-5 w-5" />
         </Button>
-      </div>
+      </Card>
 
       {!groupId && (
         <p className="mt-md rounded-md border border-warning-500 bg-warning-50 p-sm text-sm text-warning-700 dark:bg-warning-900 dark:text-warning-200">
@@ -414,7 +417,9 @@ export default function GamesPage() {
       {/* Games list */}
       <div className="mt-lg space-y-sm">
         {pageState.loading ? (
-          <p className="py-lg text-center text-secondary">Loading games…</p>
+          <div className="flex justify-center py-lg">
+            <Spinner size="sm" label="Loading games…" />
+          </div>
         ) : pageState.error ? (
           <div className="flex flex-col items-center gap-sm py-lg text-center">
             <p className="text-sm text-error-600 dark:text-error-400">{pageState.error}</p>
@@ -423,7 +428,7 @@ export default function GamesPage() {
             </Button>
           </div>
         ) : pageState.games.length === 0 ? (
-          <p className="py-lg text-center text-secondary">No games found for this week.</p>
+          <EmptyState title="No games this week" description="No games found for this week. Check back when the schedule posts." />
         ) : (
           pageState.games.map((game) => (
             <GamePickRow
@@ -451,7 +456,7 @@ export default function GamesPage() {
       {pageState.games.length > 0 && (
         <div className="sticky bottom-0 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-xxs text-sm text-secondary sm:flex-row sm:items-center sm:gap-md">
+            <div className="flex flex-col gap-xxs text-sm text-content-muted sm:flex-row sm:items-center sm:gap-md">
               <span>
                 {completePicks.length} of {totalGames} pick{totalGames === 1 ? '' : 's'} complete
                 {hasIncomplete && (

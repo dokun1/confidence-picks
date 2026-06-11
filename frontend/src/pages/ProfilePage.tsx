@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import AuthService from '../lib/authService.js';
 import Avatar from '../designsystem/components/Avatar';
 import Button from '../designsystem/components/Button';
+import Card from '../designsystem/components/Card';
 import TextField from '../designsystem/components/TextField';
 import InlineToast from '../designsystem/components/InlineToast';
 import type { ToastVariant } from '../designsystem/components/InlineToast';
@@ -32,7 +33,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-3xl mx-auto px-sm py-xl sm:px-lg text-center text-[var(--color-text-secondary)]">
+      <div className="max-w-3xl mx-auto text-center text-content-muted">
         No user data.
       </div>
     );
@@ -75,7 +76,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg space-y-xl">
+    <div className="max-w-4xl mx-auto space-y-xl">
       <header className="flex flex-col sm:flex-row items-center sm:items-end gap-md">
         <Avatar
           name={user.name}
@@ -85,23 +86,23 @@ export default function ProfilePage() {
           className="w-16 h-16 md:w-20 md:h-20 border-4 border-primary-100 dark:border-primary-800 shadow-md flex-shrink-0"
         />
         <div className="text-center sm:text-left space-y-sm">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-3xl font-heading font-bold text-content">
             My Profile
           </h1>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-content-muted">
             Manage your account details and preferences.
           </p>
         </div>
       </header>
 
-      <section className="p-lg rounded-base border border-secondary-200 dark:border-secondary-700 bg-neutral-0 dark:bg-secondary-800 space-y-md">
-        <h2 className="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+      <Card as="section" className="space-y-md">
+        <h2 className="text-xl font-heading font-semibold text-content">
           Account Details
         </h2>
         <div className="space-y-sm text-sm">
           {/* Name (editable) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-xs">
-            <span className="text-[var(--color-text-secondary)]">Name</span>
+            <span className="text-content-muted">Name</span>
             {editingName ? (
               <div className="flex flex-col gap-xs sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
@@ -143,7 +144,7 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="flex items-center gap-xs">
-                <span className="font-medium text-[var(--color-text-primary)]">
+                <span className="font-medium text-content">
                   {user.name || '—'}
                 </span>
                 <Button variant="tertiary" size="sm" onClick={startEditingName}>
@@ -155,21 +156,21 @@ export default function ProfilePage() {
 
           {/* Email (read-only) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-xs">
-            <span className="text-[var(--color-text-secondary)]">Email</span>
-            <span className="font-medium text-[var(--color-text-primary)] break-all">
+            <span className="text-content-muted">Email</span>
+            <span className="font-medium text-content break-all">
               {user.email}
             </span>
           </div>
 
           {/* Provider (read-only) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-xs">
-            <span className="text-[var(--color-text-secondary)]">Provider</span>
-            <span className="font-medium text-[var(--color-text-primary)]">
+            <span className="text-content-muted">Provider</span>
+            <span className="font-medium text-content">
               {capitalize(user.provider || 'google')}
             </span>
           </div>
         </div>
-      </section>
+      </Card>
 
       <section className="flex justify-start">
         <Button variant="destructive" onClick={() => AuthService.logout()}>

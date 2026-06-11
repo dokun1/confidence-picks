@@ -43,9 +43,9 @@ describe('CreateGroupForm', () => {
     it('renders container with correct classes', () => {
       const { container } = renderForm();
       const wrapper = container.firstChild as HTMLElement;
-      expect(wrapper).toHaveClass('bg-white');
+      expect(wrapper).toHaveClass('bg-neutral-0');
       expect(wrapper).toHaveClass('border');
-      expect(wrapper).toHaveClass('border-gray-200');
+      expect(wrapper).toHaveClass('border-secondary-200');
       expect(wrapper).toHaveClass('rounded-lg');
       expect(wrapper).toHaveClass('p-6');
     });

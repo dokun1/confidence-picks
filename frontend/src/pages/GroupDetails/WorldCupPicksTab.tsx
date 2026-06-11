@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../designsystem/components/Button';
+import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
 import MatchPickRow from '../../designsystem/components/MatchPickRow';
@@ -391,7 +392,7 @@ export default function WorldCupPicksTab({
           page and solo groups are unchanged. */}
       {showPersonSelector && selfId && selectedUserId && (
         <div className="mb-md flex flex-wrap items-center gap-sm rounded-md border border-border bg-surface p-sm">
-          <span className="text-sm font-medium text-secondary">Whose picks:</span>
+          <span className="text-sm font-medium text-content-muted">Whose picks:</span>
           <PickPersonSelector
             members={personOptions}
             selectedId={selectedUserId}
@@ -419,7 +420,7 @@ export default function WorldCupPicksTab({
       {readOnly && (
         <div
           role="status"
-          className="mb-md rounded-md border border-border bg-secondary-50 p-sm text-sm text-secondary dark:bg-secondary-800"
+          className="mb-md rounded-md border border-border bg-secondary-50 p-sm text-sm text-content-muted dark:bg-secondary-800"
         >
           You are viewing <span className="font-semibold">{selectedName}</span>&apos;s picks.
           They&apos;re read-only — you can only change your own.
@@ -429,7 +430,7 @@ export default function WorldCupPicksTab({
       {/* How scoring works — World Cup pools are flat-per-match (no confidence)
           and the group and knockout stages score differently, so the rules
           aren't obvious from the Home/Draw/Away row alone. */}
-      <div className="mb-lg rounded-md border border-border bg-surface p-sm text-sm text-secondary">
+      <div className="mb-lg rounded-md border border-border bg-surface p-sm text-sm text-content-muted">
         <p>
           Pick an outcome for every match — there&apos;s no confidence ranking, and your score is
           the sum across every match you pick.
@@ -451,7 +452,7 @@ export default function WorldCupPicksTab({
       {/* Match list, grouped by stage */}
       <div className="space-y-lg">
         {fetchState.loading ? (
-          <p className="py-lg text-center text-secondary">Loading matches…</p>
+          <p className="py-lg text-center text-content-muted">Loading matches…</p>
         ) : fetchState.error ? (
           <div className="flex flex-col items-center gap-sm py-lg text-center">
             <p className="text-sm text-error-600 dark:text-error-400">{fetchState.error}</p>
@@ -460,7 +461,7 @@ export default function WorldCupPicksTab({
             </Button>
           </div>
         ) : fetchState.matches.length === 0 ? (
-          <p className="py-lg text-center text-secondary">No matches found for this tournament.</p>
+          <EmptyState title="No matches yet" description="No matches found for this tournament." />
         ) : (
           stageGroups.map((group) => (
             <section key={group.stage} className="space-y-sm">
@@ -494,7 +495,7 @@ export default function WorldCupPicksTab({
         <div className="sticky bottom-0 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
-              <span className="text-sm text-secondary">
+              <span className="text-sm text-content-muted">
                 {/* When editing/viewing a teammate, name them so the count is
                     never mistaken for the caller's own picks. */}
                 {!viewingSelf && (
@@ -521,7 +522,7 @@ export default function WorldCupPicksTab({
                 />
               )}
               {adminEditingOther && (
-                <span className="text-xs text-secondary">Saved to this group only</span>
+                <span className="text-xs text-content-muted">Saved to this group only</span>
               )}
             </div>
             <div className="relative inline-toast-anchor">
@@ -534,7 +535,7 @@ export default function WorldCupPicksTab({
               {readOnly ? (
                 // No write affordance at all for a read-only viewer — there is
                 // simply no submit button to click.
-                <span className="text-sm italic text-secondary">View only</span>
+                <span className="text-sm italic text-content-muted">View only</span>
               ) : (
                 <Button
                   variant="primary"

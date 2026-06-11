@@ -107,7 +107,7 @@ export default function Avatar({
   }
 
   return (
-    <div className={`flex items-center justify-center bg-primary-500 text-neutral-0 font-medium ${dimensionClass} rounded-${rounded} ${className}`}>
+    <div className={`flex items-center justify-center bg-accent text-accent-fg font-medium ${dimensionClass} rounded-${rounded} ${className}`}>
       {initials}
     </div>
   );

@@ -8,40 +8,40 @@ export default {
     "extend": {
       "colors": {
         "primary": {
-          "50": "#f0f9ff",
-          "100": "#e0f2fe",
-          "200": "#bae6fd",
-          "300": "#7dd3fc",
-          "400": "#38bdf8",
-          "500": "#0ea5e9",
-          "600": "#0284c7",
-          "700": "#0369a1",
-          "800": "#075985",
-          "900": "#0c4a6e"
+          "50": "#f5f3ff",
+          "100": "#ede9fe",
+          "200": "#ddd6fe",
+          "300": "#c4b5fd",
+          "400": "#a78bfa",
+          "500": "#8b5cf6",
+          "600": "#7c3aed",
+          "700": "#6d28d9",
+          "800": "#5b21b6",
+          "900": "#4c1d95"
         },
         "secondary": {
-          "50": "#f8fafc",
-          "100": "#f1f5f9",
-          "200": "#e2e8f0",
-          "300": "#cbd5e1",
-          "400": "#94a3b8",
-          "500": "#64748b",
-          "600": "#475569",
-          "700": "#334155",
-          "800": "#1e293b",
-          "900": "#0f172a"
+          "50": "#f7f7fb",
+          "100": "#eeeef6",
+          "200": "#e0e0ee",
+          "300": "#c9c8de",
+          "400": "#9b99bf",
+          "500": "#6f6d94",
+          "600": "#524f73",
+          "700": "#3c3a57",
+          "800": "#28263b",
+          "900": "#1a1828"
         },
         "success": {
-          "50": "#f0fdf4",
-          "100": "#dcfce7",
-          "200": "#bbf7d0",
-          "300": "#86efac",
-          "400": "#4ade80",
-          "500": "#22c55e",
-          "600": "#16a34a",
-          "700": "#15803d",
-          "800": "#166534",
-          "900": "#14532d"
+          "50": "#effcf9",
+          "100": "#d2f6ee",
+          "200": "#a8ecdd",
+          "300": "#6fdcc6",
+          "400": "#34c4a8",
+          "500": "#14a88e",
+          "600": "#0c8772",
+          "700": "#0e6b5c",
+          "800": "#0f554a",
+          "900": "#0d3f38"
         },
         "error": {
           "50": "#fef2f2",
@@ -83,10 +83,26 @@ export default {
           "1000": "#000000"
         },
         "surface": {
-          "primary": "#fefefe",
-          "secondary": "#fafbfc",
-          "tertiary": "#f5f6f7",
+          "DEFAULT": "var(--color-surface-primary)",
+          "primary": "var(--color-surface-primary)",
+          "secondary": "var(--color-surface-secondary)",
+          "tertiary": "var(--color-surface-tertiary)",
           "inverse": "#1a1d21"
+        },
+        "border": {
+          "DEFAULT": "var(--color-border)"
+        },
+        "content": {
+          "DEFAULT": "var(--color-text-primary)",
+          "muted": "var(--color-text-secondary)",
+          "subtle": "var(--color-text-tertiary)"
+        },
+        "accent": {
+          "DEFAULT": "var(--color-accent)",
+          "strong": "var(--color-accent-strong)",
+          "subtle": "var(--color-accent-subtle)",
+          "fg": "var(--color-accent-fg)",
+          "on-subtle": "var(--color-accent-on-subtle)"
         }
       },
       "spacing": {
@@ -106,7 +122,7 @@ export default {
       },
       "fontFamily": {
         "heading": [
-          "Inter",
+          "Nunito",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
@@ -114,8 +130,8 @@ export default {
           "sans-serif"
         ],
         "body": [
-          "Source Sans 3",
-          "Inter",
+          "Nunito Sans",
+          "Nunito",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
@@ -192,11 +208,12 @@ export default {
         "sm": "2px",
         "base": "4px",
         "md": "6px",
-        "lg": "8px",
-        "xl": "12px",
-        "2xl": "16px",
-        "3xl": "24px",
-        "full": "9999px"
+        "lg": "12px",
+        "xl": "16px",
+        "2xl": "20px",
+        "3xl": "28px",
+        "full": "9999px",
+        "pill": "9999px"
       },
       "borderWidth": {
         "0": "0px",
@@ -209,10 +226,10 @@ export default {
         "none": "none",
         "xs": "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
         "sm": "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
-        "base": "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-        "md": "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-        "lg": "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-        "xl": "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+        "base": "0 2px 6px -1px rgba(124, 58, 237, 0.12)",
+        "md": "0 8px 20px -4px rgba(124, 58, 237, 0.16)",
+        "lg": "0 16px 36px -8px rgba(124, 58, 237, 0.20)",
+        "xl": "0 26px 56px -14px rgba(124, 58, 237, 0.26)",
         "inner": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.05)"
       },
       "width": {

@@ -7,7 +7,7 @@ describe('Button', () => {
   describe('variants', () => {
     it('renders primary variant by default', () => {
       render(<Button>Click me</Button>);
-      expect(screen.getByRole('button')).toHaveClass('bg-primary-500');
+      expect(screen.getByRole('button')).toHaveClass('bg-accent');
     });
 
     it('renders secondary variant', () => {
@@ -30,7 +30,7 @@ describe('Button', () => {
     it('falls back to primary classes for an unknown variant', () => {
       // @ts-expect-error intentionally passing an invalid variant
       render(<Button variant="unknown">Click me</Button>);
-      expect(screen.getByRole('button')).toHaveClass('bg-primary-500');
+      expect(screen.getByRole('button')).toHaveClass('bg-accent');
     });
   });
 
@@ -38,7 +38,7 @@ describe('Button', () => {
     it('renders md size by default', () => {
       render(<Button>Click me</Button>);
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('px-md');
+      expect(button).toHaveClass('px-lg');
       expect(button).toHaveClass('py-xs');
       expect(button).toHaveClass('text-base');
     });
@@ -46,16 +46,16 @@ describe('Button', () => {
     it('renders sm size', () => {
       render(<Button size="sm">Click me</Button>);
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('px-xs');
+      expect(button).toHaveClass('px-sm');
       expect(button).toHaveClass('py-xxxs');
       expect(button).toHaveClass('text-sm');
-      expect(button).toHaveClass('rounded-sm');
+      expect(button).toHaveClass('rounded-pill');
     });
 
     it('renders lg size', () => {
       render(<Button size="lg">Click me</Button>);
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('px-lg');
+      expect(button).toHaveClass('px-xl');
       expect(button).toHaveClass('py-sm');
       expect(button).toHaveClass('text-lg');
     });
@@ -75,8 +75,8 @@ describe('Button', () => {
     it('applies disabled variant classes for primary when disabled', () => {
       render(<Button variant="primary" disabled>Click me</Button>);
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('bg-primary-300');
-      expect(button).toHaveClass('text-primary-100');
+      expect(button).toHaveClass('bg-secondary-200');
+      expect(button).toHaveClass('text-secondary-500');
     });
 
     it('applies disabled variant classes for secondary when disabled', () => {
@@ -94,8 +94,8 @@ describe('Button', () => {
     it('applies disabled variant classes for destructive when disabled', () => {
       render(<Button variant="destructive" disabled>Click me</Button>);
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('bg-error-300');
-      expect(button).toHaveClass('text-error-100');
+      expect(button).toHaveClass('bg-secondary-200');
+      expect(button).toHaveClass('text-secondary-500');
     });
 
     it('does not call onClick when disabled', () => {

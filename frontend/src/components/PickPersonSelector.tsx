@@ -128,7 +128,7 @@ export default function PickPersonSelector({
                     <Avatar name={m.name} email={m.email} pictureUrl={m.pictureUrl ?? ''} variant="sm" />
                     <span className="flex-1 truncate">
                       {m.name}
-                      {isSelf && <span className="ml-xs text-xs text-secondary">(you)</span>}
+                      {isSelf && <span className="ml-xs text-xs text-content-muted">(you)</span>}
                     </span>
                     {hint && (
                       <span

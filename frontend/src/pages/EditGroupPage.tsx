@@ -5,6 +5,7 @@ import CreateGroupForm, {
 } from '../designsystem/components/CreateGroupForm';
 import { getGroup, updateGroup } from '../lib/groupsService.js';
 import type { GroupDetail } from '../lib/groupsService';
+import Spinner from '../designsystem/components/Spinner';
 
 // Ported from EditGroupPage.svelte (commit d6b2566^). Loads the group named by
 // the `/edit-group/:identifier` route param and renders the shared
@@ -65,26 +66,24 @@ export default function EditGroupPage() {
 
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-2xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
+      <div className="max-w-2xl mx-auto space-y-lg">
         <header className="space-y-sm">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-3xl font-heading font-bold text-content">
             Edit Group
           </h1>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-content-muted">
             Update the name and description for your confidence picks group.
           </p>
         </header>
 
         {loading ? (
-          /* Loading state — matches GroupsPage's spinner markup */
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-            <span className="ml-3 text-[var(--color-text-secondary)]">Loading group...</span>
+          <div className="flex justify-center py-12">
+            <Spinner size="md" label="Loading group..." />
           </div>
         ) : notFound || !group ? (
           /* Not-found state — form is deliberately absent */
           <div className="text-center py-12 space-y-md">
-            <p className="text-[var(--color-text-secondary)]">
+            <p className="text-content-muted">
               Group not found. It may have been deleted or the link is incorrect.
             </p>
           </div>

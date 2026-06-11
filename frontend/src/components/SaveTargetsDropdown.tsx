@@ -116,16 +116,16 @@ export default function SaveTargetsDropdown({
               <button
                 type="button"
                 onClick={selectOnlySource}
-                className="text-secondary hover:underline"
+                className="text-content-muted hover:underline"
               >
                 Only this group
               </button>
             </div>
           )}
           {loading ? (
-            <p className="px-xs py-sm text-sm text-secondary">Loading your groups…</p>
+            <p className="px-xs py-sm text-sm text-content-muted">Loading your groups…</p>
           ) : groups.length === 0 ? (
-            <p className="px-xs py-sm text-sm text-secondary">
+            <p className="px-xs py-sm text-sm text-content-muted">
               You're only in this one group.
             </p>
           ) : (
@@ -151,7 +151,7 @@ export default function SaveTargetsDropdown({
                       <span className="flex-1 truncate">
                         {g.name}
                         {isSource && (
-                          <span className="ml-xs text-xs text-secondary">(current)</span>
+                          <span className="ml-xs text-xs text-content-muted">(current)</span>
                         )}
                       </span>
                     </label>

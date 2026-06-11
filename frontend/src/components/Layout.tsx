@@ -8,11 +8,10 @@ export default function Layout() {
   return (
     <div className="min-h-screen">
       <Navigation />
-      {/* Mobile: no Layout-level horizontal padding so pages can use the full
-          viewport width. Page shells already contribute a 12px (px-sm) gutter
-          which is enough breathing room on a phone. Desktop (sm: and up)
-          stacks the original 16px back on so margins still match design. */}
-      <main className="mx-auto w-full max-w-6xl px-0 sm:px-md py-lg">
+      {/* Single owner of page gutters and vertical rhythm: 12px on mobile,
+          24px on desktop, plus vertical padding. Pages wrap content in
+          <PageContainer> to choose a max-width; they must not re-add padding. */}
+      <main className="mx-auto w-full max-w-6xl px-sm sm:px-lg py-lg">
         <Outlet />
       </main>
     </div>

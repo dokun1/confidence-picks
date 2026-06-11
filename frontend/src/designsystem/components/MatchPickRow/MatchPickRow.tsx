@@ -112,7 +112,7 @@ export default function MatchPickRow({
       className="flex flex-col gap-sm rounded-md border border-border bg-surface p-sm shadow-sm"
     >
       <div className="flex items-center justify-between border-b border-border pb-xs">
-        <span className="text-xs text-secondary">
+        <span className="text-xs text-content-muted">
           {dateLabel ?? STAGE_LABEL[match.stage]}
         </span>
         <div className="flex items-center gap-xs">
@@ -129,7 +129,7 @@ export default function MatchPickRow({
 
       <div className="flex items-center justify-center gap-sm py-xs">
         <TeamLabel team={match.homeTeam} score={match.homeScore} showScore={locked} />
-        <span className="text-xs font-semibold uppercase text-secondary">vs</span>
+        <span className="text-xs font-semibold uppercase text-content-muted">vs</span>
         <TeamLabel team={match.awayTeam} score={match.awayScore} showScore={locked} align="right" />
       </div>
 
@@ -163,7 +163,7 @@ function TeamLabel({
       {team.logo && <img className="h-8 w-8 object-contain" alt={team.abbreviation} src={team.logo} />}
       <span className="flex flex-col leading-tight">
         <span className="text-sm font-semibold">{team.abbreviation}</span>
-        <span className="text-[0.6rem] uppercase tracking-wide text-secondary">{team.name}</span>
+        <span className="text-[0.6rem] uppercase tracking-wide text-content-muted">{team.name}</span>
       </span>
       {showScore && (
         <span className="min-w-[2ch] text-lg font-bold tabular-nums">{score ?? 0}</span>

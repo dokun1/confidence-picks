@@ -114,17 +114,17 @@ export default function InvitePage() {
             <h1 className="text-xl font-heading font-semibold text-error-600 dark:text-error-400">
               Invitation Error
             </h1>
-            <p className="text-sm text-[var(--color-text-secondary)]">{error}</p>
+            <p className="text-sm text-content-muted">{error}</p>
             <Button variant="secondary" size="sm" onClick={() => navigate('/groups')}>
               Go to Groups
             </Button>
           </div>
         ) : invite && !invite.valid ? (
           <div className="space-y-md">
-            <h1 className="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+            <h1 className="text-xl font-heading font-semibold text-content">
               Invite Unavailable
             </h1>
-            <p className="text-sm text-[var(--color-text-secondary)]">
+            <p className="text-sm text-content-muted">
               {reasonMessage(invite.reason)}
             </p>
             <Button variant="secondary" size="sm" onClick={() => navigate('/groups')}>
@@ -140,22 +140,22 @@ export default function InvitePage() {
                 variant="md"
               />
               <div>
-                <h1 className="text-xl font-heading font-semibold text-[var(--color-text-primary)]">
+                <h1 className="text-xl font-heading font-semibold text-content">
                   Join {invite.group.name}
                 </h1>
-                <p className="text-xs text-[var(--color-text-secondary)]">
+                <p className="text-xs text-content-muted">
                   Hosted by {invite.group.ownerName}
                 </p>
               </div>
             </div>
 
             {invite.group.description && (
-              <p className="text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap">
+              <p className="text-sm text-content-muted whitespace-pre-wrap">
                 {invite.group.description}
               </p>
             )}
 
-            <div className="flex items-center gap-sm text-xs text-[var(--color-text-secondary)]">
+            <div className="flex items-center gap-sm text-xs text-content-muted">
               <span>{invite.group.memberCount} members</span>
               <span>•</span>
               <span>Max {invite.group.maxMembers}</span>
@@ -166,7 +166,7 @@ export default function InvitePage() {
 
             {invite.alreadyMember ? (
               <div className="space-y-sm">
-                <p className="text-sm text-[var(--color-text-secondary)]">
+                <p className="text-sm text-content-muted">
                   You're already a member of {invite.group.name}.
                 </p>
                 <Button

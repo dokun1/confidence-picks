@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
 import Button from '../designsystem/components/Button';
+import PageContainer from '../designsystem/components/PageContainer';
+import Spinner from '../designsystem/components/Spinner';
 import LeaderboardTab from './GroupDetails/LeaderboardTab';
 import PicksTab from './GroupDetails/PicksTab';
 import ChatTab from './GroupDetails/ChatTab';
@@ -43,12 +45,12 @@ const TABS: { key: TabKey; label: string }[] = [
 function GroupNotFound({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg">
+      <div className="max-w-4xl mx-auto">
         <div className="text-center space-y-md">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-3xl font-heading font-bold text-content">
             Group Not Found
           </h1>
-          <p className="text-[var(--color-text-secondary)]">{message}</p>
+          <p className="text-content-muted">{message}</p>
           <Button onClick={onBack}>Back to Groups</Button>
         </div>
       </div>
@@ -119,16 +121,12 @@ export default function GroupDetailsPage() {
   }
 
   if (loading) {
-    // Spinner markup mirrors GroupsPage's loading state.
     return (
-      <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-        <div className="max-w-6xl mx-auto px-sm py-lg sm:px-lg">
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-            <span className="ml-3 text-[var(--color-text-secondary)]">Loading group...</span>
-          </div>
+      <PageContainer width="wide">
+        <div className="flex justify-center py-12">
+          <Spinner size="md" label="Loading group..." />
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -148,8 +146,7 @@ export default function GroupDetailsPage() {
   const isWorldCup = group.poolType === 'world_cup_2026';
 
   return (
-    <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-6xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
+    <PageContainer width="wide" className="space-y-lg">
         {/* Header */}
         <div className="space-y-md">
           <button
@@ -175,18 +172,18 @@ export default function GroupDetailsPage() {
           </button>
 
           <div className="space-y-sm">
-            <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+            <h1 className="text-3xl font-heading font-bold text-content">
               {group.name}
             </h1>
             {group.description && (
-              <p className="text-[var(--color-text-secondary)]">{group.description}</p>
+              <p className="text-content-muted">{group.description}</p>
             )}
-            <div className="flex items-center gap-md text-sm text-[var(--color-text-secondary)]">
+            <div className="flex items-center gap-md text-sm text-content-muted">
               <span>
                 <span className="font-medium">{group.memberCount}</span> members
               </span>
               {isOwner && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-subtle text-accent-on-subtle">
                   Owner
                 </span>
               )}
@@ -250,7 +247,6 @@ export default function GroupDetailsPage() {
             members={members}
           />
         )}
-      </div>
-    </div>
+    </PageContainer>
   );
 }
