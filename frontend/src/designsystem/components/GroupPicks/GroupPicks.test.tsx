@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GroupPicks } from './';
 import type { GameData, GroupMember, MemberPicks, PickData, TeamData } from '../../../lib/types';
 
@@ -286,6 +286,48 @@ describe('GroupPicks', () => {
       // With only SCHEDULED + IN_PROGRESS games, the column disappears entirely.
       rerender(<GroupPicks games={[SCHEDULED_GAME, IN_PROGRESS_GAME]} picks={PICKS} members={MEMBERS} />);
       expect(screen.queryByRole('columnheader', { name: 'Correct' })).not.toBeInTheDocument();
+    });
+  });
+
+  // Below the `md` breakpoint, useMediaQuery('(max-width: 767px)') matches and
+  // GroupPicks renders a card-per-game layout instead of the wide table.
+  describe('mobile layout (below md)', () => {
+    function mockViewport(matches: boolean) {
+      window.matchMedia = ((query: string) => ({
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      })) as unknown as typeof window.matchMedia;
+    }
+
+    beforeEach(() => mockViewport(true)); // simulate a small viewport
+    afterEach(() => mockViewport(false)); // restore the desktop default
+
+    it('renders cards instead of the table', () => {
+      render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      // One matchup heading per game (unique), and every member is listed in
+      // each game's card.
+      expect(screen.getByText('KC @ BUF')).toBeInTheDocument();
+      expect(screen.getByText('SF @ BAL')).toBeInTheDocument();
+      expect(screen.getAllByText('Alice Johnson')).toHaveLength(GAMES.length);
+    });
+
+    it('withholds picks until kickoff in the card layout', () => {
+      render(<GroupPicks games={[SCHEDULED_GAME]} picks={PICKS} members={MEMBERS} />);
+      // One "Hidden" placeholder per member for the still-scheduled game.
+      expect(screen.getAllByText('Hidden')).toHaveLength(MEMBERS.length);
+    });
+
+    it('shows graded results and the per-game correct/graded aggregate', () => {
+      render(<GroupPicks games={[FINAL_GAME]} picks={PICKS} members={MEMBERS} />);
+      // Alice + Carol correct, Bob wrong → 2/3.
+      expect(screen.getByText('2/3 correct')).toBeInTheDocument();
     });
   });
 });
