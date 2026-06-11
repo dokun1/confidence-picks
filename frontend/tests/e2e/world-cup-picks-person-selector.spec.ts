@@ -79,7 +79,7 @@ async function stubStages(page: Page) {
             status: 'SCHEDULED',
             homeScore: 0,
             awayScore: 0,
-            gameDate: '2026-06-11T19:00:00.000Z',
+            gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             winnerTeamId: null,
             homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: 'https://example.test/mex.png' },
             awayTeam: { id: '2', name: 'Canada', abbreviation: 'CAN', logo: 'https://example.test/can.png' },

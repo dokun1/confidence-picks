@@ -44,7 +44,10 @@ function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
     awayScore: 0,
     status: 'SCHEDULED',
     isKnockout: false,
-    gameDate: '2026-06-11T20:00:00.000Z',
+    // Relative to now (tomorrow) so an upcoming match is always pre-kickoff and
+    // pickable whenever the suite runs — kickoff-time locking is exercised
+    // directly in MatchPickRow's own test.
+    gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }

@@ -63,7 +63,7 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
     // slot columns (season/season_type/week) the upsert requires.
     const gameIds = picks.map(p => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map(g => [g.id, g]));
@@ -74,10 +74,33 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       }
     }
 
+    // Lock picks at kickoff. game_date (the scheduled start) is the authoritative,
+    // stable boundary — we never trust the client and we never key off the live
+    // status, because ESPN can briefly flap an in-progress match back to
+    // SCHEDULED. Any pick whose kickoff has passed is dropped (its previously
+    // saved value is preserved untouched); the rest of the submission still
+    // saves. The client submits the whole slate each time, so rejecting the
+    // entire batch would make every pick unsavable once the first match starts —
+    // hence skip-and-save-rest, with the locked ids reported back.
+    const now = Date.now();
+    const lockedGameIds = [];
+    const openPicks = picks.filter(p => {
+      const g = gameById.get(p.gameId);
+      if (g && new Date(g.game_date).getTime() <= now) {
+        lockedGameIds.push(p.gameId);
+        return false;
+      }
+      return true;
+    });
+
+    if (openPicks.length === 0) {
+      return res.json({ picks: [], lockedGameIds });
+    }
+
     // Group picks by their game's (season, season_type, week) slot — one upsert call
     // per slot keeps the parameter columns consistent across mixed-stage submissions.
     const bySlot = new Map();
-    for (const p of picks) {
+    for (const p of openPicks) {
       const g = gameById.get(p.gameId);
       const key = `${g.season}|${g.season_type}|${g.week}`;
       if (!bySlot.has(key)) {
@@ -101,6 +124,7 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
 
     res.json({
       picks: saved.map(p => ({ gameId: p.gameId, pickedResult: p.pickedResult })),
+      lockedGameIds,
     });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
@@ -352,7 +376,7 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
     // are upserted under targetUserId rather than the caller.
     const gameIds = picks.map((p) => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map((g) => [g.id, g]));
@@ -362,8 +386,26 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       }
     }
 
+    // Kickoff lock applies to admin overrides too: a started match's pick is
+    // frozen for everyone, so even an admin cannot change a member's pick after
+    // the result is in motion. Same stable game_date boundary as the self route.
+    const now = Date.now();
+    const lockedGameIds = [];
+    const openPicks = picks.filter((p) => {
+      const g = gameById.get(p.gameId);
+      if (g && new Date(g.game_date).getTime() <= now) {
+        lockedGameIds.push(p.gameId);
+        return false;
+      }
+      return true;
+    });
+
+    if (openPicks.length === 0) {
+      return res.json({ picks: [], targetUserId, isAdminOverride: true, lockedGameIds });
+    }
+
     const bySlot = new Map();
-    for (const p of picks) {
+    for (const p of openPicks) {
       const g = gameById.get(p.gameId);
       const key = `${g.season}|${g.season_type}|${g.week}`;
       if (!bySlot.has(key)) {
@@ -389,6 +431,7 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       picks: saved.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult })),
       targetUserId,
       isAdminOverride: true,
+      lockedGameIds,
     });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });

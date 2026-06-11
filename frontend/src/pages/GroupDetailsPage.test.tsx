@@ -283,7 +283,8 @@ describe('GroupDetailsPage', () => {
       awayScore: 0,
       status: 'SCHEDULED',
       isKnockout: false,
-      gameDate: '2026-06-11T20:00:00.000Z',
+      // Tomorrow, so the match stays pre-kickoff and pickable whenever CI runs.
+      gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     };
     const stageResponder = (stage: WorldCupStage) => {
       const games = stage === 'group' ? [wcMatch] : [];

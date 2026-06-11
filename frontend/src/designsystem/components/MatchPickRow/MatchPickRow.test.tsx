@@ -16,7 +16,9 @@ function groupMatch(overrides: Partial<WorldCupMatch> = {}): WorldCupMatch {
     awayScore: 0,
     status: 'SCHEDULED',
     isKnockout: false,
-    gameDate: '2026-06-11T20:00:00.000Z',
+    // Tomorrow so "scheduled, not yet kicked off" stays editable whenever the
+    // suite runs. Past-kickoff locking is covered by its own test below.
+    gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }
@@ -144,6 +146,22 @@ describe('MatchPickRow', () => {
     };
     render(<MatchPickRow {...props} />);
     expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
+    expect(props.onPick).not.toHaveBeenCalled();
+  });
+
+  // Regression: ESPN can briefly flap an in-progress match's status back to
+  // SCHEDULED mid-game. Locking must key off the kickoff time, not just status,
+  // so a started match stays locked even when status reads 'SCHEDULED'.
+  it('locks a SCHEDULED match whose kickoff time has already passed', () => {
+    const props = {
+      ...baseProps(),
+      match: groupMatch({ status: 'SCHEDULED', gameDate: new Date(Date.now() - 60 * 60 * 1000).toISOString() }),
+    };
+    render(<MatchPickRow {...props} />);
+    expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pick a draw' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pick United States to win' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Pick Mexico to win' }));
     expect(props.onPick).not.toHaveBeenCalled();
   });
