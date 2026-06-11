@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import Avatar from '../../designsystem/components/Avatar';
 import Button from '../../designsystem/components/Button';
+import EmptyState from '../../designsystem/components/EmptyState';
 import TextField from '../../designsystem/components/TextField';
 import AuthService from '../../lib/authService';
 import { postMessage as apiPostMessage } from '../../lib/groupsService.js';
@@ -71,7 +72,7 @@ export default function ChatTab(props: ChatTabProps) {
     <div>
       <div className='space-y-lg'>
         {messages.length === 0 ? (
-          <p className='text-secondary'>No messages yet.</p>
+          <EmptyState title='No messages yet' description='Start the conversation — say hi to your group.' />
         ) : (
           messages.map(msg => (
             <div key={msg.id} className='flex gap-md'>
@@ -79,7 +80,7 @@ export default function ChatTab(props: ChatTabProps) {
               <div className='min-w-0 flex-1'>
                 <div className='flex items-baseline gap-md'>
                   <span className='font-medium'>{msg.authorName}</span>
-                  <span className='text-xs text-secondary'>{formatDate(msg.createdAt)}</span>
+                  <span className='text-xs text-content-muted'>{formatDate(msg.createdAt)}</span>
                 </div>
                 <p className='whitespace-pre-wrap'>{msg.content}</p>
               </div>

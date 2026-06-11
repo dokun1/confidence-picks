@@ -135,7 +135,7 @@ export default function GroupsSearchFilter({
         {hasActive && (
           <span
             data-testid="filter-badge"
-            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary-600 px-1 text-xs font-semibold leading-none text-neutral-0"
+            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-xs font-semibold leading-none text-accent-fg"
           >
             {count}
           </span>
@@ -156,12 +156,12 @@ export default function GroupsSearchFilter({
               onChange={(e) => setOwned(e.target.checked)}
               className="h-4 w-4"
             />
-            <span className="text-[var(--color-text-primary)]">Groups I own</span>
+            <span className="text-content">Groups I own</span>
           </label>
 
           {/* Pick type — single select */}
           <div className="mt-xs border-t border-secondary-200 pt-xs dark:border-secondary-700">
-            <p className="px-xs pb-xxs text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+            <p className="px-xs pb-xxs text-xs font-semibold uppercase tracking-wide text-content-muted">
               Pick type
             </p>
             <ul role="radiogroup" aria-label="Pick type" className="space-y-xxs">
@@ -177,7 +177,7 @@ export default function GroupsSearchFilter({
                       className={`flex w-full items-center justify-between rounded-base px-xs py-xs text-left text-sm transition-colors ${
                         selected
                           ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200'
-                          : 'text-[var(--color-text-primary)] hover:bg-secondary-50 dark:hover:bg-secondary-700'
+                          : 'text-content hover:bg-secondary-50 dark:hover:bg-secondary-700'
                       }`}
                     >
                       <span>{option.label}</span>

@@ -1,0 +1,2 @@
+export { default, default as PageContainer } from './PageContainer';
+export type { PageContainerProps, PageWidth } from './PageContainer';

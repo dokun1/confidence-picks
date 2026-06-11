@@ -1,5 +1,6 @@
 import Avatar from '../Avatar/Avatar';
 import Button from '../Button/Button';
+import Card from '../Card/Card';
 
 export interface GroupData {
   id: string;
@@ -49,24 +50,24 @@ export default function GroupCard({
   onDelete,
 }: GroupCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+    <Card padding="lg" className="hover:shadow-md transition-shadow">
       {/* Header & Badges: stack on mobile, row on desktop */}
       <div className="flex flex-col mb-4">
         <h3
-          className="text-lg font-semibold text-gray-900 mb-1 truncate sm:whitespace-normal leading-snug"
+          className="text-lg font-semibold text-secondary-900 dark:text-secondary-50 mb-1 truncate sm:whitespace-normal leading-snug"
           style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
         >
           {group.name}
         </h3>
         <p
-          className="text-sm text-gray-500 mb-2 break-all sm:break-normal"
+          className="text-sm text-secondary-500 dark:text-secondary-400 mb-2 break-all sm:break-normal"
           style={{ overflowWrap: 'anywhere' }}
         >
           ID: {group.identifier}
         </p>
         {group.description && (
           <p
-            className="text-gray-600 text-sm mb-3 leading-snug line-clamp-3 sm:line-clamp-none"
+            className="text-secondary-600 dark:text-secondary-300 text-sm mb-3 leading-snug line-clamp-3 sm:line-clamp-none"
             style={{ overflowWrap: 'break-word' }}
           >
             {group.description}
@@ -74,11 +75,11 @@ export default function GroupCard({
         )}
         <div className="flex flex-row flex-wrap gap-2 mt-1">
           {group.isOwner ? (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-subtle text-accent-on-subtle">
               Owner
             </span>
           ) : (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-800 dark:bg-success-900 dark:text-success-300">
               Member
             </span>
           )}
@@ -87,10 +88,10 @@ export default function GroupCard({
 
       {/* Meta row: stack items on mobile if needed */}
       <div className="flex flex-col xs:flex-row xs:justify-between xs:items-center mb-4 gap-1">
-        <div className="text-sm text-gray-500 break-words">
+        <div className="text-sm text-secondary-500 dark:text-secondary-400 break-words">
           <span className="font-medium">{group.memberCount}</span> members
         </div>
-        <div className="text-sm text-gray-500 break-words">
+        <div className="text-sm text-secondary-500 dark:text-secondary-400 break-words">
           Created {formatDate(group.createdAt)}
         </div>
       </div>
@@ -102,9 +103,9 @@ export default function GroupCard({
             pictureUrl={group.createdByPictureUrl}
             variant="sm"
           />
-          <div className="text-xs text-gray-500">
-            <span className="text-gray-600">Created by</span>{' '}
-            <span className="font-medium text-gray-700">{group.createdByName}</span>
+          <div className="text-xs text-secondary-500 dark:text-secondary-400">
+            <span className="text-secondary-600 dark:text-secondary-300">Created by</span>{' '}
+            <span className="font-medium text-secondary-700 dark:text-secondary-200">{group.createdByName}</span>
           </div>
         </div>
       )}
@@ -129,6 +130,6 @@ export default function GroupCard({
           </Button>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

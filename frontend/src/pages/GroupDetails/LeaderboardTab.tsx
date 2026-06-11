@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Avatar from '../../designsystem/components/Avatar';
 import Button from '../../designsystem/components/Button';
+import Spinner from '../../designsystem/components/Spinner';
+import EmptyState from '../../designsystem/components/EmptyState';
 import { getScoreboard } from '../../lib/picksService.js';
 import type { ScoreboardUser } from '../../lib/picksService';
 import { useSeasonOptions } from './useSeasonOptions';
@@ -51,7 +53,11 @@ export default function LeaderboardTab({ identifier }: LeaderboardTabProps) {
   }, [load]);
 
   if (!resolved || (loading && users.length === 0 && !error)) {
-    return <p className="text-[var(--color-text-secondary)]">Loading leaderboard…</p>;
+    return (
+      <div className="py-lg">
+        <Spinner size="sm" label="Loading leaderboard…" />
+      </div>
+    );
   }
 
   return (
@@ -62,7 +68,7 @@ export default function LeaderboardTab({ identifier }: LeaderboardTabProps) {
           aria-label="Select season"
           value={season ?? ''}
           onChange={(e) => setSeason(Number(e.target.value))}
-          className="px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-[var(--color-text-primary)]"
+          className="px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-content"
         >
           {options.map((s) => (
             <option key={s} value={s}>
@@ -78,21 +84,32 @@ export default function LeaderboardTab({ identifier }: LeaderboardTabProps) {
       {error ? (
         <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
       ) : users.length === 0 || weeks.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          No points yet for the {season} season.
-        </p>
+        <EmptyState
+          icon={
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M16 11V3H8v8M4 21h16M6 21V11h12v10M9 7h6"
+              />
+            </svg>
+          }
+          title="Nothing scored yet"
+          description={`No points yet for the ${season} season — make your picks to climb the leaderboard.`}
+        />
       ) : (
         <>
           {/* Ranked standings, mirroring the Svelte leaderboard card. */}
           <ul className="divide-y divide-secondary-200 dark:divide-secondary-700 rounded-lg border border-secondary-200 dark:border-secondary-700 bg-neutral-0 dark:bg-secondary-800">
             {users.map((u, i) => (
               <li key={u.userId} className="flex items-center gap-sm px-md py-sm">
-                <div className="w-6 text-right pr-1 text-sm font-medium tabular-nums text-[var(--color-text-primary)]">
+                <div className="w-6 text-right pr-1 text-sm font-medium tabular-nums text-content">
                   {i + 1}
                 </div>
                 <Avatar name={u.name} pictureUrl={u.pictureUrl ?? ''} variant="md" />
-                <div className="flex-1 truncate text-sm text-[var(--color-text-primary)]">{u.name}</div>
-                <div className="text-sm font-semibold tabular-nums text-[var(--color-text-primary)]">
+                <div className="flex-1 truncate text-sm text-content">{u.name}</div>
+                <div className="text-sm font-semibold tabular-nums text-content">
                   {u.totalPoints}
                 </div>
               </li>
@@ -124,15 +141,15 @@ export default function LeaderboardTab({ identifier }: LeaderboardTabProps) {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.userId} className="border-t border-secondary-200 dark:border-secondary-700">
-                    <th scope="row" className="px-sm py-xs text-left font-medium whitespace-nowrap text-[var(--color-text-primary)]">
+                    <th scope="row" className="px-sm py-xs text-left font-medium whitespace-nowrap text-content">
                       {u.name}
                     </th>
                     {weeks.map((w) => (
-                      <td key={w} className="px-sm py-xs text-center tabular-nums text-[var(--color-text-primary)]">
+                      <td key={w} className="px-sm py-xs text-center tabular-nums text-content">
                         {u.weekly.find((x) => x.week === w)?.points ?? 0}
                       </td>
                     ))}
-                    <td className="px-sm py-xs text-center font-semibold tabular-nums text-[var(--color-text-primary)]">
+                    <td className="px-sm py-xs text-center font-semibold tabular-nums text-content">
                       {u.totalPoints}
                     </td>
                   </tr>

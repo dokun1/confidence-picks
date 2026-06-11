@@ -78,11 +78,11 @@ describe('GroupCard', () => {
       expect(screen.getByText('Owner')).toBeInTheDocument();
     });
 
-    it('applies blue badge classes for owner', () => {
+    it('applies accent badge classes for owner', () => {
       render(<GroupCard group={BASE_GROUP} />);
       const badge = screen.getByText('Owner');
-      expect(badge).toHaveClass('bg-blue-100');
-      expect(badge).toHaveClass('text-blue-800');
+      expect(badge).toHaveClass('bg-accent-subtle');
+      expect(badge).toHaveClass('text-accent-on-subtle');
     });
 
     it('shows Member badge when isOwner is false', () => {
@@ -90,11 +90,11 @@ describe('GroupCard', () => {
       expect(screen.getByText('Member')).toBeInTheDocument();
     });
 
-    it('applies green badge classes for member', () => {
+    it('applies success badge classes for member', () => {
       render(<GroupCard group={MEMBER_GROUP} />);
       const badge = screen.getByText('Member');
-      expect(badge).toHaveClass('bg-green-100');
-      expect(badge).toHaveClass('text-green-800');
+      expect(badge).toHaveClass('bg-success-100');
+      expect(badge).toHaveClass('text-success-800');
     });
 
     it('does not show Member badge for owner', () => {
@@ -194,11 +194,11 @@ describe('GroupCard', () => {
     it('applies card container classes', () => {
       const { container } = render(<GroupCard group={BASE_GROUP} />);
       const card = container.firstChild as HTMLElement;
-      expect(card).toHaveClass('bg-white');
+      expect(card).toHaveClass('bg-neutral-0');
       expect(card).toHaveClass('border');
-      expect(card).toHaveClass('border-gray-200');
-      expect(card).toHaveClass('rounded-lg');
-      expect(card).toHaveClass('p-6');
+      expect(card).toHaveClass('border-border');
+      expect(card).toHaveClass('rounded-xl');
+      expect(card).toHaveClass('p-lg');
       expect(card).toHaveClass('shadow-sm');
     });
   });

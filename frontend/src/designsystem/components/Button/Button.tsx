@@ -16,9 +16,9 @@ const BASE_CLASSES =
   'inline-flex items-center justify-center font-medium transition-all duration-normal ease-smooth focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed active:translate-y-px disabled:active:translate-y-0';
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'px-xs py-xxxs text-sm rounded-sm h-10',
-  md: 'px-md py-xs text-base rounded-base h-10',
-  lg: 'px-lg py-sm text-lg rounded-md h-10',
+  sm: 'px-sm py-xxxs text-sm rounded-pill h-10',
+  md: 'px-lg py-xs text-base rounded-pill h-10',
+  lg: 'px-xl py-sm text-lg rounded-pill h-10',
 };
 
 type ButtonState = 'default' | 'disabled';
@@ -26,9 +26,9 @@ type ButtonState = 'default' | 'disabled';
 const VARIANT_CLASSES: Record<ButtonVariant, Record<ButtonState, string>> = {
   primary: {
     default:
-      'bg-primary-500 text-neutral-0 border border-primary-600 shadow-sm hover:bg-primary-600 hover:shadow-base focus:ring-primary-500 dark:bg-primary-600 dark:hover:bg-primary-500 dark:border-primary-500',
+      'bg-accent text-accent-fg border border-accent-strong shadow-sm hover:bg-accent-strong hover:shadow-base focus:ring-accent',
     disabled:
-      'bg-primary-300 text-primary-100 border-primary-300 shadow-none cursor-not-allowed dark:bg-primary-800 dark:text-primary-400 dark:border-primary-800',
+      'bg-secondary-200 text-secondary-500 border-secondary-200 shadow-none cursor-not-allowed dark:bg-secondary-800 dark:text-secondary-400 dark:border-secondary-700',
   },
   secondary: {
     default:
@@ -46,7 +46,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, Record<ButtonState, string>> = {
     default:
       'bg-error-500 text-neutral-0 border border-error-600 shadow-sm hover:bg-error-600 hover:shadow-base focus:ring-error-500 dark:bg-error-600 dark:hover:bg-error-500 dark:border-error-500',
     disabled:
-      'bg-error-300 text-error-100 border-error-300 shadow-none cursor-not-allowed dark:bg-error-800 dark:text-error-400 dark:border-error-800',
+      'bg-secondary-200 text-secondary-500 border-secondary-200 shadow-none cursor-not-allowed dark:bg-secondary-800 dark:text-secondary-400 dark:border-secondary-700',
   },
 };
 

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../designsystem/components/Button';
+import Card from '../designsystem/components/Card';
 
 // Ported from the inline Home view in the original App.svelte (commit d6b2566^).
 // A marketing landing: welcome header, three feature cards, and a "Get Started"
@@ -50,13 +51,13 @@ export default function HomePage() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="max-w-4xl mx-auto px-sm py-lg sm:px-lg">
+    <div className="max-w-4xl mx-auto">
       <div className="text-center space-y-lg">
         <header className="space-y-md">
-          <h1 className="text-4xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-4xl font-heading font-bold text-content">
             Welcome to Confidence Picks!
           </h1>
-          <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto">
+          <p className="text-xl text-content-muted max-w-2xl mx-auto">
             Your home for sports pick&apos;em pools — from NFL confidence picks to the World Cup.
             Compete with friends, track your performance, and climb the leaderboard.
           </p>
@@ -65,10 +66,7 @@ export default function HomePage() {
         {/* Feature Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
           {FEATURES.map((feature) => (
-            <div
-              key={feature.title}
-              className="p-md bg-neutral-0 dark:bg-secondary-800 border border-secondary-200 dark:border-secondary-700 rounded-base"
-            >
+            <Card key={feature.title} padding="md">
               <div
                 className={`w-12 h-12 ${feature.iconWrapper} rounded-base flex items-center justify-center mx-auto mb-sm`}
               >
@@ -87,17 +85,17 @@ export default function HomePage() {
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-heading font-semibold text-[var(--color-text-primary)] mb-xs">
+              <h3 className="text-lg font-heading font-semibold text-content mb-xs">
                 {feature.title}
               </h3>
-              <p className="text-[var(--color-text-secondary)] text-sm">{feature.description}</p>
-            </div>
+              <p className="text-content-muted text-sm">{feature.description}</p>
+            </Card>
           ))}
         </div>
 
         {/* Quick Actions */}
         <div className="space-y-md">
-          <h2 className="text-2xl font-heading font-semibold text-[var(--color-text-primary)]">
+          <h2 className="text-2xl font-heading font-semibold text-content">
             Get Started
           </h2>
           <div className="flex flex-col sm:flex-row gap-sm justify-center">

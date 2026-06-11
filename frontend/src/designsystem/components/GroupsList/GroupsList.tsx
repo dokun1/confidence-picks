@@ -1,6 +1,8 @@
 import GroupCard from '../GroupCard/GroupCard';
 import type { GroupData } from '../GroupCard/GroupCard';
 import Button from '../Button/Button';
+import Spinner from '../Spinner/Spinner';
+import EmptyState from '../EmptyState/EmptyState';
 
 export interface GroupsListProps {
   /** Array of group objects to display. */
@@ -67,8 +69,8 @@ export default function GroupsList({
       {showHeader ? (
         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-sm md:gap-0">
           <div className="order-1">
-            <h1 className="text-2xl font-bold text-gray-900">My Groups</h1>
-            <p className="text-gray-600 mt-1">Manage your confidence picks groups</p>
+            <h1 className="text-2xl font-bold text-content">My Groups</h1>
+            <p className="text-content-muted mt-1">Manage your confidence picks groups</p>
           </div>
           <div className="flex flex-col order-2 md:order-none md:flex-row md:space-x-3 gap-sm md:gap-0 w-full md:w-auto md:items-center mt-sm md:mt-0">
             <Button variant="primary" onClick={onCreateNew}>
@@ -109,15 +111,14 @@ export default function GroupsList({
 
       {/* Loading state */}
       {isLoading ? (
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading groups...</span>
+        <div className="flex justify-center py-12">
+          <Spinner size="md" label="Loading groups..." />
         </div>
       ) : groups.length === 0 ? (
         /* Empty state */
-        <div className="text-center py-12">
-          <div className="mx-auto h-12 w-12 text-gray-400">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <EmptyState
+          icon={
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -125,20 +126,20 @@ export default function GroupsList({
                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
               />
             </svg>
-          </div>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No groups found</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Get started by creating a new group or joining an existing one.
-          </p>
-          <div className="mt-6 flex justify-center space-x-3">
-            <Button variant="primary" onClick={onCreateNew}>
-              Create Your First Group
-            </Button>
-            <Button variant="secondary" onClick={onJoinExisting}>
-              Join a Group
-            </Button>
-          </div>
-        </div>
+          }
+          title="No groups found"
+          description="Get started by creating a new group or joining an existing one."
+          action={
+            <div className="flex flex-wrap justify-center gap-sm">
+              <Button variant="primary" onClick={onCreateNew}>
+                Create Your First Group
+              </Button>
+              <Button variant="secondary" onClick={onJoinExisting}>
+                Join a Group
+              </Button>
+            </div>
+          }
+        />
       ) : (
         /* Groups list */
         <div className="groups-grid">

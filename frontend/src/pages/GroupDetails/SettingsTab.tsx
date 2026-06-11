@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Avatar from '../../designsystem/components/Avatar';
 import Button from '../../designsystem/components/Button';
+import Card from '../../designsystem/components/Card';
+import EmptyState from '../../designsystem/components/EmptyState';
 import { ConfirmDeleteModal } from '../../designsystem/components/Modal';
 import { createLinkInvite } from '../../lib/invitesService.js';
 import { deleteGroup, leaveGroup } from '../../lib/groupsService.js';
@@ -31,6 +33,8 @@ export default function SettingsTab(props: SettingsTabProps) {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const inviteInputRef = useRef<HTMLInputElement>(null);
 
   // Discriminated modal state: which action the shared ConfirmDeleteModal confirms.
   const [confirmAction, setConfirmAction] = useState<'delete' | 'leave' | null>(null);
@@ -49,9 +53,30 @@ export default function SettingsTab(props: SettingsTabProps) {
     }
   }
 
-  function handleCopy() {
-    if (joinUrl) {
-      navigator.clipboard.writeText(joinUrl);
+  async function handleCopy() {
+    if (!joinUrl) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      ok = true;
+    } catch {
+      // Fallback for contexts without async clipboard access (e.g. some
+      // headless/insecure setups): select the field and use execCommand.
+      const el = inviteInputRef.current;
+      if (el) {
+        el.select();
+        try {
+          ok = document.execCommand('copy');
+        } catch {
+          ok = false;
+        }
+        el.setSelectionRange(0, 0);
+        el.blur();
+      }
+    }
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -95,7 +120,7 @@ export default function SettingsTab(props: SettingsTabProps) {
       <section>
         <h2 className='text-lg font-semibold mb-lg'>Members</h2>
         {members.length === 0 ? (
-          <p className='text-secondary'>No members yet.</p>
+          <EmptyState title='No members yet' description='Invite people with the link below to fill out your group.' />
         ) : (
           <div className='space-y-md'>
             {members.map(member => (
@@ -104,12 +129,12 @@ export default function SettingsTab(props: SettingsTabProps) {
                 <div className='min-w-0 flex-1 flex items-center gap-md'>
                   <span className='font-medium'>{member.name}</span>
                   {member.isOwner && (
-                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800'>
+                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-subtle text-accent-on-subtle'>
                       Owner
                     </span>
                   )}
                 </div>
-                <span className='text-xs text-secondary whitespace-nowrap'>
+                <span className='text-xs text-content-muted whitespace-nowrap'>
                   Joined {new Date(member.joinedAt).toLocaleDateString()}
                 </span>
               </div>
@@ -119,7 +144,7 @@ export default function SettingsTab(props: SettingsTabProps) {
       </section>
 
       {/* Invite link */}
-      <section className='rounded-md border border-border bg-surface p-lg'>
+      <Card as='section'>
         <h2 className='text-lg font-semibold mb-lg'>Invite Link</h2>
         <Button variant='secondary' onClick={handleCreateInvite} loading={creatingInvite} disabled={creatingInvite}>
           {creatingInvite ? 'Preparing…' : 'Create Invite Link'}
@@ -127,25 +152,26 @@ export default function SettingsTab(props: SettingsTabProps) {
         {joinUrl && (
           <div className='mt-md flex items-center gap-md'>
             <input
+              ref={inviteInputRef}
               type='text'
               readOnly
               value={joinUrl}
-              className='min-w-0 flex-1 rounded-base border border-border bg-surface px-md py-xs text-sm'
+              className='min-w-0 flex-1 rounded-base border border-secondary-300 bg-neutral-0 text-secondary-900 px-md py-xs text-sm dark:border-secondary-700 dark:bg-secondary-900 dark:text-secondary-100'
               onFocus={event => event.currentTarget.select()}
             />
             <Button variant='tertiary' onClick={handleCopy}>
-              Copy
+              {copied ? 'Copied!' : 'Copy'}
             </Button>
           </div>
         )}
         {inviteError && (
           <p className='mt-md text-sm text-error-600 dark:text-error-400'>{inviteError}</p>
         )}
-      </section>
+      </Card>
 
       {/* Owner/member actions: Edit + Delete (owner) or Leave (member), each
           confirmed through the shared ConfirmDeleteModal. */}
-      <section className='rounded-md border border-border bg-surface p-lg'>
+      <Card as='section'>
         <h2 className='text-lg font-semibold mb-lg'>{isOwner ? 'Manage Group' : 'Membership'}</h2>
         <div className='flex flex-wrap items-center gap-md'>
           {isOwner ? (
@@ -163,7 +189,7 @@ export default function SettingsTab(props: SettingsTabProps) {
             </Button>
           )}
         </div>
-      </section>
+      </Card>
 
       <ConfirmDeleteModal
         isOpen={confirmAction !== null}

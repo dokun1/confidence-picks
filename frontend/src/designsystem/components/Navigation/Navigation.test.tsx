@@ -103,7 +103,7 @@ describe('Navigation', () => {
     it('applies active classes to the link matching the current route', () => {
       renderNav({ initialPath: '/about' });
       for (const link of screen.getAllByRole('link', { name: 'About' })) {
-        expect(link).toHaveClass('text-primary-600');
+        expect(link).toHaveClass('text-accent-on-subtle');
         expect(link).toHaveAttribute('aria-current', 'page');
       }
     });

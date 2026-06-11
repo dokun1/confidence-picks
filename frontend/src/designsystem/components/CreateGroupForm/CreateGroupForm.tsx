@@ -144,8 +144,8 @@ export default function CreateGroupForm({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Create New Group</h2>
+    <div className="bg-neutral-0 border border-secondary-200 rounded-lg p-6 dark:bg-secondary-800 dark:border-secondary-700">
+      <h2 className="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-6">Create New Group</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <TextField
@@ -170,7 +170,7 @@ export default function CreateGroupForm({
             required
             disabled={loading || !!initialValues?.identifier}
           />
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-secondary-500 dark:text-secondary-400">
             {initialValues?.identifier
               ? 'Group ID cannot be changed after creation.'
               : 'This will be used to share your group with others. It must be unique.'}
@@ -191,7 +191,7 @@ export default function CreateGroupForm({
         <div>
           <label
             htmlFor="pool-type"
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-secondary-700 dark:text-secondary-200 mb-1"
           >
             Pool Type
           </label>
@@ -200,7 +200,7 @@ export default function CreateGroupForm({
             value={poolType}
             onChange={(e) => setPoolType(e.target.value as PoolType)}
             disabled={loading}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+            className="block w-full rounded-md border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-500 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-100"
           >
             <option value="nfl_weekly">NFL Weekly</option>
             <option value="world_cup_2026">World Cup 2026</option>

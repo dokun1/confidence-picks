@@ -1,4 +1,4 @@
-import { forwardRef, useId, useRef, useState } from 'react';
+import { forwardRef, useId, useRef } from 'react';
 import {
   CheckCircleIcon,
   ExclamationCircleIcon,
@@ -77,7 +77,7 @@ function buildInputClasses(
     'w-full rounded-base border transition-all duration-fast ease-smooth',
     'bg-neutral-0 dark:bg-secondary-800',
     'text-neutral-900 dark:text-neutral-0',
-    'placeholder-secondary-500 dark:placeholder-secondary-400',
+    'placeholder-secondary-400 dark:placeholder-secondary-500',
     'focus:outline-none focus:ring-1 focus:ring-offset-none',
     'disabled:bg-secondary-100 disabled:text-secondary-500 disabled:cursor-not-allowed',
     'dark:disabled:bg-secondary-900 dark:disabled:text-secondary-600',
@@ -121,7 +121,6 @@ const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, TextFieldPr
   ) {
     const generatedId = useId();
     const id = idProp || generatedId;
-    const [focused, setFocused] = useState(false);
     const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
     const hasValue = value.length > 0;
@@ -135,14 +134,6 @@ const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, TextFieldPr
 
     function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
       onChange?.(e.target.value);
-    }
-
-    function handleFocus() {
-      setFocused(true);
-    }
-
-    function handleBlur() {
-      setFocused(false);
     }
 
     function handleKeyDown(e: React.KeyboardEvent) {
@@ -172,7 +163,7 @@ const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, TextFieldPr
         {label && (
           <label
             htmlFor={id}
-            className="block text-sm font-medium text-[var(--color-text-secondary)] mb-xs"
+            className="block text-sm font-medium text-content-muted mb-xs"
           >
             {label}
             {required && <span className="text-error-500">*</span>}
@@ -192,8 +183,6 @@ const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, TextFieldPr
               rows={rows}
               className={inputClasses}
               onChange={handleChange}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
             />
           ) : (
             <input
@@ -210,23 +199,8 @@ const TextField = forwardRef<HTMLInputElement | HTMLTextAreaElement, TextFieldPr
                 secure ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined
               }
               onChange={handleChange}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
               onKeyDown={handleKeyDown}
             />
-          )}
-
-          {/* Placeholder animation overlay (only for non-multiline) */}
-          {placeholder && !hasValue && !multiline && (
-            <div
-              className={`absolute inset-y-0 left-0 flex items-center px-sm pointer-events-none transition-opacity duration-fast ease-smooth ${focused ? 'opacity-0' : 'opacity-100'}`}
-            >
-              <span
-                className={`text-secondary-500 dark:text-secondary-400 ${SIZE_CLASSES[size].includes('text-sm') ? 'text-sm' : SIZE_CLASSES[size].includes('text-lg') ? 'text-lg' : 'text-base'}`}
-              >
-                {placeholder}
-              </span>
-            </div>
           )}
 
           {/* Clear Button */}

@@ -1,8 +1,8 @@
 export default function AboutPage() {
   return (
-    <div className='px-sm py-lg sm:p-lg'>
+    <div>
       <h1 className='text-2xl font-bold'>About</h1>
-      <section className='mt-md space-y-md text-base text-gray-600'>
+      <section className='mt-md space-y-md text-base text-content-muted'>
         <p>
           Confidence Picks is a sports pick&apos;em platform for groups of friends. Create or join a
           group, make your picks before each game locks, and climb your group&apos;s leaderboard.
@@ -11,7 +11,7 @@ export default function AboutPage() {
         </p>
 
         <div className='space-y-xs'>
-          <h2 className='text-lg font-semibold text-gray-900'>NFL confidence pools</h2>
+          <h2 className='text-lg font-semibold text-content'>NFL confidence pools</h2>
           <p>
             Each week you rank that week&apos;s games by how confident you are. With N games on the
             slate, your surest pick is worth N points, the next is worth N−1, and so on down to 1.
@@ -22,7 +22,7 @@ export default function AboutPage() {
         </div>
 
         <div className='space-y-xs'>
-          <h2 className='text-lg font-semibold text-gray-900'>World Cup pools</h2>
+          <h2 className='text-lg font-semibold text-content'>World Cup pools</h2>
           <p>
             There&apos;s no confidence ranking — every match is worth a flat point value based only
             on the outcome you pick (home win, draw, or away win). Your tournament score is the sum
@@ -30,12 +30,12 @@ export default function AboutPage() {
           </p>
           <ul className='list-disc space-y-xxs pl-lg'>
             <li>
-              <span className='font-medium text-gray-900'>Group stage:</span> pick the winning team
+              <span className='font-medium text-content'>Group stage:</span> pick the winning team
               → 3 points; pick a team that ends up drawing → 1; pick &ldquo;Draw&rdquo; and the match
               draws → 2; pick &ldquo;Draw&rdquo; but a team wins → 1; pick the losing team → 0.
             </li>
             <li>
-              <span className='font-medium text-gray-900'>Knockout stage:</span> a match always
+              <span className='font-medium text-content'>Knockout stage:</span> a match always
               produces a team that advances — extra time or a penalty shootout decides it — so there
               is no draw. Pick the advancing team → 3 points; pick anyone else → 0. The
               &ldquo;Draw&rdquo; option is disabled for knockout matches.

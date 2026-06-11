@@ -24,12 +24,12 @@ export default function CreateGroupPage() {
 
   return (
     <div className="min-h-screen bg-neutral-0 dark:bg-secondary-900">
-      <div className="max-w-2xl mx-auto px-sm py-lg sm:px-lg space-y-lg">
+      <div className="max-w-2xl mx-auto space-y-lg">
         <header className="space-y-sm">
-          <h1 className="text-3xl font-heading font-bold text-[var(--color-text-primary)]">
+          <h1 className="text-3xl font-heading font-bold text-content">
             Create Group
           </h1>
-          <p className="text-[var(--color-text-secondary)]">
+          <p className="text-content-muted">
             Start a new confidence picks group and invite your friends to compete.
           </p>
         </header>

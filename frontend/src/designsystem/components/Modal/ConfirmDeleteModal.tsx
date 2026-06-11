@@ -28,7 +28,7 @@ function ConfirmDeleteModal({
         <h3 className="text-xl font-heading font-semibold text-error-600 dark:text-error-400">
           {title}
         </h3>
-        <p className="text-sm text-[var(--color-text-secondary)]">{body}</p>
+        <p className="text-sm text-content-muted">{body}</p>
         <div className="flex justify-end space-x-sm pt-sm">
           <Button variant="secondary" onClick={onClose} disabled={loading} type="button">
             {cancelLabel}

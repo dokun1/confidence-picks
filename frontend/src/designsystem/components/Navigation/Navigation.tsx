@@ -58,13 +58,13 @@ type LinkState = 'active' | 'inactive';
 
 // Keyed records instead of inline ternaries — mirrors the variant/size pattern in Button.tsx.
 const DESKTOP_LINK_CLASSES: Record<LinkState, string> = {
-  active: 'text-primary-600 bg-primary-50 dark:text-primary-400 dark:bg-primary-900',
+  active: 'text-accent-on-subtle bg-accent-subtle',
   inactive:
     'text-secondary-600 hover:text-secondary-900 hover:bg-secondary-50 dark:text-secondary-400 dark:hover:text-secondary-100 dark:hover:bg-secondary-800',
 };
 
 const MOBILE_LINK_CLASSES: Record<LinkState, string> = {
-  active: 'text-primary-600 bg-primary-50 dark:text-primary-400 dark:bg-primary-900',
+  active: 'text-accent-on-subtle bg-accent-subtle',
   inactive:
     'text-secondary-700 hover:text-secondary-900 hover:bg-secondary-50 dark:text-secondary-300 dark:hover:text-secondary-100 dark:hover:bg-secondary-700',
 };
@@ -166,8 +166,8 @@ export default function Navigation({ showThemeToggle = true }: NavigationProps) 
                 onClick={handleLogoClick}
                 aria-label={`${BRAND_TEXT} home`}
               >
-                <div className="w-[2rem] h-[2rem] bg-primary-500 rounded-base mr-xs flex items-center justify-center">
-                  <TrophyIcon className="w-[1.25rem] h-[1.25rem] text-neutral-0" />
+                <div className="w-[2rem] h-[2rem] bg-accent rounded-base mr-xs flex items-center justify-center">
+                  <TrophyIcon className="w-[1.25rem] h-[1.25rem] text-accent-fg" />
                 </div>
                 <span className="text-xl font-heading font-bold text-secondary-900 dark:text-neutral-0">
                   {BRAND_TEXT}

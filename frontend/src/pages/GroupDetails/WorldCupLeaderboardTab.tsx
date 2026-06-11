@@ -39,7 +39,7 @@ export default function WorldCupLeaderboardTab({ identifier }: WorldCupLeaderboa
   return (
     <div>
       {loading ? (
-        <p className="text-[var(--color-text-secondary)]">Loading leaderboard…</p>
+        <p className="text-content-muted">Loading leaderboard…</p>
       ) : error ? (
         <p className="text-error-600 dark:text-error-400">{error}</p>
       ) : (

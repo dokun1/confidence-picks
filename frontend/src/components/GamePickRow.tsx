@@ -234,7 +234,7 @@ export default function GamePickRow({
       ].join(' ')}
     >
       <div className="flex items-center justify-between border-b border-border pb-xs">
-        <span className="text-xs text-secondary">{formatGameDate(game.gameDate)}</span>
+        <span className="text-xs text-content-muted">{formatGameDate(game.gameDate)}</span>
         <div className="flex items-center gap-xs">
           <span
             className={`rounded px-xs py-xxxs text-[0.6rem] font-semibold uppercase tracking-wide ${STATUS_BADGE[status]}`}
@@ -263,7 +263,7 @@ export default function GamePickRow({
       <div className="flex items-stretch gap-sm" role="radiogroup" aria-label="Select winner">
         <div className="flex flex-1 flex-col gap-xs">
           {renderTeam(game.awayTeam, awayTeamId, awaySelected)}
-          <span className="px-sm text-xs text-secondary">@</span>
+          <span className="px-sm text-xs text-content-muted">@</span>
           {renderTeam(game.homeTeam, homeTeamId, homeSelected)}
         </div>
 
@@ -294,7 +294,7 @@ export default function GamePickRow({
                   e.stopPropagation();
                   setShowPicker((s) => !s);
                 }}
-                className="flex min-w-[2.8ch] flex-col items-center justify-center gap-xxxs rounded-md bg-primary-600 px-sm py-xs font-bold text-neutral-0 shadow-sm hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex min-w-[2.8ch] flex-col items-center justify-center gap-xxxs rounded-md bg-accent px-sm py-xs font-bold text-accent-fg shadow-sm hover:bg-accent-strong focus:outline-none focus:ring-2 focus:ring-accent"
                 title={confidence != null ? `Confidence ${confidence}` : 'Select confidence'}
               >
                 <span className="text-xl tabular-nums">{confidence ?? '—'}</span>
@@ -318,8 +318,8 @@ export default function GamePickRow({
                       className={[
                         'rounded-base px-xs py-xxs text-sm font-semibold transition-colors',
                         c === confidence
-                          ? 'bg-primary-700 text-neutral-0'
-                          : 'bg-secondary-100 text-secondary-900 hover:bg-primary-600 hover:text-neutral-0 dark:bg-secondary-700 dark:text-secondary-100',
+                          ? 'bg-accent text-accent-fg'
+                          : 'bg-secondary-100 text-secondary-900 hover:bg-accent hover:text-accent-fg dark:bg-secondary-700 dark:text-secondary-100',
                       ].join(' ')}
                     >
                       {c}
@@ -333,7 +333,7 @@ export default function GamePickRow({
       </div>
 
       {!final && status === 'not started' && game.odds && (
-        <div className="flex items-center gap-xs text-[0.65rem] font-semibold text-secondary">
+        <div className="flex items-center gap-xs text-[0.65rem] font-semibold text-content-muted">
           <span className="uppercase">Odds:</span>
           {game.odds.favoriteAbbr ? (
             <span>

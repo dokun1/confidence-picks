@@ -174,7 +174,7 @@ export default function PicksTab({ identifier, members }: PicksTabProps) {
   if (season == null) {
     return (
       <div className='rounded-md border border-border bg-surface p-lg'>
-        <p className='text-secondary'>Loading picks…</p>
+        <p className='text-content-muted'>Loading picks…</p>
       </div>
     );
   }
@@ -188,7 +188,7 @@ export default function PicksTab({ identifier, members }: PicksTabProps) {
           aria-label='Select season'
           value={season ?? ''}
           onChange={(e) => setSeason(Number(e.target.value))}
-          className='px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-[var(--color-text-primary)]'
+          className='px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-content'
         >
           {seasonOptions.map((s) => (
             <option key={s} value={s}>
@@ -201,7 +201,7 @@ export default function PicksTab({ identifier, members }: PicksTabProps) {
           value={week ?? ''}
           onChange={(e) => setWeek(Number(e.target.value))}
           disabled={week == null}
-          className='px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-[var(--color-text-primary)]'
+          className='px-sm py-xs border border-secondary-200 dark:border-secondary-700 rounded bg-neutral-0 dark:bg-secondary-800 text-content'
         >
           {week == null ? (
             <option value=''>Loading…</option>
@@ -216,7 +216,7 @@ export default function PicksTab({ identifier, members }: PicksTabProps) {
       </div>
 
       {loading ? (
-        <p className='text-secondary'>Loading picks…</p>
+        <p className='text-content-muted'>Loading picks…</p>
       ) : error ? (
         <p className='text-sm text-error-600 dark:text-error-400'>{error}</p>
       ) : (
