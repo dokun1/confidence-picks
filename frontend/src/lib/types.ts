@@ -128,6 +128,23 @@ export const WORLD_CUP_STAGES: readonly WorldCupStage[] = [
   'final',
 ] as const;
 
+// Normalized in-match event (goal or card), derived from ESPN's
+// `competitions[0].details`. Presentational only — minute is ESPN's display
+// clock string ("9'", "90'+2'") so the UI never re-formats stoppage time.
+export type MatchEventType = 'goal' | 'own-goal' | 'yellow-card' | 'red-card';
+
+export interface MatchEvent {
+  type: MatchEventType;
+  /** ESPN display clock, e.g. "9'" or "90'+2'". */
+  minute: string;
+  /** Player short name, e.g. "J. Quiñones". */
+  player: string;
+  /** Which side the event is credited to. */
+  side: 'home' | 'away';
+  /** Team abbreviation for display, e.g. "MEX". */
+  teamAbbr: string;
+}
+
 // Shaped like the backend world_cup Game JSON. `isKnockout` is a derived flag
 // (stage !== 'group') the route emits so the UI can disable draw picks without
 // re-deriving stage membership.
@@ -142,6 +159,8 @@ export interface WorldCupMatch {
   isKnockout: boolean;
   gameDate?: string;
   winnerTeamId?: string | null;
+  /** Goal/card timeline once the match has started. Absent before kickoff. */
+  events?: MatchEvent[];
 }
 
 // Mirrors the backend pick route body, which keys off `pickedResult`.
