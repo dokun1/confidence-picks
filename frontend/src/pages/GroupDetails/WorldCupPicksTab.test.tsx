@@ -68,6 +68,38 @@ function renderTab(identifier = 'la-crew') {
   return render(<WorldCupPicksTab identifier={identifier} />);
 }
 
+// The flat browse list defaults to the "Needs pick" view, which HIDES games that
+// are already picked or locked. Clicking the "All" chip forces every game to be
+// visible so a card stays in the DOM after it's picked (needed by toggle /
+// aria-pressed / hydration assertions).
+function showAllGames() {
+  fireEvent.click(screen.getByRole('button', { name: 'All' }));
+}
+
+// Each game renders a MatchListCard whose subheader carries the full matchup
+// ("Mexico vs United States"). There's no per-row testid in the flat list, so we
+// locate a card by its home-team name and scope queries to it. The Draw button is
+// the only ambiguous one (both cards have one); home/away abbrs are unique here.
+function cardFor(homeName: string): HTMLElement {
+  const label = screen.getByText(
+    (_content, node) => node?.textContent?.startsWith(homeName + ' vs ') ?? false,
+    { selector: 'span' },
+  );
+  // Climb to the card root: the nearest ancestor that also holds the pick buttons.
+  let el: HTMLElement | null = label;
+  while (el && within(el).queryAllByRole('button').length === 0) {
+    el = el.parentElement;
+  }
+  if (!el) throw new Error(`No card found for ${homeName}`);
+  return el;
+}
+
+// A game's three outcome buttons by accessible name (team abbreviation, or 'Draw').
+// Scoped to the matching card so the shared 'Draw' label is unambiguous.
+function pickButton(homeName: string, label: string): HTMLElement {
+  return within(cardFor(homeName)).getByRole('button', { name: label });
+}
+
 describe('WorldCupPicksTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,22 +152,23 @@ describe('WorldCupPicksTab', () => {
     expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
   });
 
-  it('fetches every tournament stage and groups matches by stage', async () => {
+  it('fetches every tournament stage and renders matches in the flat browse list', async () => {
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
     expect(mockGetStageMatches).toHaveBeenCalledTimes(7);
-    // Section headings (h2) — distinct from the per-row stage badges.
-    expect(screen.getByRole('heading', { name: 'Group Stage' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Round of 16' })).toBeInTheDocument();
-    expect(screen.getByTestId('match-row-20')).toBeInTheDocument();
 
-    // The populated state renders the MatchPickRow's three outcome buttons.
-    const groupRow = screen.getByTestId('match-row-10');
-    expect(within(groupRow).getByRole('button', { name: 'Pick Mexico to win' })).toBeInTheDocument();
-    expect(within(groupRow).getByRole('button', { name: 'Pick a draw' })).toBeInTheDocument();
-    expect(
-      within(groupRow).getByRole('button', { name: 'Pick United States to win' }),
-    ).toBeInTheDocument();
+    // Both matchups render in the flat list (no per-stage <h2> sections anymore).
+    expect(cardFor('Mexico')).toBeInTheDocument();
+    expect(cardFor('Canada')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Group Stage' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Round of 16' })).not.toBeInTheDocument();
+
+    // The group game's card renders the three outcome buttons (Home / Draw / Away).
+    expect(pickButton('Mexico', 'MEX')).toBeInTheDocument();
+    expect(pickButton('Mexico', 'Draw')).toBeInTheDocument();
+    expect(pickButton('Mexico', 'USA')).toBeInTheDocument();
   });
 
   it('shows an error state with a retry when a stage fetch fails', async () => {
@@ -154,13 +187,14 @@ describe('WorldCupPicksTab', () => {
 
   it('renders the submit bar once matches load and keeps submit disabled until a pick is made', async () => {
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
     const submit = screen.getByRole('button', { name: 'Submit Picks' });
     expect(submit).toBeDisabled();
     expect(screen.getByText('0 picks selected')).toBeInTheDocument();
 
-    const row = screen.getByTestId('match-row-10');
-    fireEvent.click(within(row).getByRole('button', { name: 'Pick Mexico to win' }));
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     expect(submit).toBeEnabled();
     expect(screen.getByText('1 pick selected')).toBeInTheDocument();
   });
@@ -168,14 +202,12 @@ describe('WorldCupPicksTab', () => {
   it('submits selected picks and surfaces a success toast', async () => {
     mockSubmitPicks.mockResolvedValue({});
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
 
-    fireEvent.click(
-      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
-    );
-    fireEvent.click(
-      within(screen.getByTestId('match-row-20')).getByRole('button', { name: 'Pick Canada to win' }),
-    );
+    fireEvent.click(pickButton('Mexico', 'MEX'));
+    fireEvent.click(pickButton('Canada', 'CAN'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
 
@@ -191,11 +223,11 @@ describe('WorldCupPicksTab', () => {
   it('surfaces an error toast when the submit fails', async () => {
     mockSubmitPicks.mockRejectedValue(new Error('Server said no'));
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
 
-    fireEvent.click(
-      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
-    );
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
     expect(await screen.findByText('Server said no')).toBeInTheDocument();
   });
@@ -211,11 +243,11 @@ describe('WorldCupPicksTab', () => {
     mockSubmitPicks.mockResolvedValue({});
 
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
 
-    fireEvent.click(
-      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
-    );
+    fireEvent.click(pickButton('Mexico', 'MEX'));
 
     // Open dropdown, tick the second WC group. The source 'la-crew' is
     // disabled-and-checked by SaveTargetsDropdown so we don't touch it.
@@ -241,11 +273,11 @@ describe('WorldCupPicksTab', () => {
     });
 
     renderTab();
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
 
-    fireEvent.click(
-      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
-    );
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Work Pool' }));
     fireEvent.click(screen.getByRole('button', { name: 'Submit to 2' }));
@@ -263,7 +295,10 @@ describe('WorldCupPicksTab', () => {
     mockSubmitPicks.mockResolvedValue({});
 
     renderTab();
-    await screen.findByTestId('match-row-10');
+    // Game 10 hydrates as already-picked, so the "Needs pick" default view hides
+    // its card. The submit bar (always rendered once matches load) is what proves
+    // the draft hydrated: wait for it to reflect the one saved pick.
+    await screen.findByRole('button', { name: 'Submit Picks' });
 
     // The submit button should be enabled because the draft now has 1 pick,
     // and the pick count line reflects it.
@@ -293,11 +328,11 @@ describe('WorldCupPicksTab', () => {
     mockSubmitPicks.mockResolvedValue({});
 
     const { rerender } = renderTab('la-crew');
-    await screen.findByTestId('match-row-10');
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
 
-    fireEvent.click(
-      within(screen.getByTestId('match-row-10')).getByRole('button', { name: 'Pick Mexico to win' }),
-    );
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     fireEvent.click(screen.getByRole('button', { name: 'Choose groups to save picks to' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Work Pool' }));
     expect(screen.getByRole('button', { name: 'Submit to 2' })).toBeInTheDocument();
@@ -314,13 +349,17 @@ describe('WorldCupPicksTab', () => {
 
   it('toggles a pick off when the selected result is clicked again', async () => {
     renderTab();
-    await screen.findByTestId('match-row-10');
-    const row = screen.getByTestId('match-row-10');
-    const homeBtn = within(row).getByRole('button', { name: 'Pick Mexico to win' });
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
+    // Switch to "All" so the card stays in the DOM after it's picked — the
+    // "Needs pick" default would hide it the instant it has a pick, making the
+    // toggle-off click unreachable.
+    showAllGames();
 
-    fireEvent.click(homeBtn);
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     expect(screen.getByText('1 pick selected')).toBeInTheDocument();
-    fireEvent.click(homeBtn);
+    fireEvent.click(pickButton('Mexico', 'MEX'));
     expect(screen.getByText('0 picks selected')).toBeInTheDocument();
   });
 
@@ -332,7 +371,9 @@ describe('WorldCupPicksTab', () => {
     it('hides the selector unless a roster and the caller are supplied', async () => {
       // The default renderTab passes no members/currentUserId — selector absent.
       renderTab();
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       expect(screen.queryByTestId('pick-person-selector')).not.toBeInTheDocument();
     });
 
@@ -345,13 +386,17 @@ describe('WorldCupPicksTab', () => {
           isAdmin={false}
         />,
       );
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       expect(screen.queryByTestId('pick-person-selector')).not.toBeInTheDocument();
     });
 
     it('shows the selector defaulting to the caller ("You") when a roster is supplied', async () => {
       renderWithPeople();
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       expect(screen.getByTestId('pick-person-selector')).toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: 'Choose whose picks to view or edit' }),
@@ -368,7 +413,9 @@ describe('WorldCupPicksTab', () => {
         canEdit: false,
       });
       renderWithPeople({ isAdmin: false });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
 
       pickPerson('Bob Stone');
 
@@ -382,9 +429,11 @@ describe('WorldCupPicksTab', () => {
       expect(screen.getByText('View only')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
 
-      // Bob's away pick is reflected but its row is disabled.
-      const row = screen.getByTestId('match-row-10');
-      const awayBtn = within(row).getByRole('button', { name: 'Pick United States to win' });
+      // Bob's pick is away (USA) — picked games are hidden under the default
+      // "Needs pick" view, so switch to "All" to inspect the card. Its away
+      // button reflects the pick and stays disabled for the read-only viewer.
+      showAllGames();
+      const awayBtn = pickButton('Mexico', 'USA');
       expect(awayBtn).toHaveAttribute('aria-pressed', 'true');
       expect(awayBtn).toBeDisabled();
     });
@@ -392,13 +441,15 @@ describe('WorldCupPicksTab', () => {
     it('refuses to mutate a teammate draft when a non-admin clicks a (disabled) pick', async () => {
       mockGetUserWorldCupPicks.mockResolvedValue({ picks: [], canEdit: false });
       renderWithPeople({ isAdmin: false });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       pickPerson('Bob Stone');
       await screen.findByText(/read-only/);
 
-      // The row is disabled, but force the click to prove the handler is inert.
-      const row = screen.getByTestId('match-row-10');
-      fireEvent.click(within(row).getByRole('button', { name: 'Pick Mexico to win' }));
+      // The card's controls are disabled, but force the click to prove the
+      // handler is inert (Bob has no picks, so the unpicked card is visible).
+      fireEvent.click(pickButton('Mexico', 'MEX'));
 
       // Still read-only, still no submit affordance, nothing submitted.
       expect(screen.getByText('View only')).toBeInTheDocument();
@@ -409,7 +460,9 @@ describe('WorldCupPicksTab', () => {
 
     it('lets an ADMIN edit a teammate and submits via the per-user endpoint', async () => {
       renderWithPeople({ isAdmin: true });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
 
       pickPerson('Bob Stone');
       await waitFor(() =>
@@ -421,11 +474,7 @@ describe('WorldCupPicksTab', () => {
       expect(screen.getByText('Saved to this group only')).toBeInTheDocument();
 
       // Make a pick for Bob and save it.
-      fireEvent.click(
-        within(screen.getByTestId('match-row-10')).getByRole('button', {
-          name: 'Pick Mexico to win',
-        }),
-      );
+      fireEvent.click(pickButton('Mexico', 'MEX'));
       const saveBtn = screen.getByRole('button', { name: "Save Bob's Picks" });
       expect(saveBtn).toBeEnabled();
       fireEvent.click(saveBtn);
@@ -446,7 +495,9 @@ describe('WorldCupPicksTab', () => {
         { id: 2, identifier: 'work-pool', name: 'Work Pool', poolType: 'world_cup_2026' },
       ] as any);
       renderWithPeople({ isAdmin: true });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
 
       // While picking for yourself the multi-group dropdown is present...
       expect(
@@ -468,39 +519,33 @@ describe('WorldCupPicksTab', () => {
       // own Mexico pick must not carry over and get saved as the teammate's.
       mockGetUserWorldCupPicks.mockResolvedValue({ picks: [], canEdit: true });
       renderWithPeople({ isAdmin: true });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
 
-      fireEvent.click(
-        within(screen.getByTestId('match-row-10')).getByRole('button', {
-          name: 'Pick Mexico to win',
-        }),
-      );
+      fireEvent.click(pickButton('Mexico', 'MEX'));
       expect(screen.getByText('1 pick selected')).toBeInTheDocument();
 
       pickPerson('Bob Stone');
       await screen.findByText(/Admin override/);
 
-      // Draft reset to Bob's (empty) picks — the carried-over pick is gone.
+      // Draft reset to Bob's (empty) picks — the carried-over pick is gone. With
+      // an empty draft the Mexico card is unpicked again and back in the default
+      // "Needs pick" view, so its home button reads aria-pressed=false.
       expect(screen.getByText('0 picks selected')).toBeInTheDocument();
-      expect(
-        within(screen.getByTestId('match-row-10')).getByRole('button', {
-          name: 'Pick Mexico to win',
-        }),
-      ).toHaveAttribute('aria-pressed', 'false');
+      expect(pickButton('Mexico', 'MEX')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('surfaces an error toast when an admin override submit fails', async () => {
       mockSubmitUserPicks.mockRejectedValue(new Error('Server said no'));
       renderWithPeople({ isAdmin: true });
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       pickPerson('Bob Stone');
       await screen.findByText(/Admin override/);
 
-      fireEvent.click(
-        within(screen.getByTestId('match-row-10')).getByRole('button', {
-          name: 'Pick Mexico to win',
-        }),
-      );
+      fireEvent.click(pickButton('Mexico', 'MEX'));
       fireEvent.click(screen.getByRole('button', { name: "Save Bob's Picks" }));
       expect(await screen.findByText('Server said no')).toBeInTheDocument();
     });
