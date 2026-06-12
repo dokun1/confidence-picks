@@ -7,7 +7,6 @@ export interface MatchListCardProps {
   game: BrowseGame;
   now: Date;
   onPick: (gameId: number, result: MatchResult) => void;
-  onOpenDetail: (gameId: number) => void;
 }
 
 function formatTime(iso: string): string {
@@ -31,13 +30,13 @@ function ResultStrip({ game }: { game: BrowseGame }) {
     >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-xs text-sm font-bold text-content">
-          <span className="text-lg">{game.home.flag}</span> {game.home.abbr}
+          <img src={game.home.logo} alt="" className="h-5 w-5 object-contain" /> {game.home.abbr}
         </span>
         <span className="text-xl font-extrabold tabular-nums text-content">
           {game.homeScore} <span className="text-content-subtle">–</span> {game.awayScore}
         </span>
         <span className="flex items-center gap-xs text-sm font-bold text-content">
-          {game.away.abbr} <span className="text-lg">{game.away.flag}</span>
+          {game.away.abbr} <img src={game.away.logo} alt="" className="h-5 w-5 object-contain" />
         </span>
       </div>
       <div className="mt-xs flex items-center justify-center gap-xs text-xs">
@@ -67,15 +66,15 @@ function ResultStrip({ game }: { game: BrowseGame }) {
  * a subheader above the card with a roomy "More ›"; the card body is the three-way
  * bet (pickable) or a result strip (locked).
  */
-export default function MatchListCard({ game, now, onPick, onOpenDetail }: MatchListCardProps) {
+export default function MatchListCard({ game, now, onPick }: MatchListCardProps) {
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
 
   return (
     <div>
-      {/* subheader: status/time + full names (wraps), roomy More on the right */}
-      <div className="flex items-start justify-between gap-sm px-xxs pb-xxs pt-sm">
+      {/* subheader: status/time + full names (wraps) */}
+      <div className="flex items-start gap-sm px-xxs pb-xxs pt-sm">
         <div className="min-w-0 text-xs leading-snug">
           <span className={`font-bold uppercase tracking-wide ${game.status === 'IN_PROGRESS' ? 'text-error-500' : 'text-content-subtle'}`}>
             {lead}
@@ -84,13 +83,6 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail }: Match
             {game.home.name} <span className="text-content-subtle">vs</span> {game.away.name}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => onOpenDetail(game.id)}
-          className="shrink-0 rounded-md px-xs py-xxs text-sm font-semibold text-accent hover:bg-accent-subtle/50"
-        >
-          More ›
-        </button>
       </div>
 
       {locked ? (
