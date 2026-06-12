@@ -25,9 +25,17 @@ describe('toBrowseGames', () => {
   it('maps the stageLabel for a knockout stage', () => {
     expect(toBrowseGames([match({ stage: 'r16' })], {})[0].stageLabel).toBe('Round of 16');
   });
-  it('maps the isKnockout flag through', () => {
-    expect(toBrowseGames([match({ isKnockout: true })], {})[0].isKnockout).toBe(true);
-    expect(toBrowseGames([match({ isKnockout: false })], {})[0].isKnockout).toBe(false);
+  it('derives isKnockout from the stage — every non-group stage is knockout', () => {
+    expect(toBrowseGames([match({ stage: 'group' })], {})[0].isKnockout).toBe(false);
+    for (const stage of ['r32', 'r16', 'qf', 'sf', 'third', 'final'] as const) {
+      expect(toBrowseGames([match({ stage })], {})[0].isKnockout).toBe(true);
+    }
+  });
+  it('ignores the unreliable m.isKnockout flag (the stage route never emits it)', () => {
+    // A knockout match whose isKnockout arrives false/undefined must still be
+    // flagged knockout from its stage — this is the prod bug that re-enabled Draw.
+    expect(toBrowseGames([match({ stage: 'r16', isKnockout: false })], {})[0].isKnockout).toBe(true);
+    expect(toBrowseGames([match({ stage: 'group', isKnockout: true })], {})[0].isKnockout).toBe(false);
   });
   it('normalizes an unknown status to SCHEDULED', () => {
     expect(toBrowseGames([match({ status: 'POSTPONED' as WorldCupMatch['status'] })], {})[0].status).toBe('SCHEDULED');

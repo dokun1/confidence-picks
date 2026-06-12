@@ -34,6 +34,15 @@ const usa = { id: '2', name: 'United States', abbreviation: 'USA', logo: '' };
 const can = { id: '3', name: 'Canada', abbreviation: 'CAN', logo: '' };
 const arg = { id: '4', name: 'Argentina', abbreviation: 'ARG', logo: '' };
 
+// End of the local day: the match shows under the default "Today" view AND stays
+// ahead of the clock (pre-kickoff / pickable) whenever the suite runs. Kickoff-time
+// locking is exercised directly in the card component's own tests.
+function endOfToday(): string {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+}
+
 function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
   return {
     id: 0,
@@ -44,10 +53,7 @@ function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
     awayScore: 0,
     status: 'SCHEDULED',
     isKnockout: false,
-    // Relative to now (tomorrow) so an upcoming match is always pre-kickoff and
-    // pickable whenever the suite runs — kickoff-time locking is exercised
-    // directly in the card component's own tests.
-    gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    gameDate: endOfToday(),
     ...overrides,
   };
 }
@@ -68,10 +74,9 @@ function renderTab(identifier = 'la-crew') {
   return render(<WorldCupPicksTab identifier={identifier} />);
 }
 
-// The flat browse list defaults to the "Needs pick" view, which HIDES games that
-// are already picked or locked. Clicking the "All" chip forces every game to be
-// visible so a card stays in the DOM after it's picked (needed by toggle /
-// aria-pressed / hydration assertions).
+// The flat browse list defaults to the "Today" view; the fixtures above are dated
+// today so they show there. A couple of assertions still force the "All" view via
+// this helper to keep a card visible irrespective of date/pick filters.
 function showAllGames() {
   fireEvent.click(screen.getByRole('button', { name: 'All' }));
 }
