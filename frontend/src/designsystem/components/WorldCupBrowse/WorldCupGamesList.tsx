@@ -135,12 +135,27 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
 
       {/* search + filters toggle + sort */}
       <div className="mb-sm flex gap-xs">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search teams…"
-          className="flex-1 rounded-md border border-border bg-neutral-0 px-sm py-xxs text-sm text-content placeholder:text-content-subtle dark:bg-secondary-900"
-        />
+        <div className="relative flex-1">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search teams…"
+            // text-base (16px) keeps mobile Safari from auto-zooming on focus —
+            // it zooms any input under 16px and never zooms back out on blur.
+            // pr-lg leaves room for the clear button.
+            className="w-full rounded-md border border-border bg-neutral-0 px-sm py-xxs pr-lg text-base text-content placeholder:text-content-subtle dark:bg-secondary-900"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute inset-y-0 right-0 flex items-center px-sm text-content-subtle hover:text-content"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setShowFilters((s) => !s)}

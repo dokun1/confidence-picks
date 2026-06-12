@@ -1,5 +1,7 @@
 import Avatar from '../Avatar';
 import type { TournamentLeaderboardRow } from '../../../lib/types';
+import type { ResultShade } from '../../../lib/wcGamesView';
+import { SHADE_TINT } from '../WorldCupBrowse/resultShade';
 
 export interface TournamentLeaderboardProps {
   /**
@@ -23,11 +25,13 @@ type StatKey = 'wins_correct' | 'losses' | 'draws_correct' | 'draws_incorrect';
 // The four tiebreaker stats, in tiebreaker order. Shared between the desktop
 // table columns and the mobile stat-chip grid so the two layouts can never
 // drift out of sync. `key` indexes the row; `label` is the human-facing header.
-const STAT_COLUMNS: { key: StatKey; label: string; short: string }[] = [
-  { key: 'wins_correct', label: 'Wins Correct', short: 'Wins' },
-  { key: 'losses', label: 'Losses', short: 'Losses' },
-  { key: 'draws_correct', label: 'Draws Correct', short: 'D ✓' },
-  { key: 'draws_incorrect', label: 'Draws Incorrect', short: 'D ✗' },
+// `shade` maps each stat onto the picks-view result palette (win/draw/partial/
+// loss) so the mobile chips read with the same colour coding as a scored game.
+const STAT_COLUMNS: { key: StatKey; label: string; short: string; shade: ResultShade }[] = [
+  { key: 'wins_correct', label: 'Wins Correct', short: 'Wins', shade: 'win' },
+  { key: 'losses', label: 'Losses', short: 'Losses', shade: 'loss' },
+  { key: 'draws_correct', label: 'Draws Correct', short: 'D ✓', shade: 'draw' },
+  { key: 'draws_incorrect', label: 'Draws Incorrect', short: 'D ✗', shade: 'partial' },
 ];
 
 const EMPTY_STATE = 'No standings yet — picks will appear here once the tournament begins.';
@@ -84,7 +88,8 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
               {STAT_COLUMNS.map((col) => (
                 <div
                   key={col.key}
-                  className="rounded-base bg-secondary-50 dark:bg-secondary-800 px-xs py-xs text-center"
+                  style={SHADE_TINT[col.shade]}
+                  className="rounded-base border px-xs py-xs text-center"
                 >
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400">
                     {col.short}

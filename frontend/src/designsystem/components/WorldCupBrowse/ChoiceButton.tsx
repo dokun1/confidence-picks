@@ -31,13 +31,13 @@ export default function ChoiceButton({ team, odds, record, selected, onClick, di
       onClick={onClick}
       aria-pressed={selected}
       disabled={disabled}
-      className={`flex flex-1 flex-col items-center gap-xxs rounded-md py-sm text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+      className={`flex flex-1 flex-col items-center gap-xxs rounded-md px-sm py-sm text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
         selected ? 'bg-accent text-accent-fg' : 'border border-border bg-neutral-0 hover:bg-secondary-50 dark:bg-secondary-900'
       }`}
     >
-      <span className="flex h-6 items-center justify-center gap-xs">
-        {team && <img src={team.logo} alt="" className="h-icon-sm w-icon-sm object-contain" />}
-        <span className={`text-base font-extrabold ${selected ? '' : 'text-content'}`}>{label}</span>
+      <span className="flex h-7 w-full items-center justify-center gap-sm">
+        {team && <img src={team.logo} alt="" className="h-icon-md w-icon-md object-contain" />}
+        <span className={`text-lg font-extrabold ${selected ? '' : 'text-content'}`}>{label}</span>
       </span>
       {odds && <span className={`text-xs font-bold tabular-nums ${oddsClass(odds, selected)}`}>{odds}</span>}
       {record && (
