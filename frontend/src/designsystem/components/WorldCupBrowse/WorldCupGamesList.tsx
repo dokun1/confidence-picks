@@ -29,6 +29,7 @@ const STAGES: { value: WorldCupStage | ''; label: string }[] = [
   { value: 'r16', label: 'Round of 16' },
   { value: 'qf', label: 'Quarterfinals' },
   { value: 'sf', label: 'Semifinals' },
+  { value: 'third', label: 'Third Place' },
   { value: 'final', label: 'Final' },
 ];
 
@@ -54,7 +55,7 @@ function Chip({ label, count, active, onClick }: { label: string; count?: number
 const selectCls =
   'rounded-md border border-border bg-neutral-0 px-xs py-xxs text-sm text-content dark:bg-secondary-900';
 
-export default function WorldCupGamesList({ games, now, onPick }: WorldCupGamesListProps) {
+export default function WorldCupGamesList({ games, now, onPick, disabled }: WorldCupGamesListProps) {
   const [view, setView] = useState<SavedView>('needs-pick');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -169,7 +170,7 @@ export default function WorldCupGamesList({ games, now, onPick }: WorldCupGamesL
               </div>
               <div className="space-y-xs">
                 {sec.games.map((g) => (
-                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} />
+                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} disabled={disabled} />
                 ))}
               </div>
             </section>

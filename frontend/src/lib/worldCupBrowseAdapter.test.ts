@@ -22,4 +22,10 @@ describe('toBrowseGames', () => {
   it('omits a pick when the draft has none', () => {
     expect(toBrowseGames([match({ id: 9 })], {})[0].picked).toBeUndefined();
   });
+  it('maps the stageLabel for a knockout stage', () => {
+    expect(toBrowseGames([match({ stage: 'r16' })], {})[0].stageLabel).toBe('Round of 16');
+  });
+  it('normalizes an unknown status to SCHEDULED', () => {
+    expect(toBrowseGames([match({ status: 'POSTPONED' as WorldCupMatch['status'] })], {})[0].status).toBe('SCHEDULED');
+  });
 });

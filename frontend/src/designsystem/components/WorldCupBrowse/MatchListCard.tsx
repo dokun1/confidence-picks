@@ -7,6 +7,7 @@ export interface MatchListCardProps {
   game: BrowseGame;
   now: Date;
   onPick: (gameId: number, result: MatchResult) => void;
+  disabled?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -62,11 +63,11 @@ function ResultStrip({ game }: { game: BrowseGame }) {
 }
 
 /**
- * One game in the World Cup browse list. The time/status + full team names live in
- * a subheader above the card with a roomy "More ›"; the card body is the three-way
- * bet (pickable) or a result strip (locked).
+ * One game in the World Cup browse list. A subheader shows the time/status and
+ * full team names; the card body is the three-way bet (pickable) or a result
+ * strip (locked).
  */
-export default function MatchListCard({ game, now, onPick }: MatchListCardProps) {
+export default function MatchListCard({ game, now, onPick, disabled }: MatchListCardProps) {
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
@@ -90,9 +91,9 @@ export default function MatchListCard({ game, now, onPick }: MatchListCardProps)
       ) : (
         <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
           <div className="flex gap-xs">
-            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} />
-            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} />
-            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} />
+            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled} />
+            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled} />
+            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled} />
           </div>
         </div>
       )}

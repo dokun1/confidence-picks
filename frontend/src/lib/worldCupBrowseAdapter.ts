@@ -15,7 +15,7 @@ const NORMALIZED: Record<string, GameStatus> = {
 export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): BrowseGame[] {
   return matches.map((m) => ({
     id: m.id,
-    espnId: String(m.id),
+    espnId: String(m.id), // TODO: use the real ESPN id once the stage API exposes it (P3 detail keys off it)
     stage: m.stage,
     stageLabel: STAGE_LABEL[m.stage] ?? m.stage,
     kickoff: m.gameDate ?? '',

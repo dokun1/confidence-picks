@@ -14,6 +14,7 @@ export interface ChoiceButtonProps {
   record?: string;
   selected: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }
 
 /**
@@ -22,14 +23,15 @@ export interface ChoiceButtonProps {
  * the logo'd teams. Odds and record are optional and only rendered when present.
  * Shared by the list card and the detail's pick controls.
  */
-export default function ChoiceButton({ team, odds, record, selected, onClick }: ChoiceButtonProps) {
+export default function ChoiceButton({ team, odds, record, selected, onClick, disabled }: ChoiceButtonProps) {
   const label = team ? team.abbr : 'Draw';
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`flex flex-1 flex-col items-center gap-xxs rounded-md py-sm text-center transition-colors ${
+      disabled={disabled}
+      className={`flex flex-1 flex-col items-center gap-xxs rounded-md py-sm text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
         selected ? 'bg-accent text-accent-fg' : 'border border-border bg-neutral-0 hover:bg-secondary-50 dark:bg-secondary-900'
       }`}
     >

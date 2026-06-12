@@ -1,7 +1,7 @@
 // Pure, framework-free view logic for the World Cup games browse list. Kept
 // React-free and `now`-injectable so every branch is unit-testable (mirrors
-// pollIntervalFor). The real feature maps API games + the user's picks into
-// BrowseGame; the local prototype supplies BrowseGame directly from mock data.
+// pollIntervalFor). The host derives BrowseGame from API matches + draft via
+// worldCupBrowseAdapter.
 
 import type { WorldCupStage } from './types';
 
@@ -102,7 +102,7 @@ export function applyFilters(games: BrowseGame[], f: Filters): BrowseGame[] {
 function norm(s: string): string {
   return s
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
 }
