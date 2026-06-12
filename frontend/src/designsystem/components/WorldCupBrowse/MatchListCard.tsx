@@ -1,5 +1,5 @@
 import type { BrowseGame, MatchResult } from '../../../lib/wcGamesView';
-import { isLocked, outcomeOf, resultShade } from '../../../lib/wcGamesView';
+import { isLocked, outcomeOf, resultShade, teamsDecided } from '../../../lib/wcGamesView';
 import ChoiceButton from './ChoiceButton';
 import { SHADE_TINT } from './resultShade';
 
@@ -74,11 +74,12 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
 
-  // Knockout slots are scheduled with TBD placeholders before participants are
-  // known; no outcome is pickable until both teams are assigned. And a knockout
-  // can't end in a draw (PKs decide), so the Draw choice isn't offered at all
-  // there — only the two teams.
-  const teamsAssigned = game.home.abbr !== 'TBD' && game.away.abbr !== 'TBD';
+  // Knockout slots are scheduled with placeholders before participants are
+  // known; no outcome is pickable until both teams are decided. Shares the
+  // exact rule the "needs pick" filter uses so the card and the filter can't
+  // disagree. And a knockout can't end in a draw (PKs decide), so the Draw
+  // choice isn't offered at all there — only the two teams.
+  const teamsAssigned = teamsDecided(game);
 
   return (
     <div data-testid={`match-card-${game.id}`}>

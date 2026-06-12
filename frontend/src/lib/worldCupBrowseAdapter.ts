@@ -26,6 +26,7 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
       record: m.homeTeam.record || undefined,
       moneyline: m.odds?.threeWay?.home || undefined,
       form: m.homeTeam.form || undefined,
+      isActive: m.homeTeam.isActive,
     },
     away: {
       abbr: m.awayTeam.abbreviation,
@@ -34,6 +35,7 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
       record: m.awayTeam.record || undefined,
       moneyline: m.odds?.threeWay?.away || undefined,
       form: m.awayTeam.form || undefined,
+      isActive: m.awayTeam.isActive,
     },
     // `|| undefined` (not `??`) so an empty-string odds/record from ESPN also
     // collapses to absent — the card renders nothing rather than an empty line.

@@ -20,6 +20,12 @@ export interface BrowseTeam {
   moneyline?: string;
   /** Recent W/D/L form sequence, e.g. "WWDWL". Optional. */
   form?: string;
+  /**
+   * False when this slot is still an undecided knockout placeholder rather than
+   * a real qualified team. ESPN's authoritative signal (team.isActive). Absent
+   * on group-stage/decided teams and older cached games → treated as decided.
+   */
+  isActive?: boolean;
 }
 
 export interface BrowseGame {
@@ -52,9 +58,40 @@ export function isLocked(g: BrowseGame, now: Date): boolean {
   return new Date(g.kickoff).getTime() <= now.getTime();
 }
 
-/** Needs a pick = startable window still open and no pick recorded. */
+/**
+ * A knockout slot that hasn't been decided yet, by NAME, for cached/legacy games
+ * that predate the isActive flag. ESPN seeds such slots with descriptive
+ * placeholders — literal "TBD", or "Winner Group A" / "Runner-up Group B" /
+ * "Loser Match 101" — none of which is a real qualified team. Matched
+ * case-insensitively on the abbreviation and full name.
+ */
+const PLACEHOLDER_NAME = /^(tbd|winner|runner[- ]?up|loser|1st|2nd)\b/i;
+
+/** A single slot holds a real, qualified team (not a bracket placeholder). */
+export function teamDecided(t: BrowseTeam): boolean {
+  // ESPN's authoritative signal: placeholders are flagged isActive:false.
+  if (t.isActive === false) return false;
+  // Fallback for games stored before isActive was carried through: detect the
+  // placeholder by its abbreviation or name.
+  return !PLACEHOLDER_NAME.test(t.abbr) && !PLACEHOLDER_NAME.test(t.name);
+}
+
+/**
+ * Both participants are known. Knockout slots are seeded with placeholders until
+ * the bracket decides them, and nothing is pickable until then — mirrors the
+ * guard MatchListCard uses to disable the pick buttons.
+ */
+export function teamsDecided(g: BrowseGame): boolean {
+  return teamDecided(g.home) && teamDecided(g.away);
+}
+
+/**
+ * Needs a pick = startable window still open, no pick recorded, and both teams
+ * decided. The last guard matters in knockout rounds: a game whose participants
+ * are still TBD can't be picked, so it must not appear in the "needs pick" view.
+ */
 export function needsPick(g: BrowseGame, now: Date): boolean {
-  return !isLocked(g, now) && g.picked == null;
+  return !isLocked(g, now) && g.picked == null && teamsDecided(g);
 }
 
 function isSameDay(a: Date, b: Date): boolean {
