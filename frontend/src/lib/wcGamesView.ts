@@ -38,6 +38,8 @@ export interface BrowseGame {
   awayScore?: number;
   /** The viewer's current pick, if any. */
   picked?: MatchResult;
+  /** Knockout matches can't end in a draw (PKs decide) — disables the Draw pick. */
+  isKnockout: boolean;
 }
 
 /** A game is locked once it has kicked off — by status OR by the clock passing kickoff. */

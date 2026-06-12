@@ -72,8 +72,13 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
 
+  // Knockout slots are scheduled with TBD placeholders before participants are
+  // known; no outcome is pickable until both teams are assigned. And a knockout
+  // can't end in a draw (PKs decide), so Draw stays disabled there.
+  const teamsAssigned = game.home.abbr !== 'TBD' && game.away.abbr !== 'TBD';
+
   return (
-    <div>
+    <div data-testid={`match-card-${game.id}`}>
       {/* subheader: status/time + full names (wraps) */}
       <div className="flex items-start gap-sm px-xxs pb-xxs pt-sm">
         <div className="min-w-0 text-xs leading-snug">
@@ -91,9 +96,9 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
       ) : (
         <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
           <div className="flex gap-xs">
-            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled} />
-            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled} />
-            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled} />
+            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
+            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned || game.isKnockout} />
+            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
           </div>
         </div>
       )}

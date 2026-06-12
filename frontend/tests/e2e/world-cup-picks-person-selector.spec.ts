@@ -132,7 +132,7 @@ test('admin can override a teammate and save via the per-user endpoint', async (
 
   await page.goto('/group-details?group=wc-group')
   await page.getByRole('tab', { name: 'Picks' }).click()
-  await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
+  await expect(page.getByTestId('match-card-101')).toBeVisible()
 
   // The selector defaults to the caller.
   const personButton = page.getByRole('button', { name: 'Choose whose picks to view or edit' })
@@ -144,8 +144,9 @@ test('admin can override a teammate and save via the per-user endpoint', async (
   await expect(page.getByText(/Admin override/)).toBeVisible()
   await expect(page.getByText('Saved to this group only')).toBeVisible()
 
-  // Make a pick for Bob and save it.
-  await page.getByRole('button', { name: 'Pick Mexico to win' }).click()
+  // Make a pick for Bob and save it. The default "Needs pick" view drops the
+  // game from the list once picked, so the save flows through the sticky bar.
+  await page.getByTestId('match-card-101').getByRole('button', { name: 'MEX' }).click()
   const save = page.getByRole('button', { name: "Save Bob's Picks" })
   await expect(save).toBeEnabled()
   await save.click()
@@ -185,7 +186,11 @@ test('non-admin viewing a teammate is strictly read-only — no submit affordanc
 
   await page.goto('/group-details?group=wc-group')
   await page.getByRole('tab', { name: 'Picks' }).click()
-  await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
+  await expect(page.getByTestId('match-card-101')).toBeVisible()
+
+  // Switch to "All" so Bob's already-picked game stays in the list — the default
+  // "Needs pick" view hides picked games.
+  await page.getByRole('button', { name: 'All' }).click()
 
   // Switch to Bob — read-only banner, no submit button anywhere.
   await page.getByRole('button', { name: 'Choose whose picks to view or edit' }).click()
@@ -197,7 +202,7 @@ test('non-admin viewing a teammate is strictly read-only — no submit affordanc
 
   // Bob's away pick is shown but its control is disabled — clicking it changes
   // nothing and never reaches the network.
-  const awayBtn = page.getByRole('button', { name: 'Pick Canada to win' })
+  const awayBtn = page.getByTestId('match-card-101').getByRole('button', { name: 'CAN' })
   await expect(awayBtn).toHaveAttribute('aria-pressed', 'true')
   await expect(awayBtn).toBeDisabled()
   await awayBtn.click({ force: true }).catch(() => {})

@@ -14,7 +14,7 @@ function game(over: Partial<BrowseGame> = {}): BrowseGame {
     id: 1, espnId: 'e1', stage: 'group', stageLabel: 'Group Stage',
     kickoff: '2026-06-12T20:00:00', // after NOW → not locked
     home: team('USA', 'United States'), away: team('PAR', 'Paraguay'),
-    status: 'SCHEDULED',
+    status: 'SCHEDULED', isKnockout: false,
     ...over,
   };
 }

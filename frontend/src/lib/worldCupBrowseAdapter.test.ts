@@ -25,6 +25,10 @@ describe('toBrowseGames', () => {
   it('maps the stageLabel for a knockout stage', () => {
     expect(toBrowseGames([match({ stage: 'r16' })], {})[0].stageLabel).toBe('Round of 16');
   });
+  it('maps the isKnockout flag through', () => {
+    expect(toBrowseGames([match({ isKnockout: true })], {})[0].isKnockout).toBe(true);
+    expect(toBrowseGames([match({ isKnockout: false })], {})[0].isKnockout).toBe(false);
+  });
   it('normalizes an unknown status to SCHEDULED', () => {
     expect(toBrowseGames([match({ status: 'POSTPONED' as WorldCupMatch['status'] })], {})[0].status).toBe('SCHEDULED');
   });

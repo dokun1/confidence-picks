@@ -104,24 +104,25 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
 
   await page.goto('/world-cup?group=test-group')
 
-  // The page owns the single "World Cup 2026 Picks" <h1> and renders the match
-  // under the "Group Stage" section header.
+  // The page owns the single "World Cup 2026 Picks" <h1>. The flat browse list
+  // defaults to the "Needs pick" view; both unpicked future games appear there.
   await expect(page.getByRole('heading', { name: 'World Cup 2026 Picks' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
+  await expect(page.getByTestId('match-card-101')).toBeVisible()
 
-  // MatchPickRow surfaces the three outcomes as buttons keyed by accessible
-  // name; the visible label is just the country code — no "(Home)"/"(Away)".
-  const groupRow = page.getByTestId('match-row-101')
-  await expect(groupRow.getByRole('button', { name: 'Pick Mexico to win' })).toHaveText('MEX')
-  await expect(groupRow.getByRole('button', { name: 'Pick a draw' })).toBeVisible()
-  await expect(groupRow.getByRole('button', { name: 'Pick Canada to win' })).toHaveText('CAN')
+  // MatchListCard surfaces the three outcomes as buttons labeled by team
+  // abbreviation (MEX / Draw / CAN) with aria-pressed; with no odds/record the
+  // accessible name is exactly the abbreviation.
+  const groupCard = page.getByTestId('match-card-101')
+  await expect(groupCard.getByRole('button', { name: 'MEX' })).toBeVisible()
+  await expect(groupCard.getByRole('button', { name: 'Draw' })).toBeVisible()
+  await expect(groupCard.getByRole('button', { name: 'CAN' })).toBeVisible()
 
-  // The r32 fixture's away slot is still TBD, so the whole match is unpickable
-  // until both teams are assigned.
-  const tbdRow = page.getByTestId('match-row-201')
-  await expect(tbdRow.getByRole('button', { name: 'Pick France to win' })).toBeDisabled()
-  await expect(tbdRow.getByRole('button', { name: 'Pick a draw' })).toBeDisabled()
-  await expect(tbdRow.getByRole('button', { name: 'Pick TBD to win' })).toBeDisabled()
+  // The r32 fixture is a knockout whose away slot is still TBD, so every outcome
+  // is unpickable until both teams are assigned (and a knockout can't draw).
+  const tbdCard = page.getByTestId('match-card-201')
+  await expect(tbdCard.getByRole('button', { name: 'FRA' })).toBeDisabled()
+  await expect(tbdCard.getByRole('button', { name: 'Draw' })).toBeDisabled()
+  await expect(tbdCard.getByRole('button', { name: 'TBD' })).toBeDisabled()
 })
 
 // A world_cup_2026 group surfaces the tournament-shaped tabs on its detail page:
@@ -237,13 +238,14 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
   await expect(page.getByRole('heading', { name: 'World Cup Squad' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Submit Picks' })).toHaveCount(0)
 
-  // Entering the Picks tab renders the stage list inline — we stay on
+  // Entering the Picks tab renders the flat match list inline — we stay on
   // /group-details, no separate page.
   await page.getByRole('tab', { name: 'Picks' }).click()
-  await expect(page.getByRole('heading', { name: 'Group Stage' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pick Mexico to win' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pick a draw' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pick Canada to win' })).toBeVisible()
+  const card = page.getByTestId('match-card-101')
+  await expect(card).toBeVisible()
+  await expect(card.getByRole('button', { name: 'MEX' })).toBeVisible()
+  await expect(card.getByRole('button', { name: 'Draw' })).toBeVisible()
+  await expect(card.getByRole('button', { name: 'CAN' })).toBeVisible()
   await expect(page).toHaveURL(/\/group-details\?group=wc-group/)
 
   // The sticky save bar mounted with the tab; submit is gated on having picks.
@@ -252,8 +254,10 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
   await expect(submit).toBeDisabled()
   await expect(page.getByText('0 picks selected')).toBeVisible()
 
-  // Make a pick and submit it straight from the tab.
-  await page.getByRole('button', { name: 'Pick Mexico to win' }).click()
+  // Make a pick and submit it straight from the tab. The default "Needs pick"
+  // view drops the game from the list the instant it's picked, so we drive the
+  // rest of the flow through the sticky save bar (which stays mounted).
+  await card.getByRole('button', { name: 'MEX' }).click()
   await expect(page.getByText('1 pick selected')).toBeVisible()
   await expect(submit).toBeEnabled()
   await submit.click()

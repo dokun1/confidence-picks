@@ -25,5 +25,6 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     picked: draft[m.id],
+    isKnockout: m.isKnockout,
   }));
 }
