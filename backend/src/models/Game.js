@@ -116,13 +116,21 @@ static fromESPNData(espnGame, opts = {}) {
       favoriteTeamId = homeTeam.id;
       favoriteAbbr = homeTeam.team.abbreviation;
     }
+    const ml = o.moneyline;
+    // 3-way outcome moneylines; null once the game starts (ESPN nulls them)
+    const threeWay = ml ? {
+      home: ml.home?.close?.odds ?? null,
+      draw: ml.draw?.close?.odds ?? null,
+      away: ml.away?.close?.odds ?? null,
+    } : null;
     oddsObj = {
       favoriteTeamId,
       favoriteAbbr,
       spread: o.spread,
       overUnder: o.overUnder,
       details: o.details,
-      provider: o.provider ? o.provider.name : undefined
+      provider: o.provider ? o.provider.name : undefined,
+      threeWay,
     };
   }
 
@@ -145,7 +153,9 @@ static fromESPNData(espnGame, opts = {}) {
   abbreviation: homeTeam.team.abbreviation,
   logo: homeTeam.team.logo,
   color: homeTeam.team.color,
-  altColor: homeTeam.team.alternateColor
+  altColor: homeTeam.team.alternateColor,
+  record: homeTeam.records?.find(r => r.type === 'total')?.summary ?? null,
+  form: homeTeam.form ?? null,
     },
     awayTeam: {
   id: awayTeam.id,
@@ -153,7 +163,9 @@ static fromESPNData(espnGame, opts = {}) {
   abbreviation: awayTeam.team.abbreviation,
   logo: awayTeam.team.logo,
   color: awayTeam.team.color,
-  altColor: awayTeam.team.alternateColor
+  altColor: awayTeam.team.alternateColor,
+  record: awayTeam.records?.find(r => r.type === 'total')?.summary ?? null,
+  form: awayTeam.form ?? null,
     },
     gameDate: new Date(espnGame.date),
     status: normalized,

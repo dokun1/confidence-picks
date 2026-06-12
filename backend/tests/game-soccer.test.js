@@ -183,6 +183,88 @@ describe('Game.fromESPNData match events (goals/cards)', () => {
   });
 });
 
+describe('Game.fromESPNData 3-way odds + W-D-L record/form', () => {
+  const { MEX, USA } = WORLD_CUP_2026_TEAMS;
+
+  test('parses threeWay moneyline from mock event odds', () => {
+    const event = buildMockWorldCupEvent({
+      id: '800',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 0,
+      awayScore: 0,
+      status: 'scheduled',
+      stage: 'group',
+      odds: { home: '-150', draw: '+260', away: '+420', provider: 'DraftKings', favorite: 'home' },
+    });
+    const game = Game.fromESPNData(event, { league: 'world_cup', stage: 'group' });
+
+    // The mock stamps odds.home into moneyline.home.close.odds, etc.
+    assert.deepStrictEqual(game.odds.threeWay, { home: '-150', draw: '+260', away: '+420' });
+  });
+
+  test('parses record and form from competitor fields', () => {
+    const event = buildMockWorldCupEvent({
+      id: '801',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 1,
+      awayScore: 0,
+      status: 'final',
+      stage: 'group',
+      homeForm: 'WWWWD',
+      awayForm: 'WLWDD',
+      homeRecord: '2-1-0',
+      awayRecord: '1-1-1',
+    });
+    const game = Game.fromESPNData(event, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.homeTeam.record, '2-1-0');
+    assert.strictEqual(game.homeTeam.form, 'WWWWD');
+    assert.strictEqual(game.awayTeam.record, '1-1-1');
+    assert.strictEqual(game.awayTeam.form, 'WLWDD');
+  });
+
+  test('game without odds has null odds (no threeWay crash)', () => {
+    const event = buildMockWorldCupEvent({
+      id: '802',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 0,
+      awayScore: 0,
+      status: 'scheduled',
+      stage: 'group',
+      // no odds provided
+    });
+    const game = Game.fromESPNData(event, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.odds, null);
+  });
+
+  test('competitor without records/form yields null record and null form', () => {
+    const event = buildMockWorldCupEvent({
+      id: '803',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 0,
+      awayScore: 0,
+      status: 'scheduled',
+      stage: 'group',
+      // no homeForm/awayForm/homeRecord/awayRecord
+    });
+    const game = Game.fromESPNData(event, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.homeTeam.record, null);
+    assert.strictEqual(game.homeTeam.form, null);
+    assert.strictEqual(game.awayTeam.record, null);
+    assert.strictEqual(game.awayTeam.form, null);
+  });
+});
+
 // Regression for the events-column sev: on an un-migrated production schema the
 // games.events column is absent. save() MUST still persist the row (and set the
 // id) — a failed save returns no id, and an id-less Game breaks the pick↔game
