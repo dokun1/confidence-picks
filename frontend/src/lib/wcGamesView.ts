@@ -3,7 +3,7 @@
 // pollIntervalFor). The host derives BrowseGame from API matches + draft via
 // worldCupBrowseAdapter.
 
-import type { WorldCupStage } from './types';
+import type { MatchEvent, WorldCupStage } from './types';
 
 export type MatchResult = 'home' | 'draw' | 'away';
 export type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
@@ -18,6 +18,8 @@ export interface BrowseTeam {
   record?: string;
   /** Moneyline for this team to win. Optional: absent until P2. */
   moneyline?: string;
+  /** Recent W/D/L form sequence, e.g. "WWDWL". Optional. */
+  form?: string;
 }
 
 export interface BrowseGame {
@@ -40,6 +42,8 @@ export interface BrowseGame {
   picked?: MatchResult;
   /** Knockout matches can't end in a draw (PKs decide) — disables the Draw pick. */
   isKnockout: boolean;
+  /** Goal/card timeline once the match has started. Absent before kickoff. */
+  events?: MatchEvent[];
 }
 
 /** A game is locked once it has kicked off — by status OR by the clock passing kickoff. */

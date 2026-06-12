@@ -25,6 +25,7 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
       logo: m.homeTeam.logo,
       record: m.homeTeam.record || undefined,
       moneyline: m.odds?.threeWay?.home || undefined,
+      form: m.homeTeam.form || undefined,
     },
     away: {
       abbr: m.awayTeam.abbreviation,
@@ -32,6 +33,7 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
       logo: m.awayTeam.logo,
       record: m.awayTeam.record || undefined,
       moneyline: m.odds?.threeWay?.away || undefined,
+      form: m.awayTeam.form || undefined,
     },
     // `|| undefined` (not `??`) so an empty-string odds/record from ESPN also
     // collapses to absent — the card renders nothing rather than an empty line.
@@ -46,5 +48,6 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     // pick enabled on knockout matches. Every non-group stage is single-elimination
     // (PKs decide), so Draw must be disabled — see MatchListCard.
     isKnockout: m.stage !== 'group',
+    events: m.events,
   }));
 }

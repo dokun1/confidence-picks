@@ -70,4 +70,27 @@ describe('toBrowseGames', () => {
     expect(g.drawOdds).toBeUndefined();
     expect(g.overUnder).toBeUndefined();
   });
+
+  it('carries team form and the match events timeline through', () => {
+    const events: WorldCupMatch['events'] = [
+      { type: 'goal', minute: "9'", player: 'J. Quiñones', side: 'home', teamAbbr: 'MEX' },
+    ];
+    const m = match({
+      id: 55,
+      homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: 'mex.png', form: 'WWDWL' },
+      awayTeam: { id: '2', name: 'South Africa', abbreviation: 'RSA', logo: 'rsa.png', form: 'LDWWD' },
+      events,
+    });
+    const [g] = toBrowseGames([m], {});
+    expect(g.home.form).toBe('WWDWL');
+    expect(g.away.form).toBe('LDWWD');
+    expect(g.events).toEqual(events);
+  });
+
+  it('leaves form and events undefined when the match omits them', () => {
+    const [g] = toBrowseGames([match({ id: 56 })], {});
+    expect(g.home.form).toBeUndefined();
+    expect(g.away.form).toBeUndefined();
+    expect(g.events).toBeUndefined();
+  });
 });
