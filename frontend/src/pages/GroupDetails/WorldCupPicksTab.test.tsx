@@ -46,7 +46,7 @@ function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
     isKnockout: false,
     // Relative to now (tomorrow) so an upcoming match is always pre-kickoff and
     // pickable whenever the suite runs — kickoff-time locking is exercised
-    // directly in MatchPickRow's own test.
+    // directly in the card component's own tests.
     gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };

@@ -31,9 +31,8 @@ import { toBrowseGames } from '../../lib/worldCupBrowseAdapter';
 //
 // A member's picks are flat (home/away/draw) with no confidence — World Cup
 // scoring is flat-per-match (see world-cup-picks-rules.md). Every stage is
-// fetched in parallel and the flattened matches are grouped back by stage for
-// rendering, iterating WORLD_CUP_STAGES so sections appear in tournament order
-// regardless of fetch resolution order.
+// fetched in parallel and the flattened matches are passed to `WorldCupGamesList`
+// via the `toBrowseGames` adapter; the list owns all view/filter/sort/search state.
 
 type DraftMap = Record<number, MatchPickResult>;
 
@@ -136,8 +135,7 @@ export default function WorldCupPicksTab({
     setFetchState((s) => ({ ...s, loading: true, error: '' }));
     (async () => {
       try {
-        // Fetch every stage in parallel; flatten into one list and group by stage
-        // at render time so the sections follow WORLD_CUP_STAGES order.
+        // Fetch every stage in parallel and flatten into one list; the browse list handles ordering/grouping.
         const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
         if (cancelled) return;
         const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
@@ -261,6 +259,7 @@ export default function WorldCupPicksTab({
     [fetchState.matches, draft],
   );
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
+  // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
 
   const picks: MatchPick[] = useMemo(
     () =>
@@ -487,7 +486,7 @@ export default function WorldCupPicksTab({
           <WorldCupGamesList
             games={browseGames}
             now={now}
-            onPick={(gameId, result) => pickResult(gameId, result)}
+            onPick={pickResult}
             disabled={submitting || readOnly}
           />
         )}
