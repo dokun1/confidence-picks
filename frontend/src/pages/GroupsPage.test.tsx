@@ -182,6 +182,24 @@ describe('GroupsPage', () => {
     expect(screen.getByRole('button', { name: /join group/i })).toBeInTheDocument();
   });
 
+  it('pins the search/filter bar to the top in a sticky container', async () => {
+    mockGetMyGroups.mockResolvedValue([groupA, groupB]);
+
+    renderPage();
+    await screen.findByRole('heading', { name: groupA.name });
+
+    // The search/filter bar must live inside a sticky wrapper that pins it to
+    // the top of the viewport while the cards scroll beneath it — matching the
+    // World Cup picks page. Walk up from the search input to that wrapper.
+    const search = screen.getByPlaceholderText(/search groups/i);
+    const sticky = search.closest('.sticky');
+    expect(sticky).not.toBeNull();
+    expect(sticky).toHaveClass('top-0');
+    // It backs the bar with an opaque, blurred backdrop so cards never show
+    // through the gap as they pass under it.
+    expect(sticky).toHaveClass('backdrop-blur');
+  });
+
   it('shows a loading indicator before getMyGroups resolves', async () => {
     // A never-resolving promise keeps the page in its loading state.
     mockGetMyGroups.mockReturnValue(new Promise<GroupData[]>(() => {}));
