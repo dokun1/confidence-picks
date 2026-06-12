@@ -74,6 +74,12 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
   // Bumped on every open so a fast close/reopen can't let a stale fetch win.
   const fetchSeq = useRef(0);
 
+  // The sticky controls block (search + chips + filters) and the results region
+  // below it, measured so a filter change can re-anchor the scroll to content
+  // rather than stranding the viewport in empty space — see the effect below.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
   const selectedGame = useMemo(
     () => (selectedId == null ? null : games.find((g) => g.id === selectedId) ?? null),
     [games, selectedId],
@@ -126,6 +132,31 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
 
   const empty = sections.length === 0;
 
+  // Re-anchor the scroll on a filter change. The controls above are sticky, so a
+  // change made while scrolled deep into the list would otherwise leave the
+  // viewport stranded below the (possibly shorter) new results — staring at empty
+  // space instead of matches. When the start of the list has scrolled up behind
+  // the sticky controls, bring it back to just under them so the user lands on
+  // content. We deliberately do NOT jump to the very top of the page on every
+  // change: if the list start is still on screen, the scroll is left untouched.
+  const filterKey = `${view}|${query}|${filters.stage ?? ''}|${filters.status ?? ''}|${
+    filters.picked == null ? '' : filters.picked
+  }|${sort}`;
+  const prevFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (prevFilterKey.current === filterKey) return; // initial mount — nothing changed
+    prevFilterKey.current = filterKey;
+    const list = listRef.current;
+    if (!list) return;
+    const headerH = headerRef.current?.offsetHeight ?? 0;
+    // Only re-anchor when the list's top has scrolled up behind the sticky
+    // controls; if it's still in view, the current scroll is already reasonable.
+    if (list.getBoundingClientRect().top < headerH) {
+      list.style.scrollMarginTop = `${headerH}px`;
+      list.scrollIntoView({ block: 'start' });
+    }
+  }, [filterKey]);
+
   return (
     <div className="mx-auto w-full max-w-[520px]">
       {/* header */}
@@ -134,6 +165,16 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
         {needsPickCount > 0 && <span className="text-sm font-semibold text-accent">{needsPickCount} left to pick</span>}
       </div>
 
+      {/* Sticky controls — search + view chips + filters stay pinned to the top
+          of the viewport while the match list scrolls beneath them. The negative
+          margins bleed the backdrop out to the host page gutters so list rows
+          never show through the gap as they scroll under it; the matching px
+          re-pads the inner controls back to the column. z-10 keeps it above the
+          rows but below the detail panel (z-40). */}
+      <div
+        ref={headerRef}
+        className="sticky top-0 z-10 -mx-sm bg-neutral-0/95 px-sm pt-xs pb-xs backdrop-blur dark:bg-secondary-900/95 sm:-mx-lg sm:px-lg"
+      >
       {/* search + filters toggle + sort */}
       <div className="mb-sm flex gap-xs">
         <div className="relative flex-1">
@@ -232,8 +273,10 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
           </select>
         </div>
       )}
+      </div>
 
       {/* list */}
+      <div ref={listRef} data-testid="games-list-region">
       {empty ? (
         <div className="rounded-xl border border-dashed border-border py-2xl text-center text-content-subtle">
           {view === 'needs-pick' ? 'All caught up — every game here is picked or locked. 🎉' : 'No games match these filters.'}
@@ -254,6 +297,7 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
           ))}
         </div>
       )}
+      </div>
 
       {selectedGame && (
         <MatchDetailPanel
