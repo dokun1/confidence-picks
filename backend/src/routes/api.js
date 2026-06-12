@@ -1,6 +1,8 @@
 import express from 'express';
 import pool from '../config/database.js';
 import { GameService } from '../services/GameService.js';
+import { ESPNService } from '../services/ESPNService.js';
+import { SoccerSummaryService } from '../services/SoccerSummaryService.js';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -50,6 +52,23 @@ router.get('/games/world-cup-2026/stage/:stage', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// On-demand, resilient, no-schema per-match detail for the World Cup detail panel.
+// Registered before /games/:year/:seasonType/:week for the same reason as the stage
+// route: world-cup-2026/event/:espnId is a literal-prefixed 4-segment path the NFL
+// param route would otherwise claim. Fetches ESPN /summary live and returns parsed
+// JSON — NO database, NO persistence. NEVER 500: on any failure we return HTTP 200
+// with a sparse-but-valid body so a broken /summary only blanks the panel.
+router.get('/games/world-cup-2026/event/:espnId', async (req, res) => {
+  const { espnId } = req.params;
+  try {
+    const summary = await ESPNService.fetchSoccerSummary(espnId);
+    res.json(SoccerSummaryService.parseSummary(summary));
+  } catch (error) {
+    console.error(`[event-detail] failed for espnId=${espnId}: ${error.message}`);
+    res.json({ venue: null, stats: [], lineups: null }); // never 500 — blank detail, not an error
   }
 });
 
