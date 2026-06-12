@@ -5,12 +5,12 @@ import {
   type BrowseGame, type Filters, type GameStatus, type MatchResult, type SavedView, type SortKey,
 } from '../../../lib/wcGamesView';
 import MatchListCard from './MatchListCard';
-import MatchDetailPanel from './MatchDetailPanel';
-import { mockMatchDetail } from '../../../lib/wcMatchDetail';
 
 export interface WorldCupGamesListProps {
-  initialGames: BrowseGame[];
+  games: BrowseGame[];          // derived by the host from matches + draft
   now: Date;
+  onPick: (gameId: number, result: MatchResult) => void;
+  disabled?: boolean;           // read-only viewer (optional; pass through if convenient)
 }
 
 const VIEWS: { key: SavedView; label: string }[] = [
@@ -54,17 +54,14 @@ function Chip({ label, count, active, onClick }: { label: string; count?: number
 const selectCls =
   'rounded-md border border-border bg-neutral-0 px-xs py-xxs text-sm text-content dark:bg-secondary-900';
 
-export default function WorldCupGamesList({ initialGames, now }: WorldCupGamesListProps) {
-  const [games, setGames] = useState<BrowseGame[]>(initialGames);
+export default function WorldCupGamesList({ games, now, onPick }: WorldCupGamesListProps) {
   const [view, setView] = useState<SavedView>('needs-pick');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>('kickoff');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const needsPickCount = useMemo(() => games.filter((g) => needsPick(g, now)).length, [games, now]);
-  const picksCount = useMemo(() => games.filter((g) => g.picked != null).length, [games]);
   const correctCount = useMemo(() => games.filter((g) => pickVerdict(g) === 'correct').length, [games]);
   const incorrectCount = useMemo(() => games.filter((g) => pickVerdict(g) === 'incorrect').length, [games]);
   // Counted chips: needs-pick + the running Correct/Incorrect tally (shown even at 0).
@@ -78,14 +75,7 @@ export default function WorldCupGamesList({ initialGames, now }: WorldCupGamesLi
     [games, view, filters, query, sort, now],
   );
 
-  function pick(gameId: number, result: MatchResult) {
-    setGames((prev) =>
-      prev.map((g) => (g.id === gameId ? { ...g, picked: g.picked === result ? undefined : result } : g)),
-    );
-  }
-
   const empty = sections.length === 0;
-  const selectedGame = selectedId == null ? null : games.find((g) => g.id === selectedId) ?? null;
 
   return (
     <div className="mx-auto w-full max-w-[520px]">
@@ -179,32 +169,12 @@ export default function WorldCupGamesList({ initialGames, now }: WorldCupGamesLi
               </div>
               <div className="space-y-xs">
                 {sec.games.map((g) => (
-                  <MatchListCard key={g.id} game={g} now={now} onPick={pick} onOpenDetail={setSelectedId} />
+                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} />
                 ))}
               </div>
             </section>
           ))}
         </div>
-      )}
-
-      {/* sticky submit bar (stub) */}
-      <div className="sticky bottom-0 z-30 mt-lg border-t border-border bg-neutral-0/95 py-sm backdrop-blur dark:bg-secondary-900/95">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-content-muted">{picksCount} pick{picksCount === 1 ? '' : 's'} selected</span>
-          <button type="button" className="rounded-pill bg-accent px-md py-xs text-sm font-semibold text-accent-fg">
-            Submit Picks
-          </button>
-        </div>
-      </div>
-
-      {selectedGame && (
-        <MatchDetailPanel
-          game={selectedGame}
-          detail={mockMatchDetail(selectedGame)}
-          now={now}
-          onPick={pick}
-          onClose={() => setSelectedId(null)}
-        />
       )}
     </div>
   );
