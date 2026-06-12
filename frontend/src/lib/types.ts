@@ -46,6 +46,12 @@ export interface TeamData {
   altColor?: string;
   record?: string;
   form?: string;
+  /**
+   * False when this slot is an undecided knockout placeholder (ESPN's
+   * "Winner Group A" etc.) rather than a real qualified team. Absent on older
+   * cached games and on group-stage teams, where it should be treated as true.
+   */
+  isActive?: boolean;
 }
 
 export interface GameData {

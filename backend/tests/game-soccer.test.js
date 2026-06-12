@@ -84,6 +84,36 @@ describe('Game.fromESPNData soccer competitor parsing', () => {
   });
 });
 
+describe('Game.fromESPNData team.isActive (undecided knockout slots)', () => {
+  test('carries isActive through for both competitors', () => {
+    // Mock teams are real/active, so both slots should report isActive:true.
+    const [drawMatch] = generateMockWorldCupStage({ stage: 'group' });
+    const game = Game.fromESPNData(drawMatch, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.homeTeam.isActive, true);
+    assert.strictEqual(game.awayTeam.isActive, true);
+  });
+
+  test('preserves isActive:false for an undecided bracket placeholder', () => {
+    // ESPN seeds an undecided knockout slot ("Winner Group A") with isActive:false.
+    const [match] = generateMockWorldCupStage({ stage: 'knockout' });
+    match.competitions[0].competitors.find(c => c.homeAway === 'away').team.isActive = false;
+    const game = Game.fromESPNData(match, { league: 'world_cup', stage: 'r16' });
+
+    assert.strictEqual(game.homeTeam.isActive, true);
+    assert.strictEqual(game.awayTeam.isActive, false);
+  });
+
+  test('defaults to true when ESPN omits the flag', () => {
+    const [match] = generateMockWorldCupStage({ stage: 'group' });
+    for (const c of match.competitions[0].competitors) delete c.team.isActive;
+    const game = Game.fromESPNData(match, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.homeTeam.isActive, true);
+    assert.strictEqual(game.awayTeam.isActive, true);
+  });
+});
+
 describe('Game.toJSON surfaces league and stage', () => {
   test('includes league and stage for a soccer game', () => {
     const [drawMatch] = generateMockWorldCupStage({ stage: 'group' });

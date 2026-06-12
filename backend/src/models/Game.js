@@ -156,6 +156,10 @@ static fromESPNData(espnGame, opts = {}) {
   altColor: homeTeam.team.alternateColor,
   record: homeTeam.records?.find(r => r.type === 'total')?.summary ?? null,
   form: homeTeam.form ?? null,
+  // ESPN flags undecided knockout slots (e.g. "Winner Group A") with
+  // isActive:false; carry it so the client can tell a real team from a
+  // bracket placeholder. Default true when ESPN omits it (group/decided games).
+  isActive: homeTeam.team.isActive ?? true,
     },
     awayTeam: {
   id: awayTeam.id,
@@ -166,6 +170,7 @@ static fromESPNData(espnGame, opts = {}) {
   altColor: awayTeam.team.alternateColor,
   record: awayTeam.records?.find(r => r.type === 'total')?.summary ?? null,
   form: awayTeam.form ?? null,
+  isActive: awayTeam.team.isActive ?? true,
     },
     gameDate: new Date(espnGame.date),
     status: normalized,

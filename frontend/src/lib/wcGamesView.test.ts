@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyFilters, applyView, buildSections, groupByDate, isLocked, matchesSearch,
   needsPick, NO_FILTERS, outcomeOf, pickVerdict, resultShade, sortGames,
+  teamDecided, teamsDecided,
   type BrowseGame, type BrowseTeam,
 } from './wcGamesView';
 
@@ -35,10 +36,35 @@ describe('isLocked / needsPick', () => {
   it('a picked-but-open game no longer needs a pick', () => {
     expect(needsPick(game({ picked: 'home' }), NOW)).toBe(false);
   });
-  it('a knockout game with undecided (TBD) teams never needs a pick', () => {
-    // Open + unpicked, but a bracket slot is still TBD → unpickable.
+  it('a knockout game with an undecided slot never needs a pick', () => {
+    // Open + unpicked, but a bracket slot isn't a real team yet → unpickable.
     expect(needsPick(game({ away: team('TBD', 'TBD') }), NOW)).toBe(false);
     expect(needsPick(game({ home: team('TBD', 'TBD') }), NOW)).toBe(false);
+    // ESPN's authoritative flag: a descriptive placeholder marked isActive:false.
+    expect(needsPick(game({ away: { ...team('WIN', 'Winner Group A'), isActive: false } }), NOW)).toBe(false);
+    // Fallback by name even when the flag is absent (legacy/cached rows).
+    expect(needsPick(game({ away: team('B1', 'Winner Group B') }), NOW)).toBe(false);
+  });
+});
+
+describe('teamDecided / teamsDecided', () => {
+  it('a real qualified team is decided', () => {
+    expect(teamDecided(team('USA', 'United States'))).toBe(true);
+    expect(teamDecided({ ...team('BRA', 'Brazil'), isActive: true })).toBe(true);
+  });
+  it('isActive:false is the authoritative undecided signal, regardless of name', () => {
+    expect(teamDecided({ ...team('USA', 'United States'), isActive: false })).toBe(false);
+  });
+  it('falls back to placeholder name/abbr when isActive is absent', () => {
+    expect(teamDecided(team('TBD', 'TBD'))).toBe(false);
+    expect(teamDecided(team('WIN', 'Winner Group A'))).toBe(false);
+    expect(teamDecided(team('RU', 'Runner-up Group C'))).toBe(false);
+    expect(teamDecided(team('L73', 'Loser Match 73'))).toBe(false);
+  });
+  it('a game is decided only when both slots are', () => {
+    expect(teamsDecided(game())).toBe(true);
+    expect(teamsDecided(game({ home: team('TBD', 'TBD') }))).toBe(false);
+    expect(teamsDecided(game({ away: { ...team('W', 'Winner Group D'), isActive: false } }))).toBe(false);
   });
 });
 
