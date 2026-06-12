@@ -419,20 +419,23 @@ gh pr create --base claude/wc-browse-spec --head claude/wc-browse-p1 \
 
 ---
 
-## P2 — Scoreboard extras + detail panel (outline; detail-plan when reached)
+## P2 — Card odds + W-D-L record (zero-schema backend + frontend)
 
-Backend (`backend/src/models/Game.js` `fromESPNData` + `toJSON`):
-- Parse `competition.odds[0].moneyline` (home/draw/away) + `overUnder` → `odds.threeWay`.
-- Parse `competitors[].records[].summary` → `record`; `competitors[].form` → `form`; `competitors[].statistics` (9) → `statistics`.
+### ✅ Prod-safety: NO schema change at all (verified against live ESPN)
+The card data rides entirely in **existing JSONB columns**, so the events-SEV class (new column missing in prod) is structurally impossible here:
+- **3-way odds** → the existing `odds` JSONB. `odds.threeWay = { home, draw, away }` from `competition.odds[0].moneyline.{home,draw,away}.close.odds` (ESPN gives `"-1200"`/`"+1100"`/`"+2500"` on SCHEDULED games; the whole `moneyline` is null post-kickoff, which is fine — locked cards show the result strip, not odds). `overUnder` already parsed.
+- **W-D-L record + form** → the existing `home_team`/`away_team` JSONB objects. `record` from `competitors[].records` (the `type:"total"` entry's `summary`, e.g. `"1-0-0"`); `form` from `competitors[].form` (e.g. `"WWWWD"`) — both present on every game incl. completed.
 
-### ⚠️ Prod-safety guardrails (audit — this is the SEV-risk phase)
-The events-column SEV happened because a new column + `save()` writing it deployed BEFORE prod had the column (prod schema sync is gated behind `INIT_DB=true`, not auto-run). P2 must not repeat that:
-1. **3-way odds + over/under** ride inside the EXISTING `odds` JSONB column — richer content, **no schema change**. Safe.
-2. **record / form / statistics**: do NOT add a column and blindly `save()` it. Either
-   (a) **reuse the proven events-column resilience** — the `Game.eventsColumnAvailable` pattern (detect Postgres `42703`, persist without the column, never 500) — AND run the `INIT_DB` migration as part of the release; or
-   (b) serve them in `toJSON` from the in-memory ESPN parse without persisting (note: a cache-hit DB read then lacks them, so the detail's stats are blank until the next live refresh — weaker but zero-schema).
-   Prefer (a). NEVER ship "add column → `save()` writes it → deploy" without the resilient guard.
-3. Deploy order is frontend-tolerant: the frontend already treats `record`/`moneyline`/`drawOdds`/`overUnder` as optional (P1), so a frontend that ships before the backend just shows cards without odds — no break.
+Backend = changes to `Game.fromESPNData` ONLY (no schema, no `save()` change, no migration, no resilient-column guard — `save()` already `JSON.stringify`s the team + odds objects). `toJSON`/`fromDbRow` round-trip them unchanged.
+
+Frontend:
+- Extend `frontend/src/lib/types.ts`: `TeamData` gains `record?`, `form?`; `WorldCupMatch` gains `odds?: { threeWay?: { home?: string; draw?: string; away?: string }; overUnder?: number }` and `espnId?: string`.
+- `worldCupBrowseAdapter.ts`: populate `BrowseTeam.record` + `BrowseTeam.moneyline` (from `odds.threeWay`), `BrowseGame.drawOdds`/`overUnder`, and `espnId: m.espnId` (the REAL espn id, replacing the P1 `String(m.id)` stub).
+- The card (P1) already renders odds/record when present — no card change needed.
+
+(The detail panel + match stats / H2H / standings / lineups move to **P3**, since their reliable source is the `/summary` endpoint, not the scoreboard.)
+
+PR `claude/wc-browse-p2` → `claude/wc-browse-p1`.
 
 Frontend:
 - Extend `WorldCupMatch` + the adapter to fill `BrowseTeam.record`/`moneyline`, `BrowseGame.drawOdds`/`overUnder` (the card already renders them when present).
@@ -441,10 +444,12 @@ Frontend:
 
 PR `claude/wc-browse-p2` → `claude/wc-browse-p1`.
 
-## P3 — Summary endpoint (outline)
+## P3 — Detail panel + `/event/:espnId` summary endpoint (outline)
 
-- Backend `GET /api/games/world-cup-2026/event/:espnId` → ESPN `/summary`; parse venue, head-to-head, standings, lineups (rosters + keyEvents sub minutes).
-- Frontend `getMatchDetail(espnId)` calls it; detail gains venue (header), H2H, group standings, lineups (team toggle, markers).
+This phase reintroduces the **detail panel** (deferred from P1/P2) and feeds it from `/summary`.
+
+- Backend `GET /api/games/world-cup-2026/event/:espnId` → ESPN `/summary`; parse venue, **match stats** (boxscore), head-to-head, standings, lineups (rosters + keyEvents sub minutes).
+- Frontend: reintroduce `MatchDetailPanel` + the "More ›" affordance + a `?match=:espnId` slide-over route; `getMatchDetail(espnId)` calls the endpoint. The panel shows pick + odds + form + timeline (already on the game) and adds venue (header), match stats, H2H, group standings, lineups (team toggle, markers).
 
 ### ⚠️ Prod-safety guardrails (audit)
 1. **Prefer NO new schema.** The detail is opened per-match (N+1), not on every list load, so fetch `/summary` **on demand, live, un-persisted** — a short in-process/HTTP-cache TTL at most. This sidesteps the migration class entirely. Only if a DB cache is truly needed, reuse the events-resilience pattern + migrate.
