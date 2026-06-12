@@ -464,7 +464,7 @@ export default function WorldCupPicksTab({
           <li>
             <span className="font-medium text-secondary-900 dark:text-neutral-0">Knockout:</span>{' '}
             the team that advances = 3 pts, everyone else = 0. Penalties still count as advancing, so
-            &ldquo;Draw&rdquo; is disabled.
+            there&apos;s no &ldquo;Draw&rdquo; option — just the two teams.
           </li>
         </ul>
       </div>

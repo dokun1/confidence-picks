@@ -106,9 +106,11 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
       </div>
 
       {/* saved-view chips — full-bleed horizontal scroller. The negative margins
-          cancel the host page's px-sm/sm:px-lg gutters so the chips run edge to
-          edge, and the scrollbar is hidden (it overlapped the chips on overflow). */}
-      <div className="mb-xs -mx-sm flex gap-xs overflow-x-auto [scrollbar-width:none] sm:-mx-lg [&::-webkit-scrollbar]:hidden">
+          cancel the host page's px-sm/sm:px-lg gutters so the strip can scroll
+          edge to edge; the matching px re-pads the inside so the first and last
+          chips rest with a gutter rather than jammed against the screen edge. The
+          scrollbar is hidden (it overlapped the chips on overflow). */}
+      <div className="mb-xs -mx-sm flex gap-xs overflow-x-auto px-sm [scrollbar-width:none] sm:-mx-lg sm:px-lg [&::-webkit-scrollbar]:hidden">
         {VIEWS.map((v) => (
           <Chip
             key={v.key}
