@@ -1,5 +1,6 @@
 import type { BrowseGame, GameStatus, MatchResult } from './wcGamesView';
 import type { WorldCupMatch, WorldCupStage } from './types';
+import { teamGroup } from './wcGroups';
 
 type DraftMap = Record<number, MatchResult>;
 
@@ -51,5 +52,11 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     // (PKs decide), so Draw must be disabled — see MatchListCard.
     isKnockout: m.stage !== 'group',
     events: m.events,
+    // Group-stage games carry a FIFA group letter (A–L) derived from the team
+    // abbreviation. Knockout teams may share abbreviations with group-stage
+    // placeholders, so we only populate this on group-stage matches.
+    wcGroup: m.stage === 'group'
+      ? (teamGroup(m.homeTeam.abbreviation) ?? teamGroup(m.awayTeam.abbreviation))
+      : undefined,
   }));
 }

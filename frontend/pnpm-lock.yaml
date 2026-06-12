@@ -11,6 +11,9 @@ importers:
       '@heroicons/react':
         specifier: ^2
         version: 2.2.0(react@18.3.1)
+      '@testing-library/dom':
+        specifier: ^10.4.1
+        version: 10.4.1
       heroicons:
         specifier: ^2.2.0
         version: 2.2.0

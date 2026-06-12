@@ -50,6 +50,8 @@ export interface BrowseGame {
   isKnockout: boolean;
   /** Goal/card timeline once the match has started. Absent before kickoff. */
   events?: MatchEvent[];
+  /** FIFA group letter ('A'–'L'). Present only on group-stage games. */
+  wcGroup?: string;
 }
 
 /** A game is locked once it has kicked off — by status OR by the clock passing kickoff. */
@@ -131,9 +133,11 @@ export interface Filters {
   status: GameStatus | null;
   /** true = only picked, false = only unpicked, null = either. */
   picked: boolean | null;
+  /** FIFA group letter ('A'–'L') or null for no group filter. */
+  wcGroup: string | null;
 }
 
-export const NO_FILTERS: Filters = { stage: null, status: null, picked: null };
+export const NO_FILTERS: Filters = { stage: null, status: null, picked: null, wcGroup: null };
 
 /** AND-combine the explicit filters on top of whatever the view already narrowed. */
 export function applyFilters(games: BrowseGame[], f: Filters): BrowseGame[] {
@@ -142,6 +146,7 @@ export function applyFilters(games: BrowseGame[], f: Filters): BrowseGame[] {
     if (f.status && g.status !== f.status) return false;
     if (f.picked === true && g.picked == null) return false;
     if (f.picked === false && g.picked != null) return false;
+    if (f.wcGroup && g.wcGroup !== f.wcGroup) return false;
     return true;
   });
 }

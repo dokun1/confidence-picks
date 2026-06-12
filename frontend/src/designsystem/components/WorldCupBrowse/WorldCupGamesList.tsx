@@ -4,6 +4,7 @@ import {
   buildSections, needsPick, pickVerdict, NO_FILTERS,
   type BrowseGame, type Filters, type GameStatus, type MatchResult, type SavedView, type SortKey,
 } from '../../../lib/wcGamesView';
+import { WC_GROUP_LETTERS } from '../../../lib/wcGroups';
 import type { EventDetail } from '../../../lib/wcMatchDetail';
 import { getMatchDetail } from '../../../lib/worldCupService.js';
 import MatchListCard from './MatchListCard';
@@ -193,6 +194,16 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
             onChange={(e) => setFilters((f) => ({ ...f, stage: (e.target.value || null) as WorldCupStage | null }))}
           >
             {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <select
+            className={selectCls}
+            value={filters.wcGroup ?? ''}
+            onChange={(e) => setFilters((f) => ({ ...f, wcGroup: e.target.value || null }))}
+          >
+            <option value="">Any group</option>
+            {WC_GROUP_LETTERS.map((g) => (
+              <option key={g} value={g}>Group {g}</option>
+            ))}
           </select>
           <select
             className={selectCls}
