@@ -12,11 +12,12 @@ export type SavedView = 'needs-pick' | 'today' | 'live' | 'all' | 'correct' | 'i
 export interface BrowseTeam {
   abbr: string;
   name: string;
-  flag: string;
-  /** W-D-L, e.g. "1-0-0". */
-  record: string;
-  /** DraftKings moneyline for this team to win, e.g. "−120" / "+260". */
-  moneyline: string;
+  /** Crest/flag image URL (TeamData.logo). */
+  logo: string;
+  /** W-D-L, e.g. "1-0-0". Optional: absent until P2 parses it. */
+  record?: string;
+  /** Moneyline for this team to win. Optional: absent until P2. */
+  moneyline?: string;
 }
 
 export interface BrowseGame {
@@ -29,9 +30,9 @@ export interface BrowseGame {
   home: BrowseTeam;
   away: BrowseTeam;
   /** DraftKings moneyline for the draw, e.g. "+205". */
-  drawOdds: string;
+  drawOdds?: string;
   /** Over/under total goals, e.g. "2.5". */
-  overUnder: string;
+  overUnder?: string;
   status: GameStatus;
   homeScore?: number;
   awayScore?: number;

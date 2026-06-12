@@ -7,14 +7,14 @@ import {
 
 const NOW = new Date('2026-06-12T16:00:00');
 
-const team = (abbr: string, name: string): BrowseTeam => ({ abbr, name, flag: '🏳️', record: '0-0-0', moneyline: '+100' });
+const team = (abbr: string, name: string): BrowseTeam => ({ abbr, name, logo: '' });
 
 function game(over: Partial<BrowseGame> = {}): BrowseGame {
   return {
     id: 1, espnId: 'e1', stage: 'group', stageLabel: 'Group Stage',
     kickoff: '2026-06-12T20:00:00', // after NOW → not locked
     home: team('USA', 'United States'), away: team('PAR', 'Paraguay'),
-    drawOdds: '+200', overUnder: '2.5', status: 'SCHEDULED',
+    status: 'SCHEDULED',
     ...over,
   };
 }
