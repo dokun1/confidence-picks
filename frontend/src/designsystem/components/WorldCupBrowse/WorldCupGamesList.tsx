@@ -56,7 +56,7 @@ const selectCls =
   'rounded-md border border-border bg-neutral-0 px-xs py-xxs text-sm text-content dark:bg-secondary-900';
 
 export default function WorldCupGamesList({ games, now, onPick, disabled }: WorldCupGamesListProps) {
-  const [view, setView] = useState<SavedView>('needs-pick');
+  const [view, setView] = useState<SavedView>('today');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>('kickoff');
@@ -105,8 +105,10 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
         </button>
       </div>
 
-      {/* saved-view chips */}
-      <div className="mb-xs flex gap-xs overflow-x-auto pb-xxs">
+      {/* saved-view chips — full-bleed horizontal scroller. The negative margins
+          cancel the host page's px-sm/sm:px-lg gutters so the chips run edge to
+          edge, and the scrollbar is hidden (it overlapped the chips on overflow). */}
+      <div className="mb-xs -mx-sm flex gap-xs overflow-x-auto [scrollbar-width:none] sm:-mx-lg [&::-webkit-scrollbar]:hidden">
         {VIEWS.map((v) => (
           <Chip
             key={v.key}

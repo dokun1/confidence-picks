@@ -132,6 +132,8 @@ test('admin can override a teammate and save via the per-user endpoint', async (
 
   await page.goto('/group-details?group=wc-group')
   await page.getByRole('tab', { name: 'Picks' }).click()
+  // Default "Today" view hides the future-dated seed; switch to "All".
+  await page.getByRole('button', { name: 'All' }).click()
   await expect(page.getByTestId('match-card-101')).toBeVisible()
 
   // The selector defaults to the caller.
@@ -144,8 +146,7 @@ test('admin can override a teammate and save via the per-user endpoint', async (
   await expect(page.getByText(/Admin override/)).toBeVisible()
   await expect(page.getByText('Saved to this group only')).toBeVisible()
 
-  // Make a pick for Bob and save it. The default "Needs pick" view drops the
-  // game from the list once picked, so the save flows through the sticky bar.
+  // Make a pick for Bob and save it through the sticky bar.
   await page.getByTestId('match-card-101').getByRole('button', { name: 'MEX' }).click()
   const save = page.getByRole('button', { name: "Save Bob's Picks" })
   await expect(save).toBeEnabled()
@@ -186,11 +187,12 @@ test('non-admin viewing a teammate is strictly read-only — no submit affordanc
 
   await page.goto('/group-details?group=wc-group')
   await page.getByRole('tab', { name: 'Picks' }).click()
-  await expect(page.getByTestId('match-card-101')).toBeVisible()
 
-  // Switch to "All" so Bob's already-picked game stays in the list — the default
-  // "Needs pick" view hides picked games.
+  // Switch to "All" so the future-dated seed (and, after the person switch,
+  // Bob's already-picked game) stays in the list — the default "Today" view
+  // hides it by date and "Needs pick" would hide it once picked.
   await page.getByRole('button', { name: 'All' }).click()
+  await expect(page.getByTestId('match-card-101')).toBeVisible()
 
   // Switch to Bob — read-only banner, no submit button anywhere.
   await page.getByRole('button', { name: 'Choose whose picks to view or edit' }).click()

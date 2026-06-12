@@ -105,8 +105,10 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
   await page.goto('/world-cup?group=test-group')
 
   // The page owns the single "World Cup 2026 Picks" <h1>. The flat browse list
-  // defaults to the "Needs pick" view; both unpicked future games appear there.
+  // defaults to the "Today" view; the seeded games are future-dated, so switch
+  // to "All" to surface both regardless of date.
   await expect(page.getByRole('heading', { name: 'World Cup 2026 Picks' })).toBeVisible()
+  await page.getByRole('button', { name: 'All' }).click()
   await expect(page.getByTestId('match-card-101')).toBeVisible()
 
   // MatchListCard surfaces the three outcomes as buttons labeled by team
@@ -241,6 +243,9 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
   // Entering the Picks tab renders the flat match list inline — we stay on
   // /group-details, no separate page.
   await page.getByRole('tab', { name: 'Picks' }).click()
+  // The list defaults to the "Today" view; the seeded match is future-dated, so
+  // switch to "All" to surface it.
+  await page.getByRole('button', { name: 'All' }).click()
   const card = page.getByTestId('match-card-101')
   await expect(card).toBeVisible()
   await expect(card.getByRole('button', { name: 'MEX' })).toBeVisible()
@@ -254,9 +259,8 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
   await expect(submit).toBeDisabled()
   await expect(page.getByText('0 picks selected')).toBeVisible()
 
-  // Make a pick and submit it straight from the tab. The default "Needs pick"
-  // view drops the game from the list the instant it's picked, so we drive the
-  // rest of the flow through the sticky save bar (which stays mounted).
+  // Make a pick and submit it straight from the tab via the sticky save bar
+  // (which stays mounted regardless of which view filters the list).
   await card.getByRole('button', { name: 'MEX' }).click()
   await expect(page.getByText('1 pick selected')).toBeVisible()
   await expect(submit).toBeEnabled()

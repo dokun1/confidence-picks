@@ -36,8 +36,9 @@ const groupMatch: WorldCupMatch = {
   awayScore: 0,
   status: 'SCHEDULED',
   isKnockout: false,
-  // Tomorrow, so the match stays pre-kickoff and pickable whenever CI runs.
-  gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  // End of today: visible under the default "Today" view AND pre-kickoff /
+  // pickable whenever CI runs.
+  gameDate: (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
 };
 
 function renderPage(route = '/world-cup?group=la-crew') {

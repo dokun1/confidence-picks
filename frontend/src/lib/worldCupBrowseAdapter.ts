@@ -25,6 +25,10 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     picked: draft[m.id],
-    isKnockout: m.isKnockout,
+    // Derive from the stage rather than trusting m.isKnockout: the stage route
+    // doesn't actually emit that flag, so it arrives undefined and left the Draw
+    // pick enabled on knockout matches. Every non-group stage is single-elimination
+    // (PKs decide), so Draw must be disabled — see MatchListCard.
+    isKnockout: m.stage !== 'group',
   }));
 }
