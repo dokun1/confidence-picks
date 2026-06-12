@@ -5,6 +5,7 @@ import apiRouter from '../src/routes/api.js';
 import { Game } from '../src/models/Game.js';
 import { MockESPNService } from '../src/mocks/MockESPNService.js';
 import { WORLD_CUP_2026_TEAMS } from '../src/mocks/espnWorldCupData.js';
+import { ESPNService } from '../src/services/ESPNService.js';
 
 // Exercises GET /api/games/world-cup-2026/stage/:stage in isolation: the router is
 // mounted on a throwaway Express app, ESPN is the mock service, and the DB layer is
@@ -89,5 +90,60 @@ describe('GET /api/games/world-cup-2026/stage/:stage', () => {
     );
     assert.ok(reg, 'knockout slate should include ENG vs GER');
     assert.strictEqual(reg.winnerTeamId, WORLD_CUP_2026_TEAMS.ENG.id, 'advancing team surfaces in JSON');
+  });
+});
+
+describe('GET /api/games/world-cup-2026/event/:espnId', () => {
+  let server;
+  let baseURL;
+
+  before(async () => {
+    const app = express();
+    app.use('/api', apiRouter);
+    await new Promise((resolve) => {
+      server = app.listen(0, () => {
+        baseURL = `http://localhost:${server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  test('never-500 on fetch failure — returns 200 with sparse body', async () => {
+    mock.method(ESPNService, 'fetchSoccerSummary', async () => { throw new Error('boom'); });
+
+    const res = await fetch(`${baseURL}/api/games/world-cup-2026/event/760415`);
+    assert.strictEqual(res.status, 200, 'should never 500 on upstream failure');
+    const body = await res.json();
+    assert.deepStrictEqual(body, { venue: null, stats: [], lineups: null });
+  });
+
+  test('happy path — returns 200 with parsed venue', async () => {
+    const fixture = {
+      header: {
+        competitions: [{
+          competitors: [
+            { homeAway: 'home', team: { id: '1', abbreviation: 'USA', displayName: 'United States' } },
+            { homeAway: 'away', team: { id: '2', abbreviation: 'MEX', displayName: 'Mexico' } },
+          ],
+        }],
+      },
+      gameInfo: {
+        venue: { fullName: 'SoFi Stadium', address: { city: 'Inglewood' } },
+      },
+    };
+    mock.method(ESPNService, 'fetchSoccerSummary', async () => fixture);
+
+    const res = await fetch(`${baseURL}/api/games/world-cup-2026/event/760415`);
+    assert.strictEqual(res.status, 200, 'should return 200 on success');
+    const body = await res.json();
+    assert.strictEqual(body.venue, 'SoFi Stadium · Inglewood', 'venue should be formatted');
   });
 });

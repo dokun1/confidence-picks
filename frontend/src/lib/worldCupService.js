@@ -93,3 +93,15 @@ export async function getWorldCupLeaderboard(groupId) {
   }
   return res.json();
 }
+
+// On-demand match detail (venue + curated stats + per-side lineups) for the
+// detail panel. Keyed by the real ESPN event id; resilient on the backend, so
+// the panel still renders the game-side info if this throws.
+export async function getMatchDetail(espnId) {
+  const res = await authFetch(`${apiBase()}/api/games/world-cup-2026/event/${espnId}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to load match detail');
+  }
+  return res.json();
+}

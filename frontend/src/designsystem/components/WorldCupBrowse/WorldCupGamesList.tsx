@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldCupStage } from '../../../lib/types';
 import {
   buildSections, needsPick, pickVerdict, NO_FILTERS,
   type BrowseGame, type Filters, type GameStatus, type MatchResult, type SavedView, type SortKey,
 } from '../../../lib/wcGamesView';
+import type { EventDetail } from '../../../lib/wcMatchDetail';
+import { getMatchDetail } from '../../../lib/worldCupService.js';
 import MatchListCard from './MatchListCard';
+import MatchDetailPanel from './MatchDetailPanel';
+
+// Fallback so the panel still renders the game-side info when the /event fetch fails.
+const EMPTY_DETAIL: EventDetail = { venue: null, stats: [], lineups: null };
 
 export interface WorldCupGamesListProps {
   games: BrowseGame[];          // derived by the host from matches + draft
@@ -61,6 +67,47 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>('kickoff');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<EventDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  // Bumped on every open so a fast close/reopen can't let a stale fetch win.
+  const fetchSeq = useRef(0);
+
+  const selectedGame = useMemo(
+    () => (selectedId == null ? null : games.find((g) => g.id === selectedId) ?? null),
+    [games, selectedId],
+  );
+
+  // If the selected game disappears from the list, drop the panel.
+  useEffect(() => {
+    if (selectedId != null && selectedGame == null) setSelectedId(null);
+  }, [selectedId, selectedGame]);
+
+  const openDetail = (gameId: number) => {
+    const game = games.find((g) => g.id === gameId);
+    if (!game) return;
+    const seq = ++fetchSeq.current;
+    setSelectedId(gameId);
+    setDetail(null);
+    setDetailLoading(true);
+    getMatchDetail(game.espnId)
+      .then((d: EventDetail) => {
+        if (fetchSeq.current === seq) setDetail(d);
+      })
+      .catch(() => {
+        if (fetchSeq.current === seq) setDetail(EMPTY_DETAIL);
+      })
+      .finally(() => {
+        if (fetchSeq.current === seq) setDetailLoading(false);
+      });
+  };
+
+  const closeDetail = () => {
+    fetchSeq.current++; // invalidate any in-flight fetch
+    setSelectedId(null);
+    setDetail(null);
+    setDetailLoading(false);
+  };
 
   const needsPickCount = useMemo(() => games.filter((g) => needsPick(g, now)).length, [games, now]);
   const correctCount = useMemo(() => games.filter((g) => pickVerdict(g) === 'correct').length, [games]);
@@ -174,12 +221,24 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
               </div>
               <div className="space-y-xs">
                 {sec.games.map((g) => (
-                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} disabled={disabled} />
+                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} onOpenDetail={openDetail} disabled={disabled} />
                 ))}
               </div>
             </section>
           ))}
         </div>
+      )}
+
+      {selectedGame && (
+        <MatchDetailPanel
+          game={selectedGame}
+          detail={detail}
+          loading={detailLoading}
+          now={now}
+          onPick={onPick}
+          onClose={closeDetail}
+          disabled={disabled}
+        />
       )}
     </div>
   );

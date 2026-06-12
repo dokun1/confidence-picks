@@ -9,6 +9,7 @@ vi.mock('../../lib/worldCupService.js', () => ({
   getMyWorldCupPicks: vi.fn(),
   getUserWorldCupPicks: vi.fn(),
   submitUserWorldCupPicks: vi.fn(),
+  getMatchDetail: vi.fn().mockResolvedValue({ venue: null, stats: [], lineups: null }),
 }));
 vi.mock('../../lib/groupsService.js', () => ({
   getMyGroups: vi.fn(),
@@ -82,22 +83,18 @@ function showAllGames() {
 }
 
 // Each game renders a MatchListCard whose subheader carries the full matchup
-// ("Mexico vs United States"). There's no per-row testid in the flat list, so we
-// locate a card by its home-team name and scope queries to it. Only the group
-// game shows a Draw button (knockout games offer just the two teams), but we keep
-// queries card-scoped anyway since team abbreviations could repeat across cards.
+// ("Mexico vs United States") and whose root holds a `match-card-<id>` testid. We
+// find the card by its home-team name, then climb to that testid'd root — robust
+// whether or not the card shows a Draw button (knockout games offer just the two
+// teams) or a "More ›" button.
 function cardFor(homeName: string): HTMLElement {
   const label = screen.getByText(
     (_content, node) => node?.textContent?.startsWith(homeName + ' vs ') ?? false,
     { selector: 'span' },
   );
-  // Climb to the card root: the nearest ancestor that also holds the pick buttons.
-  let el: HTMLElement | null = label;
-  while (el && within(el).queryAllByRole('button').length === 0) {
-    el = el.parentElement;
-  }
-  if (!el) throw new Error(`No card found for ${homeName}`);
-  return el;
+  const card = label.closest('[data-testid^="match-card-"]');
+  if (!card) throw new Error(`No card found for ${homeName}`);
+  return card as HTMLElement;
 }
 
 // A game's outcome buttons by accessible name (team abbreviation, or 'Draw' on

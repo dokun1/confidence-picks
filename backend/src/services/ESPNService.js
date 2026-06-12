@@ -159,6 +159,24 @@ export class ESPNService {
     return qs ? `${base}?${qs}` : base;
   }
 
+  /**
+   * Fetch ESPN's per-event `/summary` for a single FIFA World Cup 2026 match.
+   *
+   * Mirrors fetchSoccerWeek's fetch/throw contract: builds the summary URL,
+   * throws on a non-OK response so the caller (the resilient /event route) can
+   * catch and return a sparse body. The route — not this method — guarantees the
+   * never-500 behaviour; this stays a thin throwing fetch like its siblings.
+   *
+   * @param {(string|number)} eventId - ESPN event id
+   * @returns {Promise<Object>} Raw ESPN summary JSON
+   */
+  static async fetchSoccerSummary(eventId) {
+    const url = `${this.SOCCER_BASE_URL}/fifa.world/summary?event=${encodeURIComponent(eventId)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`ESPN summary ${res.status} for event ${eventId}`);
+    return res.json();
+  }
+
   static async fetchGameById(gameId) {
     // ESPN doesn't have a direct game-by-id endpoint for scoreboard
     // You'd need to implement this based on their API structure

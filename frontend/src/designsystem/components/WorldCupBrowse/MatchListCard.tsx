@@ -7,6 +7,8 @@ export interface MatchListCardProps {
   game: BrowseGame;
   now: Date;
   onPick: (gameId: number, result: MatchResult) => void;
+  /** Opens the match detail panel for this game. Omit to hide the "More ›" button. */
+  onOpenDetail?: (gameId: number) => void;
   disabled?: boolean;
 }
 
@@ -67,7 +69,7 @@ function ResultStrip({ game }: { game: BrowseGame }) {
  * full team names; the card body is the three-way bet (pickable) or a result
  * strip (locked).
  */
-export default function MatchListCard({ game, now, onPick, disabled }: MatchListCardProps) {
+export default function MatchListCard({ game, now, onPick, onOpenDetail, disabled }: MatchListCardProps) {
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
@@ -80,8 +82,8 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
 
   return (
     <div data-testid={`match-card-${game.id}`}>
-      {/* subheader: status/time + full names (wraps) */}
-      <div className="flex items-start gap-sm px-xxs pb-xxs pt-sm">
+      {/* subheader: status/time + full names (wraps), roomy More on the right */}
+      <div className="flex items-start justify-between gap-sm px-xxs pb-xxs pt-sm">
         <div className="min-w-0 text-xs leading-snug">
           <span className={`font-bold uppercase tracking-wide ${game.status === 'IN_PROGRESS' ? 'text-error-500' : 'text-content-subtle'}`}>
             {lead}
@@ -90,6 +92,15 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
             {game.home.name} <span className="text-content-subtle">vs</span> {game.away.name}
           </span>
         </div>
+        {onOpenDetail && (
+          <button
+            type="button"
+            onClick={() => onOpenDetail(game.id)}
+            className="shrink-0 rounded-md px-xs py-xxs text-sm font-semibold text-accent hover:bg-accent-subtle/50"
+          >
+            More ›
+          </button>
+        )}
       </div>
 
       {locked ? (

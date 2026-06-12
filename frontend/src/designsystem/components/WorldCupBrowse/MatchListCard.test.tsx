@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import MatchListCard from './MatchListCard';
 import type { BrowseGame, BrowseTeam } from '../../../lib/wcGamesView';
 
@@ -50,5 +50,17 @@ describe('MatchListCard', () => {
   it('exposes a match-card testid on the root element', () => {
     render(<MatchListCard game={game({ id: 42 })} now={NOW} onPick={noop} />);
     expect(screen.getByTestId('match-card-42')).toBeInTheDocument();
+  });
+
+  it('calls onOpenDetail with the game id when "More ›" is clicked', () => {
+    const onOpenDetail = vi.fn();
+    render(<MatchListCard game={game({ id: 42 })} now={NOW} onPick={noop} onOpenDetail={onOpenDetail} />);
+    fireEvent.click(screen.getByRole('button', { name: /more/i }));
+    expect(onOpenDetail).toHaveBeenCalledWith(42);
+  });
+
+  it('omits the "More ›" button when no onOpenDetail handler is given', () => {
+    render(<MatchListCard game={game()} now={NOW} onPick={noop} />);
+    expect(screen.queryByRole('button', { name: /more/i })).toBeNull();
   });
 });

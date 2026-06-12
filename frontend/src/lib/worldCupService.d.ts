@@ -11,6 +11,7 @@ import type {
   MatchPickResult,
   TournamentLeaderboardRow,
 } from './types';
+import type { EventDetail } from './wcMatchDetail';
 
 /** Response shape of GET /api/games/world-cup-2026/stage/:stage. */
 export interface StageMatchesResponse {
@@ -78,5 +79,12 @@ export function submitUserWorldCupPicks(
   userId: string | number,
   picks: MatchPick[],
 ): Promise<{ picks?: MatchPick[]; targetUserId?: number; isAdminOverride?: boolean } & Record<string, unknown>>;
+
+/**
+ * Fetch on-demand match detail (venue + curated stats + per-side lineups) for the
+ * detail panel, keyed by the real ESPN event id. The backend is resilient, so the
+ * panel renders the game-side info even if this rejects.
+ */
+export function getMatchDetail(espnId: string): Promise<EventDetail>;
 
 export type { MatchPickResult };
