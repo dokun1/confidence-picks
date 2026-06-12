@@ -59,21 +59,26 @@ export function isLocked(g: BrowseGame, now: Date): boolean {
 }
 
 /**
- * A knockout slot that hasn't been decided yet, by NAME, for cached/legacy games
- * that predate the isActive flag. ESPN seeds such slots with descriptive
- * placeholders — literal "TBD", or "Winner Group A" / "Runner-up Group B" /
- * "Loser Match 101" — none of which is a real qualified team. Matched
- * case-insensitively on the abbreviation and full name.
+ * Matches ESPN's knockout-slot placeholder NAMES — the qualification path shown
+ * before the bracket is decided, never a real nation. Observed in live R32 data:
+ * "Group A 2nd Place", "Group C Winner", "Third Place Group A/B/C/D/F", plus the
+ * older "TBD" / "Winner Group A" / "Runner-up …" forms. Matched anywhere in the
+ * string (not anchored) and case-insensitively; the slash also flags the
+ * multi-group third-place placeholder. No country name contains these tokens.
  */
-const PLACEHOLDER_NAME = /^(tbd|winner|runner[- ]?up|loser|1st|2nd)\b/i;
+const PLACEHOLDER_NAME = /\b(winner|runner-?up|loser|place|group|tbd)\b|\//i;
 
 /** A single slot holds a real, qualified team (not a bracket placeholder). */
 export function teamDecided(t: BrowseTeam): boolean {
-  // ESPN's authoritative signal: placeholders are flagged isActive:false.
+  // ESPN's authoritative signal when present: placeholders are flagged isActive:false.
   if (t.isActive === false) return false;
-  // Fallback for games stored before isActive was carried through: detect the
-  // placeholder by its abbreviation or name.
-  return !PLACEHOLDER_NAME.test(t.abbr) && !PLACEHOLDER_NAME.test(t.name);
+  // Real FIFA national-team abbreviations are alphabetic 3-letter codes (FRA,
+  // ESP, BRA). ESPN's knockout placeholders use digit-bearing codes instead
+  // (2A, 1C, 2F, 3RD), so any digit in the abbreviation marks an undecided slot.
+  // This is the workhorse for already-cached games that have no isActive flag.
+  if (/\d/.test(t.abbr)) return false;
+  // Belt-and-suspenders: also catch the placeholder by its qualification-path name.
+  return !PLACEHOLDER_NAME.test(t.name);
 }
 
 /**

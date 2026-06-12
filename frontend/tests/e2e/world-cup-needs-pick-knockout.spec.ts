@@ -14,10 +14,12 @@ import { test, expect } from '@playwright/test'
 // filename-derived substring match keeps registering this page's coverage.
 
 const inDays = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString()
-const realTeam = (id: string, name: string, abbr: string) => ({ id, name, abbreviation: abbr, logo: '', isActive: true })
-// An undecided knockout slot, as real ESPN data shapes it: a descriptive
-// placeholder name flagged isActive:false (see WORLD_CUP_2026_API.md).
-const placeholder = (name: string, abbr: string) => ({ id: `tbd-${abbr}`, name, abbreviation: abbr, logo: '', isActive: false })
+const realTeam = (id: string, name: string, abbr: string) => ({ id, name, abbreviation: abbr, logo: '' })
+// An undecided knockout slot exactly as live ESPN R32 data shapes it: a
+// qualification-path name ("Group A 2nd Place", "Group C Winner") and a
+// digit-bearing abbreviation ("2A", "1C"), with NO isActive flag — the real
+// cached-data case that the first fix missed.
+const placeholder = (name: string, abbr: string) => ({ id: `ph-${abbr}`, name, abbreviation: abbr, logo: '' })
 
 const decidedGame = {
   id: 301, stage: 'r32', isKnockout: true, status: 'SCHEDULED', homeScore: 0, awayScore: 0,
@@ -27,7 +29,7 @@ const decidedGame = {
 const undecidedGame = {
   id: 302, stage: 'r32', isKnockout: true, status: 'SCHEDULED', homeScore: 0, awayScore: 0,
   gameDate: inDays(3), winnerTeamId: null,
-  homeTeam: realTeam('382', 'Portugal', 'POR'), awayTeam: placeholder('Winner Group A', 'WGA'),
+  homeTeam: placeholder('Group A 2nd Place', '2A'), awayTeam: placeholder('Group C Winner', '1C'),
 }
 
 async function seed(page: import('@playwright/test').Page) {
@@ -61,6 +63,6 @@ test('the undecided game still lists under "All", with its picks disabled', asyn
   await expect(page.getByTestId('match-card-301')).toBeVisible()
   const undecided = page.getByTestId('match-card-302')
   await expect(undecided).toBeVisible()
-  await expect(undecided.getByRole('button', { name: 'POR' })).toBeDisabled()
-  await expect(undecided.getByRole('button', { name: 'WGA' })).toBeDisabled()
+  await expect(undecided.getByRole('button', { name: '2A' })).toBeDisabled()
+  await expect(undecided.getByRole('button', { name: '1C' })).toBeDisabled()
 })
