@@ -125,6 +125,34 @@ describe('applyFilters (AND-combined)', () => {
   });
 });
 
+describe('applyFilters — wcGroup', () => {
+  const groupD = game({ id: 1, stage: 'group', wcGroup: 'D' });
+  const groupA = game({ id: 2, stage: 'group', wcGroup: 'A' });
+  const knockout = game({ id: 3, stage: 'r16' }); // no wcGroup
+
+  it('filters to a single FIFA group', () => {
+    const result = applyFilters([groupD, groupA, knockout], { ...NO_FILTERS, wcGroup: 'D' });
+    expect(result.map((g) => g.id)).toEqual([1]);
+  });
+
+  it('null wcGroup filter shows all games including those without a group', () => {
+    const result = applyFilters([groupD, groupA, knockout], { ...NO_FILTERS, wcGroup: null });
+    expect(result.map((g) => g.id)).toEqual([1, 2, 3]);
+  });
+
+  it('AND-combines wcGroup with stage filter', () => {
+    // Stage=group + wcGroup=D → only the group-D game
+    const result = applyFilters([groupD, groupA, knockout], { ...NO_FILTERS, stage: 'group', wcGroup: 'D' });
+    expect(result.map((g) => g.id)).toEqual([1]);
+  });
+
+  it('excludes knockout games when a group is selected (no wcGroup on knockouts)', () => {
+    // Knockout games have no wcGroup, so they never match a letter filter.
+    const result = applyFilters([groupD, knockout], { ...NO_FILTERS, wcGroup: 'D' });
+    expect(result.map((g) => g.id)).toEqual([1]);
+  });
+});
+
 describe('matchesSearch', () => {
   const g = game({ home: team('MEX', 'México'), away: team('RSA', 'South Africa') });
   it('matches code and name, case- and diacritic-insensitive', () => {

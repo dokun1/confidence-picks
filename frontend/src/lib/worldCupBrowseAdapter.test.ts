@@ -93,4 +93,38 @@ describe('toBrowseGames', () => {
     expect(g.away.form).toBeUndefined();
     expect(g.events).toBeUndefined();
   });
+
+  it('populates wcGroup from the home team abbreviation for group-stage games', () => {
+    // USA is in Group D
+    const m = match({ stage: 'group', homeTeam: { id: '660', name: 'United States', abbreviation: 'USA', logo: '' } });
+    const [g] = toBrowseGames([m], {});
+    expect(g.wcGroup).toBe('D');
+  });
+
+  it('falls back to the away team abbreviation when home is unknown', () => {
+    // PAR (Paraguay) is also in Group D
+    const m = match({
+      stage: 'group',
+      homeTeam: { id: '0', name: 'Unknown', abbreviation: 'UNK', logo: '' },
+      awayTeam: { id: '1', name: 'Paraguay', abbreviation: 'PAR', logo: '' },
+    });
+    const [g] = toBrowseGames([m], {});
+    expect(g.wcGroup).toBe('D');
+  });
+
+  it('leaves wcGroup undefined for knockout matches', () => {
+    const m = match({ stage: 'r16', homeTeam: { id: '660', name: 'United States', abbreviation: 'USA', logo: '' } });
+    const [g] = toBrowseGames([m], {});
+    expect(g.wcGroup).toBeUndefined();
+  });
+
+  it('leaves wcGroup undefined when neither team abbreviation is in the lookup', () => {
+    const m = match({
+      stage: 'group',
+      homeTeam: { id: '0', name: 'Unknown A', abbreviation: 'UNK', logo: '' },
+      awayTeam: { id: '1', name: 'Unknown B', abbreviation: 'XYZ', logo: '' },
+    });
+    const [g] = toBrowseGames([m], {});
+    expect(g.wcGroup).toBeUndefined();
+  });
 });
