@@ -263,6 +263,27 @@ describe('Game.fromESPNData 3-way odds + W-D-L record/form', () => {
     assert.strictEqual(game.awayTeam.record, null);
     assert.strictEqual(game.awayTeam.form, null);
   });
+
+  // ESPN nulls the moneyline once a match kicks off. threeWay must be null then
+  // (locked cards show the result strip, not odds) without crashing.
+  test('an odds entry with a null moneyline (in-match) yields threeWay = null', () => {
+    const event = buildMockWorldCupEvent({
+      id: '804',
+      date: new Date('2026-06-11T18:00:00Z'),
+      homeTeam: MEX,
+      awayTeam: USA,
+      homeScore: 1,
+      awayScore: 1,
+      status: 'inProgress',
+      stage: 'group',
+      odds: { home: '-150', draw: '+260', away: '+420', provider: 'DraftKings', favorite: 'home' },
+    });
+    // Simulate the live state: the odds entry exists but its moneyline is nulled.
+    event.competitions[0].odds[0].moneyline = null;
+    const game = Game.fromESPNData(event, { league: 'world_cup', stage: 'group' });
+
+    assert.strictEqual(game.odds.threeWay, null);
+  });
 });
 
 // Regression for the events-column sev: on an un-migrated production schema the
