@@ -35,6 +35,11 @@ describe('isLocked / needsPick', () => {
   it('a picked-but-open game no longer needs a pick', () => {
     expect(needsPick(game({ picked: 'home' }), NOW)).toBe(false);
   });
+  it('a knockout game with undecided (TBD) teams never needs a pick', () => {
+    // Open + unpicked, but a bracket slot is still TBD → unpickable.
+    expect(needsPick(game({ away: team('TBD', 'TBD') }), NOW)).toBe(false);
+    expect(needsPick(game({ home: team('TBD', 'TBD') }), NOW)).toBe(false);
+  });
 });
 
 describe('applyView', () => {
@@ -48,6 +53,13 @@ describe('applyView', () => {
 
   it('needs-pick = open + unpicked only', () => {
     expect(applyView(games, 'needs-pick', NOW).map((g) => g.id)).toEqual([1]);
+  });
+  it('needs-pick excludes undecided knockout games even when open + unpicked', () => {
+    const withTbd = [
+      ...games,
+      game({ id: 6, stage: 'r16', kickoff: '2026-06-12T20:00:00', away: team('TBD', 'TBD') }),
+    ];
+    expect(applyView(withTbd, 'needs-pick', NOW).map((g) => g.id)).toEqual([1]);
   });
   it('today = kickoff on NOW’s date', () => {
     expect(applyView(games, 'today', NOW).map((g) => g.id).sort()).toEqual([1, 2]);

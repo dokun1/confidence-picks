@@ -52,9 +52,22 @@ export function isLocked(g: BrowseGame, now: Date): boolean {
   return new Date(g.kickoff).getTime() <= now.getTime();
 }
 
-/** Needs a pick = startable window still open and no pick recorded. */
+/**
+ * Both participants are known. Knockout slots are seeded with ESPN's "TBD"
+ * placeholder until the bracket decides them, and nothing is pickable until
+ * then — mirrors the `teamsAssigned` guard in MatchListCard.
+ */
+export function teamsDecided(g: BrowseGame): boolean {
+  return g.home.abbr !== 'TBD' && g.away.abbr !== 'TBD';
+}
+
+/**
+ * Needs a pick = startable window still open, no pick recorded, and both teams
+ * decided. The last guard matters in knockout rounds: a game whose participants
+ * are still TBD can't be picked, so it must not appear in the "needs pick" view.
+ */
 export function needsPick(g: BrowseGame, now: Date): boolean {
-  return !isLocked(g, now) && g.picked == null;
+  return !isLocked(g, now) && g.picked == null && teamsDecided(g);
 }
 
 function isSameDay(a: Date, b: Date): boolean {
