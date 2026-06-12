@@ -178,6 +178,20 @@ describe('SoccerSummaryService.parseSummary — lineups', () => {
   });
 });
 
+describe('SoccerSummaryService._deriveLine — position bucketing', () => {
+  const dl = (abbr) => SoccerSummaryService._deriveLine(abbr);
+
+  test("'G' → 'GK'", () => assert.strictEqual(dl('G'), 'GK'));
+  test("'CD-L' → 'DEF'", () => assert.strictEqual(dl('CD-L'), 'DEF'));
+  test("'LB' → 'DEF'", () => assert.strictEqual(dl('LB'), 'DEF'));
+  test("'DM' → 'MID'", () => assert.strictEqual(dl('DM'), 'MID'));
+  test("'CM-R' → 'MID'", () => assert.strictEqual(dl('CM-R'), 'MID'));
+  test("'LM' → 'MID'", () => assert.strictEqual(dl('LM'), 'MID'));
+  test("'F' → 'FWD'", () => assert.strictEqual(dl('F'), 'FWD'));
+  test("'RW' → 'FWD'", () => assert.strictEqual(dl('RW'), 'FWD'));
+  test("unknown 'XYZ' → 'MID'", () => assert.strictEqual(dl('XYZ'), 'MID'));
+});
+
 describe('SoccerSummaryService.parseSummary — resilience', () => {
   test('parseSummary({}) returns a sparse-but-valid body without throwing', () => {
     const out = SoccerSummaryService.parseSummary({});

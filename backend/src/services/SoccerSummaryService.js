@@ -139,10 +139,10 @@ export class SoccerSummaryService {
   static _deriveLine(abbr) {
     if (!abbr) return 'MID';
     const a = String(abbr).toUpperCase();
-    if (a === 'G' || a === 'GK') return 'GK';
-    if (a.startsWith('D') || a === 'LB' || a === 'RB' || a === 'CD') return 'DEF';
-    if (a.startsWith('M') || a === 'CM' || a === 'DM' || a === 'AM' || a === 'LM' || a === 'RM') return 'MID';
-    if (a === 'F' || a === 'CF' || a === 'ST' || a === 'LW' || a === 'RW') return 'FWD';
+    if (a.startsWith('G')) return 'GK';
+    if (a.startsWith('DM') || a.startsWith('CM') || a.startsWith('AM') || a.startsWith('LM') || a.startsWith('RM') || a.startsWith('M')) return 'MID';
+    if (a.startsWith('CD') || a.startsWith('CB') || a.startsWith('LWB') || a.startsWith('RWB') || a.startsWith('LB') || a.startsWith('RB') || a.startsWith('SW') || a.startsWith('D')) return 'DEF';
+    if (a.startsWith('CF') || a.startsWith('ST') || a.startsWith('LW') || a.startsWith('RW') || a.startsWith('F') || a.startsWith('W')) return 'FWD';
     return 'MID';
   }
 
