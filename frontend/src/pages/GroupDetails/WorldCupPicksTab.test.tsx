@@ -83,8 +83,9 @@ function showAllGames() {
 
 // Each game renders a MatchListCard whose subheader carries the full matchup
 // ("Mexico vs United States"). There's no per-row testid in the flat list, so we
-// locate a card by its home-team name and scope queries to it. The Draw button is
-// the only ambiguous one (both cards have one); home/away abbrs are unique here.
+// locate a card by its home-team name and scope queries to it. Only the group
+// game shows a Draw button (knockout games offer just the two teams), but we keep
+// queries card-scoped anyway since team abbreviations could repeat across cards.
 function cardFor(homeName: string): HTMLElement {
   const label = screen.getByText(
     (_content, node) => node?.textContent?.startsWith(homeName + ' vs ') ?? false,
@@ -99,8 +100,8 @@ function cardFor(homeName: string): HTMLElement {
   return el;
 }
 
-// A game's three outcome buttons by accessible name (team abbreviation, or 'Draw').
-// Scoped to the matching card so the shared 'Draw' label is unambiguous.
+// A game's outcome buttons by accessible name (team abbreviation, or 'Draw' on
+// group games). Scoped to the matching card so a repeated label is unambiguous.
 function pickButton(homeName: string, label: string): HTMLElement {
   return within(cardFor(homeName)).getByRole('button', { name: label });
 }

@@ -74,7 +74,8 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
 
   // Knockout slots are scheduled with TBD placeholders before participants are
   // known; no outcome is pickable until both teams are assigned. And a knockout
-  // can't end in a draw (PKs decide), so Draw stays disabled there.
+  // can't end in a draw (PKs decide), so the Draw choice isn't offered at all
+  // there — only the two teams.
   const teamsAssigned = game.home.abbr !== 'TBD' && game.away.abbr !== 'TBD';
 
   return (
@@ -97,7 +98,12 @@ export default function MatchListCard({ game, now, onPick, disabled }: MatchList
         <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
           <div className="flex gap-xs">
             <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
-            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned || game.isKnockout} />
+            {/* Group games are three-way (Draw is a valid outcome). Knockout games
+                are single-elimination — PKs decide a level match — so only the two
+                teams are offered; Draw isn't rendered at all. */}
+            {!game.isKnockout && (
+              <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
+            )}
             <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
           </div>
         </div>

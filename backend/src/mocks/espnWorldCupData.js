@@ -80,7 +80,11 @@ export function buildMockWorldCupEvent({
   probability = null,
   winner = null,
   shootout = null,
-  events = null
+  events = null,
+  homeForm,
+  awayForm,
+  homeRecord,
+  awayRecord,
 }) {
   const statusConfig = {
     scheduled: { state: 'pre', name: 'STATUS_SCHEDULED', description: 'Scheduled', detail: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }), completed: false },
@@ -129,6 +133,8 @@ export function buildMockWorldCupEvent({
   }] : [];
 
   const buildCompetitor = (team, homeAway, scoreValue, order) => {
+    const form = homeAway === 'home' ? homeForm : awayForm;
+    const record = homeAway === 'home' ? homeRecord : awayRecord;
     const competitor = {
       id: team.id,
       uid: `s:600~t:${team.id}`,
@@ -151,6 +157,14 @@ export function buildMockWorldCupEvent({
       score: scoreValue.toString(),
       linescores: []
     };
+    // Stamp form string when provided (e.g. "WWWWD").
+    if (form != null) {
+      competitor.form = form;
+    }
+    // Stamp W-D-L record as a single-entry records array matching ESPN's shape.
+    if (record != null) {
+      competitor.records = [{ name: 'All Splits', type: 'total', summary: record, abbreviation: 'Total' }];
+    }
     // ESPN flags the result team via competitors[].winner. Only stamped when a
     // winner is declared (knockouts), so group regulation matches keep their
     // existing shape and the parser there still reads the scoreline.

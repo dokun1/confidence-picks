@@ -15,12 +15,28 @@ const NORMALIZED: Record<string, GameStatus> = {
 export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): BrowseGame[] {
   return matches.map((m) => ({
     id: m.id,
-    espnId: String(m.id), // TODO: use the real ESPN id once the stage API exposes it (P3 detail keys off it)
+    espnId: m.espnId ?? String(m.id),
     stage: m.stage,
     stageLabel: STAGE_LABEL[m.stage] ?? m.stage,
     kickoff: m.gameDate ?? '',
-    home: { abbr: m.homeTeam.abbreviation, name: m.homeTeam.name, logo: m.homeTeam.logo },
-    away: { abbr: m.awayTeam.abbreviation, name: m.awayTeam.name, logo: m.awayTeam.logo },
+    home: {
+      abbr: m.homeTeam.abbreviation,
+      name: m.homeTeam.name,
+      logo: m.homeTeam.logo,
+      record: m.homeTeam.record || undefined,
+      moneyline: m.odds?.threeWay?.home || undefined,
+    },
+    away: {
+      abbr: m.awayTeam.abbreviation,
+      name: m.awayTeam.name,
+      logo: m.awayTeam.logo,
+      record: m.awayTeam.record || undefined,
+      moneyline: m.odds?.threeWay?.away || undefined,
+    },
+    // `|| undefined` (not `??`) so an empty-string odds/record from ESPN also
+    // collapses to absent — the card renders nothing rather than an empty line.
+    drawOdds: m.odds?.threeWay?.draw || undefined,
+    overUnder: m.odds?.overUnder != null ? String(m.odds.overUnder) : undefined,
     status: NORMALIZED[m.status] ?? 'SCHEDULED',
     homeScore: m.homeScore,
     awayScore: m.awayScore,

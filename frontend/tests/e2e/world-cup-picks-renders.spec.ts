@@ -119,12 +119,13 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
   await expect(groupCard.getByRole('button', { name: 'Draw' })).toBeVisible()
   await expect(groupCard.getByRole('button', { name: 'CAN' })).toBeVisible()
 
-  // The r32 fixture is a knockout whose away slot is still TBD, so every outcome
-  // is unpickable until both teams are assigned (and a knockout can't draw).
+  // The r32 fixture is a knockout: a knockout can't draw, so it offers only the
+  // two teams (no Draw button), and with its away slot still TBD both team
+  // buttons are unpickable until participants are assigned.
   const tbdCard = page.getByTestId('match-card-201')
   await expect(tbdCard.getByRole('button', { name: 'FRA' })).toBeDisabled()
-  await expect(tbdCard.getByRole('button', { name: 'Draw' })).toBeDisabled()
   await expect(tbdCard.getByRole('button', { name: 'TBD' })).toBeDisabled()
+  await expect(tbdCard.getByRole('button', { name: 'Draw' })).toHaveCount(0)
 })
 
 // A world_cup_2026 group surfaces the tournament-shaped tabs on its detail page:

@@ -44,6 +44,8 @@ export interface TeamData {
   logo: string;
   color?: string;
   altColor?: string;
+  record?: string;
+  form?: string;
 }
 
 export interface GameData {
@@ -150,6 +152,8 @@ export interface MatchEvent {
 // re-deriving stage membership.
 export interface WorldCupMatch {
   id: number;
+  /** Real ESPN event id (used for P3 detail panel deep-links). */
+  espnId?: string;
   stage: WorldCupStage;
   homeTeam: TeamData;
   awayTeam: TeamData;
@@ -161,6 +165,11 @@ export interface WorldCupMatch {
   winnerTeamId?: string | null;
   /** Goal/card timeline once the match has started. Absent before kickoff. */
   events?: MatchEvent[];
+  /** Pre-match odds from the odds JSONB column. */
+  odds?: {
+    threeWay?: { home?: string | null; draw?: string | null; away?: string | null };
+    overUnder?: number;
+  };
 }
 
 // Mirrors the backend pick route body, which keys off `pickedResult`.

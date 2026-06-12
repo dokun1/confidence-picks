@@ -40,4 +40,34 @@ describe('toBrowseGames', () => {
   it('normalizes an unknown status to SCHEDULED', () => {
     expect(toBrowseGames([match({ status: 'POSTPONED' as WorldCupMatch['status'] })], {})[0].status).toBe('SCHEDULED');
   });
+
+  it('maps odds.threeWay + team record + real espnId onto BrowseGame', () => {
+    const m = match({
+      id: 42,
+      espnId: 'espn-101',
+      homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: 'mex.png', record: '2-1-0' },
+      awayTeam: { id: '2', name: 'South Africa', abbreviation: 'RSA', logo: 'rsa.png', record: '1-1-1' },
+      odds: {
+        threeWay: { home: '-150', draw: '+260', away: '+420' },
+        overUnder: 2.5,
+      },
+    });
+    const [g] = toBrowseGames([m], {});
+    expect(g.espnId).toBe('espn-101');
+    expect(g.home.record).toBe('2-1-0');
+    expect(g.home.moneyline).toBe('-150');
+    expect(g.away.record).toBe('1-1-1');
+    expect(g.away.moneyline).toBe('+420');
+    expect(g.drawOdds).toBe('+260');
+    expect(g.overUnder).toBe('2.5');
+  });
+
+  it('leaves moneyline/drawOdds/overUnder undefined and falls back espnId when no odds', () => {
+    const [g] = toBrowseGames([match({ id: 99 })], {});
+    expect(g.espnId).toBe('99');
+    expect(g.home.moneyline).toBeUndefined();
+    expect(g.away.moneyline).toBeUndefined();
+    expect(g.drawOdds).toBeUndefined();
+    expect(g.overUnder).toBeUndefined();
+  });
 });
