@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import WorldCupGamesList from './WorldCupGamesList';
 import type { BrowseGame, BrowseTeam } from '../../../lib/wcGamesView';
 
@@ -48,5 +48,61 @@ describe('WorldCupGamesList', () => {
     expect(search).toHaveValue('');
     expect(screen.getByTestId('match-card-1')).toBeInTheDocument();
     expect(screen.getByTestId('match-card-2')).toBeInTheDocument();
+  });
+
+  describe('sticky controls + scroll re-anchoring on filter change', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('keeps the search box and view chips in a sticky, pinned container', () => {
+      const today = game({ id: 1 });
+      const { container } = render(
+        <WorldCupGamesList games={[today]} now={NOW} onPick={() => {}} />,
+      );
+      // The search input and the view chips share one sticky, top-pinned wrapper
+      // so they stay visible as the match list scrolls beneath them.
+      const sticky = container.querySelector('.sticky');
+      expect(sticky).not.toBeNull();
+      expect(sticky?.className).toContain('top-0');
+      expect(sticky).toContainElement(screen.getByPlaceholderText('Search teams…'));
+      expect(sticky).toContainElement(screen.getByRole('button', { name: 'All' }));
+    });
+
+    it('re-anchors to the list when a filter changes after scrolling past it', () => {
+      const today = game({ id: 1 });
+      const tomorrow = game({
+        id: 2, kickoff: '2026-06-13T20:00:00',
+        home: team('BRA', 'Brazil'), away: team('ARG', 'Argentina'),
+      });
+      render(<WorldCupGamesList games={[today, tomorrow]} now={NOW} onPick={() => {}} />);
+
+      const region = screen.getByTestId('games-list-region');
+      // Simulate the list having scrolled up behind the sticky header.
+      vi.spyOn(region, 'getBoundingClientRect').mockReturnValue({ top: -400 } as DOMRect);
+      const scrollIntoView = vi.spyOn(region, 'scrollIntoView');
+
+      // Switch the view — content changes, and since we're scrolled past the
+      // list top, the scroll is re-anchored to the start of the new results.
+      fireEvent.click(screen.getByRole('button', { name: 'All' }));
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    });
+
+    it('leaves the scroll alone when the list top is already on screen', () => {
+      const today = game({ id: 1 });
+      const tomorrow = game({
+        id: 2, kickoff: '2026-06-13T20:00:00',
+        home: team('BRA', 'Brazil'), away: team('ARG', 'Argentina'),
+      });
+      render(<WorldCupGamesList games={[today, tomorrow]} now={NOW} onPick={() => {}} />);
+
+      const region = screen.getByTestId('games-list-region');
+      // List top is still below the (zero-height in jsdom) sticky header.
+      vi.spyOn(region, 'getBoundingClientRect').mockReturnValue({ top: 120 } as DOMRect);
+      const scrollIntoView = vi.spyOn(region, 'scrollIntoView');
+
+      fireEvent.click(screen.getByRole('button', { name: 'All' }));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
   });
 });
