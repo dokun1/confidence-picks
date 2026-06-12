@@ -3,13 +3,11 @@ import Button from '../../designsystem/components/Button';
 import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
-import MatchPickRow from '../../designsystem/components/MatchPickRow';
 import {
   WORLD_CUP_STAGES,
   type MatchPick,
   type MatchPickResult,
   type WorldCupMatch,
-  type WorldCupStage,
 } from '../../lib/types';
 import {
   getStageMatches,
@@ -22,6 +20,8 @@ import { getMyGroups } from '../../lib/groupsService.js';
 import { pollIntervalFor } from '../../lib/matchPolling';
 import SaveTargetsDropdown, { type SaveTarget } from '../../components/SaveTargetsDropdown';
 import PickPersonSelector, { type PickPersonOption } from '../../components/PickPersonSelector';
+import WorldCupGamesList from '../../designsystem/components/WorldCupBrowse/WorldCupGamesList';
+import { toBrowseGames } from '../../lib/worldCupBrowseAdapter';
 
 // The World Cup pick-making surface: the whole tournament as one stage-grouped
 // match list with a sticky submit bar. Extracted from WorldCupPicksPage so a
@@ -31,20 +31,8 @@ import PickPersonSelector, { type PickPersonOption } from '../../components/Pick
 //
 // A member's picks are flat (home/away/draw) with no confidence — World Cup
 // scoring is flat-per-match (see world-cup-picks-rules.md). Every stage is
-// fetched in parallel and the flattened matches are grouped back by stage for
-// rendering, iterating WORLD_CUP_STAGES so sections appear in tournament order
-// regardless of fetch resolution order.
-
-// Section header labels per stage.
-const STAGE_LABEL: Record<WorldCupStage, string> = {
-  group: 'Group Stage',
-  r32: 'Round of 32',
-  r16: 'Round of 16',
-  qf: 'Quarterfinals',
-  sf: 'Semifinals',
-  third: 'Third Place',
-  final: 'Final',
-};
+// fetched in parallel and the flattened matches are passed to `WorldCupGamesList`
+// via the `toBrowseGames` adapter; the list owns all view/filter/sort/search state.
 
 type DraftMap = Record<number, MatchPickResult>;
 
@@ -147,8 +135,7 @@ export default function WorldCupPicksTab({
     setFetchState((s) => ({ ...s, loading: true, error: '' }));
     (async () => {
       try {
-        // Fetch every stage in parallel; flatten into one list and group by stage
-        // at render time so the sections follow WORLD_CUP_STAGES order.
+        // Fetch every stage in parallel and flatten into one list; the browse list handles ordering/grouping.
         const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
         if (cancelled) return;
         const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
@@ -264,16 +251,15 @@ export default function WorldCupPicksTab({
     });
   }
 
-  // Group the flattened matches by stage, preserving tournament order. Only
-  // stages with at least one match produce a section.
-  const stageGroups = useMemo(
-    () =>
-      WORLD_CUP_STAGES.map((stage) => ({
-        stage,
-        matches: fetchState.matches.filter((m) => m.stage === stage),
-      })).filter((g) => g.matches.length > 0),
-    [fetchState.matches],
+  // Derive the flat browse-list games from the fetched matches + the current
+  // draft. The list itself owns view/filter/sort state; we just feed it data and
+  // route picks back through pickResult.
+  const browseGames = useMemo(
+    () => toBrowseGames(fetchState.matches, draft),
+    [fetchState.matches, draft],
   );
+  const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
+  // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
 
   const picks: MatchPick[] = useMemo(
     () =>
@@ -483,7 +469,7 @@ export default function WorldCupPicksTab({
         </ul>
       </div>
 
-      {/* Match list, grouped by stage */}
+      {/* Flat browse list */}
       <div className="space-y-lg">
         {fetchState.loading ? (
           <p className="py-lg text-center text-content-muted">Loading matches…</p>
@@ -497,22 +483,12 @@ export default function WorldCupPicksTab({
         ) : fetchState.matches.length === 0 ? (
           <EmptyState title="No matches yet" description="No matches found for this tournament." />
         ) : (
-          stageGroups.map((group) => (
-            <section key={group.stage} className="space-y-sm">
-              <h2 className="text-lg font-semibold text-secondary-900 dark:text-neutral-0">
-                {STAGE_LABEL[group.stage]}
-              </h2>
-              {group.matches.map((match) => (
-                <MatchPickRow
-                  key={match.id}
-                  match={match}
-                  pickedResult={draft[match.id] ?? null}
-                  disabled={submitting || readOnly}
-                  onPick={(result) => pickResult(match.id, result)}
-                />
-              ))}
-            </section>
-          ))
+          <WorldCupGamesList
+            games={browseGames}
+            now={now}
+            onPick={pickResult}
+            disabled={submitting || readOnly}
+          />
         )}
       </div>
 

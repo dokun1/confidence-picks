@@ -1,0 +1,107 @@
+import type { BrowseGame, MatchResult } from '../../../lib/wcGamesView';
+import { isLocked, outcomeOf, resultShade } from '../../../lib/wcGamesView';
+import ChoiceButton from './ChoiceButton';
+import { SHADE_TINT } from './resultShade';
+
+export interface MatchListCardProps {
+  game: BrowseGame;
+  now: Date;
+  onPick: (gameId: number, result: MatchResult) => void;
+  disabled?: boolean;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Locked games (live/final) show the score + the viewer's pick outcome, not buttons.
+ *  Final games are tinted by how the pick fared (win/draw/partial/loss). */
+function ResultStrip({ game }: { game: BrowseGame }) {
+  const live = game.status === 'IN_PROGRESS';
+  const result = outcomeOf(game);
+  const pickedTeam =
+    game.picked === 'home' ? game.home.abbr : game.picked === 'away' ? game.away.abbr : game.picked === 'draw' ? 'Draw' : null;
+  // Only final matches carry a settled result to shade by; live stays neutral.
+  const shade = game.status === 'FINAL' ? resultShade(game.picked, result) : null;
+
+  return (
+    <div
+      style={shade ? SHADE_TINT[shade] : undefined}
+      className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800"
+    >
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-xs text-sm font-bold text-content">
+          <img src={game.home.logo} alt="" className="h-5 w-5 object-contain" /> {game.home.abbr}
+        </span>
+        <span className="text-xl font-extrabold tabular-nums text-content">
+          {game.homeScore} <span className="text-content-subtle">–</span> {game.awayScore}
+        </span>
+        <span className="flex items-center gap-xs text-sm font-bold text-content">
+          {game.away.abbr} <img src={game.away.logo} alt="" className="h-5 w-5 object-contain" />
+        </span>
+      </div>
+      <div className="mt-xs flex items-center justify-center gap-xs text-xs">
+        {pickedTeam == null ? (
+          <span className="text-content-subtle">No pick made</span>
+        ) : (
+          <>
+            <span className="text-content-subtle">Your pick:</span>
+            <span className="font-semibold text-content">{pickedTeam}</span>
+            {!live && shade && (
+              <span
+                className="font-bold"
+                style={{ color: shade === 'win' || shade === 'draw' ? '#0c8772' : shade === 'partial' ? '#f97316' : '#ef4444' }}
+              >
+                {shade === 'win' ? '✓ +3' : shade === 'draw' ? '✓ +2' : shade === 'partial' ? '~ +1' : '✗ 0'}
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One game in the World Cup browse list. A subheader shows the time/status and
+ * full team names; the card body is the three-way bet (pickable) or a result
+ * strip (locked).
+ */
+export default function MatchListCard({ game, now, onPick, disabled }: MatchListCardProps) {
+  const locked = isLocked(game, now);
+  const lead =
+    game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
+
+  // Knockout slots are scheduled with TBD placeholders before participants are
+  // known; no outcome is pickable until both teams are assigned. And a knockout
+  // can't end in a draw (PKs decide), so Draw stays disabled there.
+  const teamsAssigned = game.home.abbr !== 'TBD' && game.away.abbr !== 'TBD';
+
+  return (
+    <div data-testid={`match-card-${game.id}`}>
+      {/* subheader: status/time + full names (wraps) */}
+      <div className="flex items-start gap-sm px-xxs pb-xxs pt-sm">
+        <div className="min-w-0 text-xs leading-snug">
+          <span className={`font-bold uppercase tracking-wide ${game.status === 'IN_PROGRESS' ? 'text-error-500' : 'text-content-subtle'}`}>
+            {lead}
+          </span>
+          <span className="ml-xs font-semibold text-content-muted">
+            {game.home.name} <span className="text-content-subtle">vs</span> {game.away.name}
+          </span>
+        </div>
+      </div>
+
+      {locked ? (
+        <ResultStrip game={game} />
+      ) : (
+        <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
+          <div className="flex gap-xs">
+            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
+            <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned || game.isKnockout} />
+            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

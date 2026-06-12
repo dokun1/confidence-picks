@@ -343,11 +343,15 @@ describe('GroupDetailsPage', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
 
-      // The match list and its outcome buttons render inline — no link-out to
-      // a separate page, and no NFL picks loader.
-      expect(await screen.findByTestId('match-row-10')).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Group Stage' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Pick Mexico to win' })).toBeInTheDocument();
+      // The flat browse list and its outcome buttons render inline — no link-out
+      // to a separate page, and no NFL picks loader.
+      expect(
+        await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+          selector: 'span',
+        }),
+      ).toBeInTheDocument();
+      // The home outcome button is keyed by the team's abbreviation in the list.
+      expect(screen.getByRole('button', { name: 'MEX' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /make world cup picks/i })).not.toBeInTheDocument();
       expect(screen.queryByText('Loading picks…')).not.toBeInTheDocument();
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -372,7 +376,9 @@ describe('GroupDetailsPage', () => {
 
       // Entering the Picks tab mounts the surface and its sticky save bar.
       fireEvent.click(screen.getByRole('tab', { name: /picks/i }));
-      await screen.findByTestId('match-row-10');
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
       expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeInTheDocument();
       expect(screen.getByText('0 picks selected')).toBeInTheDocument();
 

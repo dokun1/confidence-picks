@@ -76,10 +76,13 @@ describe('WorldCupPicksPage', () => {
       screen.getByRole('heading', { name: 'World Cup 2026 Picks' }),
     ).toBeInTheDocument();
 
-    // The embedded WorldCupPicksTab fetches the stages and renders the match
-    // list plus the sticky submit bar.
-    expect(await screen.findByTestId('match-row-10')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Group Stage' })).toBeInTheDocument();
+    // The embedded WorldCupPicksTab fetches the stages and renders the flat
+    // browse list (matchup subheader) plus the sticky submit bar.
+    expect(
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeInTheDocument();
     expect(mockGetStageMatches).toHaveBeenCalledTimes(7);
   });
