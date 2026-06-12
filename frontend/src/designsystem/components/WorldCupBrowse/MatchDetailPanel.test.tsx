@@ -36,6 +36,45 @@ describe('MatchDetailPanel', () => {
     expect(screen.getByText('Loading lineups…')).toBeInTheDocument();
   });
 
+  it('renders three pick buttons (home / draw / away) for a scheduled (not locked) game', () => {
+    render(
+      <MatchDetailPanel
+        game={baseGame({ kickoff: '2026-06-20T17:00:00Z', status: 'SCHEDULED' })}
+        detail={null}
+        loading={false}
+        now={now}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    // Home and away abbreviation buttons + Draw
+    expect(screen.getByRole('button', { name: 'MEX' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RSA' })).toBeInTheDocument();
+  });
+
+  it('does NOT render pick buttons for a locked (FINAL) game', () => {
+    const game = baseGame({
+      status: 'FINAL',
+      kickoff: '2026-06-01T17:00:00Z', // past → locked
+      homeScore: 1,
+      awayScore: 0,
+    });
+    render(
+      <MatchDetailPanel
+        game={game}
+        detail={null}
+        loading={false}
+        now={now}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'MEX' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Draw' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RSA' })).not.toBeInTheDocument();
+  });
+
   it('renders venue, a match stat, and a starter name for a final game with detail', () => {
     const game = baseGame({
       status: 'FINAL',

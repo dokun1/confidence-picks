@@ -237,6 +237,7 @@ export default function WorldCupGamesList({ games, now, onPick, disabled }: Worl
           now={now}
           onPick={onPick}
           onClose={closeDetail}
+          disabled={disabled}
         />
       )}
     </div>

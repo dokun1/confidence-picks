@@ -13,6 +13,7 @@ export interface MatchDetailPanelProps {
   now: Date;
   onPick: (gameId: number, result: MatchResult) => void;
   onClose: () => void;
+  disabled?: boolean;
 }
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -71,14 +72,14 @@ function TeamLineupView({ lineup }: { lineup: TeamLineup }) {
         return (
           <div key={ln.key}>
             <div className="px-xxs pb-xxs pt-sm text-[0.65rem] font-bold uppercase tracking-wide text-content-subtle">{ln.label}</div>
-            {players.map((p) => <PlayerRow key={p.num} p={p} />)}
+            {players.map((p) => <PlayerRow key={`${p.num}-${p.name}`} p={p} />)}
           </div>
         );
       })}
       {lineup.subs.length > 0 && (
         <>
           <div className="px-xxs pb-xxs pt-md text-[0.7rem] font-bold uppercase tracking-wide text-content-subtle">Substitutes used</div>
-          {lineup.subs.map((p) => <PlayerRow key={p.num} p={p} />)}
+          {lineup.subs.map((p) => <PlayerRow key={`${p.num}-${p.name}`} p={p} />)}
         </>
       )}
     </div>
@@ -143,7 +144,7 @@ function MatchStats({ game, detail }: { game: BrowseGame; detail: EventDetail })
   );
 }
 
-export default function MatchDetailPanel({ game, detail, loading, now, onPick, onClose }: MatchDetailPanelProps) {
+export default function MatchDetailPanel({ game, detail, loading, now, onPick, onClose, disabled }: MatchDetailPanelProps) {
   const locked = isLocked(game, now);
   const live = game.status === 'IN_PROGRESS';
   const kickoff = new Date(game.kickoff);
@@ -189,9 +190,9 @@ export default function MatchDetailPanel({ game, detail, loading, now, onPick, o
         {!locked && (
           <Section title="Your pick">
             <div className="flex gap-xs">
-              <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} />
-              <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} />
-              <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} />
+              <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled} />
+              <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled} />
+              <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled} />
             </div>
             {game.overUnder && <p className="mt-xs text-center text-xs text-content-subtle">DraftKings · O/U {game.overUnder}</p>}
           </Section>

@@ -9,6 +9,7 @@ vi.mock('../../lib/worldCupService.js', () => ({
   getMyWorldCupPicks: vi.fn(),
   getUserWorldCupPicks: vi.fn(),
   submitUserWorldCupPicks: vi.fn(),
+  getMatchDetail: vi.fn().mockResolvedValue({ venue: null, stats: [], lineups: null }),
 }));
 vi.mock('../../lib/groupsService.js', () => ({
   getMyGroups: vi.fn(),
