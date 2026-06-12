@@ -143,7 +143,17 @@ export default function GroupsPage() {
              Create/Join actions are rendered by GroupsList directly below the
              bar, matching the layout: my groups → search → create → join. */
           <div className="space-y-lg">
-            <GroupsSearchFilter onChange={setFilters} />
+            {/* Sticky search + filter bar — pinned to the top of the viewport
+                while the groups list scrolls beneath it, mirroring the World Cup
+                picks page (see WorldCupGamesList). The negative margins bleed the
+                backdrop out to the page gutters (Layout's px-sm/sm:px-lg) so cards
+                never show through the gap as they scroll under it; the matching
+                px re-pads the bar back to the column. z-10 keeps it above the
+                cards; the filter popover (z-20, anchored inside the bar) still
+                layers above it. */}
+            <div className="sticky top-0 z-10 -mx-sm bg-neutral-0/95 px-sm py-xs backdrop-blur dark:bg-secondary-900/95 sm:-mx-lg sm:px-lg">
+              <GroupsSearchFilter onChange={setFilters} />
+            </div>
 
             {visibleGroups.length === 0 ? (
               <>
