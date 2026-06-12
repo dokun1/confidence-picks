@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2",
+    "@testing-library/dom": "^10.4.1",
     "heroicons": "^2.2.0",
     "react": "^18",
     "react-dom": "^18",
