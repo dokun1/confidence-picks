@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  applyFilters, applyView, buildSections, groupByDate, isLocked, matchesSearch,
-  needsPick, NO_FILTERS, outcomeOf, pickVerdict, resultShade, sortGames,
+  applyFilters, applyView, buildSections, groupByDate, isLocked, liveClockLabel,
+  matchesSearch, needsPick, NO_FILTERS, outcomeOf, pickVerdict, resultShade, sortGames,
   teamDecided, teamsDecided,
   type BrowseGame, type BrowseTeam,
 } from './wcGamesView';
@@ -19,6 +19,32 @@ function game(over: Partial<BrowseGame> = {}): BrowseGame {
     ...over,
   };
 }
+
+describe('liveClockLabel', () => {
+  it('returns null for a game that is not in progress', () => {
+    expect(liveClockLabel(game({ status: 'SCHEDULED', displayClock: "63'" }))).toBeNull();
+    expect(liveClockLabel(game({ status: 'FINAL', displayClock: "90'" }))).toBeNull();
+  });
+  it('returns the minute mark for a live game', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "63'" }))).toBe("63'");
+  });
+  it('passes ESPN stoppage-time clocks through verbatim (never re-derived)', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "90'+2'" }))).toBe("90'+2'");
+  });
+  it('collapses a halftime break to "HT" rather than showing a stale 45\'', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "45'", statusDetail: 'Halftime' }))).toBe('HT');
+  });
+  it('does NOT collapse an in-half detail like "1st Half" to HT', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "12'", statusDetail: '1st Half' }))).toBe("12'");
+  });
+  it('falls back to the descriptive detail when the clock is the pre-kickoff "0\'"', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "0'", statusDetail: '1st Half' }))).toBe('1st Half');
+  });
+  it('returns null for a live game with no clock or detail at all', () => {
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS' }))).toBeNull();
+    expect(liveClockLabel(game({ status: 'IN_PROGRESS', displayClock: "0'" }))).toBeNull();
+  });
+});
 
 describe('isLocked / needsPick', () => {
   it('a scheduled match before kickoff is unlocked and needs a pick', () => {

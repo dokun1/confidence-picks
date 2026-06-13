@@ -94,6 +94,21 @@ describe('toBrowseGames', () => {
     expect(g.events).toBeUndefined();
   });
 
+  it('carries live progress (displayClock / statusDetail / period) through', () => {
+    const m = match({ id: 57, status: 'IN_PROGRESS', displayClock: "63'", statusDetail: '2nd Half', period: 2 });
+    const [g] = toBrowseGames([m], {});
+    expect(g.displayClock).toBe("63'");
+    expect(g.statusDetail).toBe('2nd Half');
+    expect(g.period).toBe(2);
+  });
+
+  it('collapses an empty-string displayClock/statusDetail to undefined', () => {
+    const m = match({ id: 58, displayClock: '', statusDetail: '' });
+    const [g] = toBrowseGames([m], {});
+    expect(g.displayClock).toBeUndefined();
+    expect(g.statusDetail).toBeUndefined();
+  });
+
   it('populates wcGroup from the home team abbreviation for group-stage games', () => {
     // USA is in Group D
     const m = match({ stage: 'group', homeTeam: { id: '660', name: 'United States', abbreviation: 'USA', logo: '' } });

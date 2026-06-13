@@ -44,6 +44,16 @@ export interface BrowseGame {
   status: GameStatus;
   homeScore?: number;
   awayScore?: number;
+  /**
+   * Live match progress from ESPN's `status` block (see WorldCupMatch). Present
+   * once a match is in progress: `displayClock` is the minute mark ("63'"),
+   * `statusDetail` the descriptive state ("Halftime", "1st Half"), `period` the
+   * half (1/2, 3+ for extra time). Fed to liveClockLabel to show how far along
+   * a live match is.
+   */
+  displayClock?: string;
+  statusDetail?: string;
+  period?: number;
   /** The viewer's current pick, if any. */
   picked?: MatchResult;
   /** Knockout matches can't end in a draw (PKs decide) — disables the Draw pick. */
@@ -58,6 +68,38 @@ export interface BrowseGame {
 export function isLocked(g: BrowseGame, now: Date): boolean {
   if (g.status !== 'SCHEDULED') return true;
   return new Date(g.kickoff).getTime() <= now.getTime();
+}
+
+/**
+ * A short, human label for how far along a live match is — ESPN gives us the
+ * minute mark, not a real-time stream, so this is a progress snapshot, not a
+ * ticking clock. Returns null for any non-live game (the caller renders nothing).
+ *
+ * Precedence:
+ *   1. Halftime/break — ESPN freezes the clock and flags it in statusDetail
+ *      ("Halftime"); collapse to "HT" so we don't show a stale "45'".
+ *   2. The minute mark — displayClock, e.g. "63'" or "90'+2'" (stoppage time
+ *      already formatted by ESPN; never re-derived here). Skipped when it's the
+ *      pre-kickoff "0'" placeholder so a just-flipped-live match falls through.
+ *   3. The descriptive detail as a last resort, e.g. "1st Half".
+ *
+ * Pure and `Pick`-typed so the label logic is unit-tested in isolation from the
+ * card/panel that render it.
+ */
+export function liveClockLabel(
+  g: Pick<BrowseGame, 'status' | 'displayClock' | 'statusDetail'>,
+): string | null {
+  if (g.status !== 'IN_PROGRESS') return null;
+  const detail = (g.statusDetail ?? '').trim();
+  // "Halftime" → "HT". Anchored to the half[-/space]time word so a live-half
+  // detail like "1st Half" does NOT collapse to HT.
+  if (/half[\s-]?time/i.test(detail) || /\bHT\b/.test(detail)) return 'HT';
+  const clock = (g.displayClock ?? '').trim();
+  // ESPN seeds an in-progress status with a "0'" clock at the instant of
+  // kickoff before the minute ticks; treat it as "no minute yet" and fall back.
+  if (clock && clock !== "0'" && clock !== '0') return clock;
+  if (detail) return detail;
+  return null;
 }
 
 /**

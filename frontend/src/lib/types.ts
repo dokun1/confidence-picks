@@ -169,6 +169,17 @@ export interface WorldCupMatch {
   isKnockout: boolean;
   gameDate?: string;
   winnerTeamId?: string | null;
+  /**
+   * Live match progress, parsed by the backend from ESPN's `status` block and
+   * persisted (display_clock / period / status_detail columns), so they survive
+   * the stage cache. `displayClock` is ESPN's minute mark for a soccer match in
+   * progress, e.g. "63'" or "90'+2'"; `statusDetail` carries the descriptive
+   * state, e.g. "Halftime" or "1st Half"; `period` is 1 = first half, 2 = second
+   * half, 3+ = extra time. All absent before kickoff.
+   */
+  displayClock?: string;
+  statusDetail?: string;
+  period?: number;
   /** Goal/card timeline once the match has started. Absent before kickoff. */
   events?: MatchEvent[];
   /** Pre-match odds from the odds JSONB column. */

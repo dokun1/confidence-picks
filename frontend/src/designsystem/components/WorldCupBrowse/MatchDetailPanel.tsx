@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { BrowseGame, MatchResult } from '../../../lib/wcGamesView';
-import { isLocked } from '../../../lib/wcGamesView';
+import { isLocked, liveClockLabel } from '../../../lib/wcGamesView';
 import type { EventDetail, MatchStat, PlayerMark, TeamLineup } from '../../../lib/wcMatchDetail';
 import MatchTimeline from '../MatchTimeline';
 import ChoiceButton from './ChoiceButton';
@@ -147,6 +147,8 @@ function MatchStats({ game, detail }: { game: BrowseGame; detail: EventDetail })
 export default function MatchDetailPanel({ game, detail, loading, now, onPick, onClose, disabled }: MatchDetailPanelProps) {
   const locked = isLocked(game, now);
   const live = game.status === 'IN_PROGRESS';
+  // Minute mark for a live match ("63'" / "HT"); null otherwise.
+  const clock = liveClockLabel(game);
   const kickoff = new Date(game.kickoff);
   const dateLabel = kickoff.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const timeLabel = kickoff.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -170,7 +172,9 @@ export default function MatchDetailPanel({ game, detail, loading, now, onPick, o
               {locked ? (
                 <>
                   <div className="text-2xl font-extrabold tabular-nums text-content">{game.homeScore} – {game.awayScore}</div>
-                  <div className={`text-xs font-bold ${live ? 'text-error-500' : 'text-content-subtle'}`}>{live ? 'LIVE' : 'FULL TIME'}</div>
+                  <div className={`text-xs font-bold ${live ? 'text-error-500' : 'text-content-subtle'}`} data-testid="detail-status">
+                    {live ? (clock ? `LIVE · ${clock}` : 'LIVE') : 'FULL TIME'}
+                  </div>
                 </>
               ) : (
                 <div className="text-xs font-bold uppercase tracking-wide text-content-subtle">Kickoff</div>
