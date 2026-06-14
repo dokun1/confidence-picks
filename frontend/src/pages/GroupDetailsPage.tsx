@@ -227,7 +227,10 @@ export default function GroupDetailsPage() {
 
         {/* Tab Navigation */}
         <div className="border-b border-secondary-200 dark:border-secondary-700">
-          <div className="flex gap-lg overflow-x-auto" role="tablist" aria-label="Group sections">
+          {/* pt-1 gives the Chat tab's unread dot room: overflow-x-auto forces
+              overflow-y to clip at the row's top edge, which would otherwise
+              shave the top off the dot's negative offset. */}
+          <div className="flex gap-lg overflow-x-auto pt-1" role="tablist" aria-label="Group sections">
             {TABS.map((tab) => (
               <button
                 key={tab.key}

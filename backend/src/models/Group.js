@@ -308,11 +308,40 @@ export class Group {
     return result.rows[0];
   }
 
+  // Ensure the chat read-marker table exists. Production resilience: prod runs
+  // with INIT_DB unset, so schema.sql is NOT synced on deploy — mirror the
+  // GroupInvite.ensureLinkInviteSchema self-heal so this feature works on a plain
+  // deploy with no manual migration step. Cheap: a single catalog lookup that
+  // early-returns once the table is present.
+  static async ensureChatReadsSchema() {
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_name = 'group_message_reads'`
+      );
+      if (check.rows.length > 0) return; // already present
+      console.log('[chat] Missing group_message_reads table – creating');
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS group_message_reads (
+          id SERIAL PRIMARY KEY,
+          group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          last_read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(group_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_group_message_reads_group_user ON group_message_reads(group_id, user_id);
+      `);
+      console.log('[chat] group_message_reads table created');
+    } catch (e) {
+      console.warn('[chat] Failed to ensure chat reads schema (may already exist):', e.message);
+    }
+  }
+
   // Whether the given user has unread chat messages in the group. A message is
   // unread when it was authored by someone else and is newer than the user's last
   // read marker. With no marker row (the default for everyone), every message from
   // another member reads as unread — the intended "nobody has read chat yet" state.
   static async getUnreadStatus(groupId, userId) {
+    await this.ensureChatReadsSchema();
     const query = `
       SELECT EXISTS (
         SELECT 1
@@ -331,6 +360,7 @@ export class Group {
   // Mark the group chat as read for the user (upsert the last_read_at marker to
   // now). Called when a member opens the chat tab so the unread indicator clears.
   static async markMessagesRead(groupId, userId) {
+    await this.ensureChatReadsSchema();
     const query = `
       INSERT INTO group_message_reads (group_id, user_id, last_read_at)
       VALUES ($1, $2, CURRENT_TIMESTAMP)
