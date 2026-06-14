@@ -16,6 +16,8 @@ vi.mock('../lib/groupsService.js', () => ({
   getMembers: vi.fn(),
   getMessages: vi.fn(),
   getMyGroups: vi.fn(),
+  getUnreadStatus: vi.fn(),
+  markMessagesRead: vi.fn(),
 }));
 
 // PicksTab and LeaderboardTab own their own fetches (seasons -> closest week ->
@@ -62,7 +64,14 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-import { getGroup, getMembers, getMessages, getMyGroups } from '../lib/groupsService.js';
+import {
+  getGroup,
+  getMembers,
+  getMessages,
+  getMyGroups,
+  getUnreadStatus,
+  markMessagesRead,
+} from '../lib/groupsService.js';
 import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
 import {
   getWorldCupLeaderboard,
@@ -73,6 +82,8 @@ const mockGetGroup = vi.mocked(getGroup);
 const mockGetMembers = vi.mocked(getMembers);
 const mockGetMessages = vi.mocked(getMessages);
 const mockGetMyGroups = vi.mocked(getMyGroups);
+const mockGetUnreadStatus = vi.mocked(getUnreadStatus);
+const mockMarkMessagesRead = vi.mocked(markMessagesRead);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const mockGetScoreboard = vi.mocked(getScoreboard);
@@ -140,6 +151,11 @@ describe('GroupDetailsPage', () => {
     // empty list defaults them to the (mocked) current season.
     mockGetPickSeasons.mockResolvedValue({ seasons: [] });
     mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
+    // Chat unread state is resolved independently of the mount fetch. Default to
+    // "no unread" so the existing navigation/leaderboard tests see no dot; the
+    // unread-indicator suite overrides this per test.
+    mockGetUnreadStatus.mockResolvedValue(false);
+    mockMarkMessagesRead.mockResolvedValue(undefined);
   });
 
   it('renders the group name as the heading once the parallel fetch resolves', async () => {
@@ -387,6 +403,75 @@ describe('GroupDetailsPage', () => {
       fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
       expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
       expect(screen.queryByText('0 picks selected')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('unread chat indicator', () => {
+    beforeEach(() => {
+      mockGetGroup.mockResolvedValue(memberGroup);
+      mockGetMembers.mockResolvedValue(members);
+      mockGetMessages.mockResolvedValue(messages);
+    });
+
+    it('shows a red dot on the Chat tab when the group has unread messages', async () => {
+      mockGetUnreadStatus.mockResolvedValue(true);
+
+      renderPage();
+      await screen.findByRole('heading', { name: memberGroup.name });
+
+      // The indicator resolves asynchronously, independently of the mount fetch.
+      expect(await screen.findByTestId('chat-unread-indicator')).toBeInTheDocument();
+      expect(mockGetUnreadStatus).toHaveBeenCalledWith('sunday-squad');
+    });
+
+    it('shows no dot when there is nothing unread', async () => {
+      mockGetUnreadStatus.mockResolvedValue(false);
+
+      renderPage();
+      await screen.findByRole('heading', { name: memberGroup.name });
+      await waitFor(() => expect(mockGetUnreadStatus).toHaveBeenCalled());
+
+      expect(screen.queryByTestId('chat-unread-indicator')).not.toBeInTheDocument();
+    });
+
+    it('leaves the dot off when the unread fetch fails (non-fatal, page still renders)', async () => {
+      mockGetUnreadStatus.mockRejectedValue(new Error('backend down'));
+
+      renderPage();
+      // The page renders normally despite the unread fetch rejecting.
+      await screen.findByRole('heading', { name: memberGroup.name });
+      await waitFor(() => expect(mockGetUnreadStatus).toHaveBeenCalled());
+
+      expect(screen.queryByTestId('chat-unread-indicator')).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /Group Not Found/i })).not.toBeInTheDocument();
+    });
+
+    it('clears the dot and marks the chat read when the Chat tab is opened', async () => {
+      mockGetUnreadStatus.mockResolvedValue(true);
+
+      renderPage();
+      await screen.findByRole('heading', { name: memberGroup.name });
+      await screen.findByTestId('chat-unread-indicator');
+
+      fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
+
+      // Chat content renders, the dot disappears, and the read marker persists.
+      expect(screen.getByText('Welcome!')).toBeInTheDocument();
+      expect(screen.queryByTestId('chat-unread-indicator')).not.toBeInTheDocument();
+      expect(mockMarkMessagesRead).toHaveBeenCalledWith('sunday-squad');
+    });
+
+    it('does not mark the chat read when Chat is opened with nothing unread', async () => {
+      mockGetUnreadStatus.mockResolvedValue(false);
+
+      renderPage();
+      await screen.findByRole('heading', { name: memberGroup.name });
+      await waitFor(() => expect(mockGetUnreadStatus).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
+
+      expect(screen.getByText('Welcome!')).toBeInTheDocument();
+      expect(mockMarkMessagesRead).not.toHaveBeenCalled();
     });
   });
 });

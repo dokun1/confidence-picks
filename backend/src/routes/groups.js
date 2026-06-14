@@ -273,6 +273,51 @@ router.get('/:identifier/messages', authenticateToken, async (req, res) => {
   }
 });
 
+// Get unread chat status for the current user. Returns { hasUnread } so the
+// group view can show a red dot on the Chat tab when there are messages the
+// caller has not read yet.
+router.get('/:identifier/messages/unread', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    if (!group.userRole) {
+      return res.status(403).json({ error: 'Must be a group member to view messages' });
+    }
+
+    const hasUnread = await Group.getUnreadStatus(group.id, req.user.id);
+    res.json({ hasUnread });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Mark the group chat as read for the current user. Called when the member opens
+// the Chat tab so the unread indicator clears.
+router.post('/:identifier/messages/read', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    if (!group.userRole) {
+      return res.status(403).json({ error: 'Must be a group member to mark messages read' });
+    }
+
+    const lastReadAt = await Group.markMessagesRead(group.id, req.user.id);
+    res.json({ lastReadAt });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Post message to group
 router.post('/:identifier/messages', authenticateToken, async (req, res) => {
   try {

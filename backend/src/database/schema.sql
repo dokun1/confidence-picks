@@ -145,6 +145,22 @@ CREATE TABLE IF NOT EXISTS group_messages (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Per-user chat read markers. One row per (group, user) recording the last time
+-- that user visited the group chat. The absence of a row is meaningful: it means
+-- the user has never read the chat, so every message reads as unread. This is the
+-- intended initial state for everyone — no backfill is required to "put everyone
+-- in the unread state". A message counts as unread for a user when it was authored
+-- by someone else and created after that user's last_read_at (or no marker exists).
+CREATE TABLE IF NOT EXISTS group_message_reads (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  last_read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(group_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_message_reads_group_user ON group_message_reads(group_id, user_id);
+
 -- User picks table (for confidence picks) now that groups exists
 CREATE TABLE IF NOT EXISTS user_picks (
   id SERIAL PRIMARY KEY,

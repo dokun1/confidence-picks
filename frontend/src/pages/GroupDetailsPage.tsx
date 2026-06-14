@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getGroup, getMembers, getMessages } from '../lib/groupsService.js';
+import { getGroup, getMembers, getMessages, getUnreadStatus, markMessagesRead } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
 import Button from '../designsystem/components/Button';
 import PageContainer from '../designsystem/components/PageContainer';
@@ -70,6 +70,10 @@ export default function GroupDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('leaderboard');
+  // Drives the red dot on the Chat tab. Fetched independently of the mount fetch
+  // (a failure here must not collapse the whole page into the Not Found UI), and
+  // cleared the moment the user opens the chat.
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
   useEffect(() => {
     if (!identifier) return;
@@ -110,6 +114,25 @@ export default function GroupDetailsPage() {
     };
   }, [identifier]);
 
+  // Resolve the Chat tab's unread state separately from the mount fetch. Kept off
+  // the Promise.all so an older backend (or a transient failure) leaves the dot
+  // off rather than failing the whole page. Everyone starts unread by default,
+  // so a fresh group surfaces the dot until the chat is opened.
+  useEffect(() => {
+    if (!identifier) return;
+    let cancelled = false;
+    getUnreadStatus(identifier)
+      .then((unread) => {
+        if (!cancelled) setHasUnreadChat(unread);
+      })
+      .catch(() => {
+        /* non-fatal: leave the indicator off */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [identifier]);
+
   // No identifier in the query string: nothing to load, show the error UI early.
   if (!identifier) {
     return (
@@ -137,6 +160,17 @@ export default function GroupDetailsPage() {
         onBack={() => navigate('/groups')}
       />
     );
+  }
+
+  // Switch tabs; opening Chat clears the unread dot and marks the chat read
+  // server-side (fire-and-forget — the local clear is what the user sees, and a
+  // failed write just means the dot reappears on the next visit).
+  function handleSelectTab(key: TabKey) {
+    setActiveTab(key);
+    if (key === 'chat' && hasUnreadChat && identifier) {
+      setHasUnreadChat(false);
+      markMessagesRead(identifier).catch(() => {});
+    }
   }
 
   // getGroup returns userRole (NOT isOwner); admin is the owning role.
@@ -193,21 +227,31 @@ export default function GroupDetailsPage() {
 
         {/* Tab Navigation */}
         <div className="border-b border-secondary-200 dark:border-secondary-700">
-          <div className="flex gap-lg overflow-x-auto" role="tablist" aria-label="Group sections">
+          {/* pt-1 gives the Chat tab's unread dot room: overflow-x-auto forces
+              overflow-y to clip at the row's top edge, which would otherwise
+              shave the top off the dot's negative offset. */}
+          <div className="flex gap-lg overflow-x-auto pt-1" role="tablist" aria-label="Group sections">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 role="tab"
                 aria-selected={activeTab === tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`pb-sm px-xs text-sm font-medium border-b-2 transition-colors ${
+                onClick={() => handleSelectTab(tab.key)}
+                className={`relative pb-sm px-xs text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.key
                     ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                     : 'border-transparent text-secondary-600 dark:text-secondary-400 hover:text-secondary-900 dark:hover:text-secondary-100'
                 }`}
               >
                 {tab.label}
+                {tab.key === 'chat' && hasUnreadChat && (
+                  <span
+                    data-testid="chat-unread-indicator"
+                    aria-label="Unread messages"
+                    className="absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full bg-error-500"
+                  />
+                )}
               </button>
             ))}
           </div>

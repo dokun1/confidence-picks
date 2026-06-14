@@ -120,6 +120,18 @@ export async function getMessages(identifier, { limit = 50, offset = 0 } = {}) {
   }));
 }
 
+export async function getUnreadStatus(identifier) {
+  const res = await authFetch(`${apiBase()}/${identifier}/messages/unread`);
+  if (!res.ok) throw new Error('Failed to load unread status');
+  const data = await res.json();
+  return Boolean(data.hasUnread);
+}
+
+export async function markMessagesRead(identifier) {
+  const res = await authFetch(`${apiBase()}/${identifier}/messages/read`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to mark messages read');
+}
+
 export async function postMessage(identifier, message) {
   const res = await authFetch(`${apiBase()}/${identifier}/messages`, {
     method: 'POST',
