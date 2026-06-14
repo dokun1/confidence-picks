@@ -59,6 +59,10 @@ export function getMessages(
   opts?: { limit?: number; offset?: number },
 ): Promise<GroupMessage[]>;
 export function postMessage(identifier: string, message: string): Promise<GroupMessage>;
+// Whether the caller has unread chat messages in the group (drives the Chat tab's
+// red dot). markMessagesRead clears that state server-side when the chat is opened.
+export function getUnreadStatus(identifier: string): Promise<boolean>;
+export function markMessagesRead(identifier: string): Promise<void>;
 export function leaveGroup(identifier: string): Promise<void>;
 export function joinGroup(identifier: string): Promise<void>;
 export function updateGroup(

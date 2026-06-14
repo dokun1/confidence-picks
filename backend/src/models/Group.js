@@ -303,9 +303,43 @@ export class Group {
       VALUES ($1, $2, $3)
       RETURNING *
     `;
-    
+
     const result = await pool.query(query, [groupId, userId, message]);
     return result.rows[0];
+  }
+
+  // Whether the given user has unread chat messages in the group. A message is
+  // unread when it was authored by someone else and is newer than the user's last
+  // read marker. With no marker row (the default for everyone), every message from
+  // another member reads as unread — the intended "nobody has read chat yet" state.
+  static async getUnreadStatus(groupId, userId) {
+    const query = `
+      SELECT EXISTS (
+        SELECT 1
+        FROM group_messages gm
+        LEFT JOIN group_message_reads r
+          ON r.group_id = gm.group_id AND r.user_id = $2
+        WHERE gm.group_id = $1
+          AND gm.user_id <> $2
+          AND (r.last_read_at IS NULL OR gm.created_at > r.last_read_at)
+      ) AS has_unread
+    `;
+    const result = await pool.query(query, [groupId, userId]);
+    return result.rows[0].has_unread;
+  }
+
+  // Mark the group chat as read for the user (upsert the last_read_at marker to
+  // now). Called when a member opens the chat tab so the unread indicator clears.
+  static async markMessagesRead(groupId, userId) {
+    const query = `
+      INSERT INTO group_message_reads (group_id, user_id, last_read_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT (group_id, user_id)
+      DO UPDATE SET last_read_at = CURRENT_TIMESTAMP
+      RETURNING last_read_at
+    `;
+    const result = await pool.query(query, [groupId, userId]);
+    return result.rows[0].last_read_at;
   }
 
   // Update group
