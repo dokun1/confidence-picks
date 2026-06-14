@@ -45,6 +45,12 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     status: NORMALIZED[m.status] ?? 'SCHEDULED',
     homeScore: m.homeScore,
     awayScore: m.awayScore,
+    // Live progress (minute mark / half / descriptive state). `|| undefined` so
+    // an empty-string clock from a cached pre-kickoff row collapses to absent
+    // and liveClockLabel reads it as "no minute yet".
+    displayClock: m.displayClock || undefined,
+    statusDetail: m.statusDetail || undefined,
+    period: m.period,
     picked: draft[m.id],
     // Derive from the stage rather than trusting m.isKnockout: the stage route
     // doesn't actually emit that flag, so it arrives undefined and left the Draw

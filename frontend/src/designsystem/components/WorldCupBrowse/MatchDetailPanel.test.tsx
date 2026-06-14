@@ -110,4 +110,48 @@ describe('MatchDetailPanel', () => {
     expect(screen.getByText('Possession')).toBeInTheDocument();
     expect(screen.getByText('Raúl Jiménez')).toBeInTheDocument();
   });
+
+  it('shows the live minute mark alongside LIVE for an in-progress game', () => {
+    const game = baseGame({
+      status: 'IN_PROGRESS',
+      kickoff: '2026-06-01T17:00:00Z', // in the past → locked
+      homeScore: 1,
+      awayScore: 0,
+      displayClock: "63'",
+      statusDetail: '2nd Half',
+      period: 2,
+    });
+    render(
+      <MatchDetailPanel
+        game={game}
+        detail={null}
+        loading={false}
+        now={new Date('2026-06-01T18:00:00Z')}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('detail-status')).toHaveTextContent("LIVE · 63'");
+  });
+
+  it('shows plain FULL TIME (no clock) for a final game', () => {
+    const game = baseGame({
+      status: 'FINAL',
+      kickoff: '2026-06-01T17:00:00Z',
+      homeScore: 2,
+      awayScore: 0,
+      displayClock: "90'",
+    });
+    render(
+      <MatchDetailPanel
+        game={game}
+        detail={null}
+        loading={false}
+        now={new Date('2026-06-11T00:00:00Z')}
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('detail-status')).toHaveTextContent('FULL TIME');
+  });
 });

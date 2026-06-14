@@ -1,5 +1,5 @@
 import type { BrowseGame, MatchResult } from '../../../lib/wcGamesView';
-import { isLocked, outcomeOf, resultShade, teamsDecided } from '../../../lib/wcGamesView';
+import { isLocked, liveClockLabel, outcomeOf, resultShade, teamsDecided } from '../../../lib/wcGamesView';
 import ChoiceButton from './ChoiceButton';
 import { SHADE_TINT } from './resultShade';
 
@@ -73,6 +73,9 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
+  // Minute mark for a live match ("63'" / "HT"); null otherwise. Shown next to
+  // the LIVE badge so the card hints at how far along the game is.
+  const clock = liveClockLabel(game);
 
   // Knockout slots are scheduled with placeholders before participants are
   // known; no outcome is pickable until both teams are decided. Shares the
@@ -89,6 +92,11 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
           <span className={`font-bold uppercase tracking-wide ${game.status === 'IN_PROGRESS' ? 'text-error-500' : 'text-content-subtle'}`}>
             {lead}
           </span>
+          {clock && (
+            <span className="ml-xs font-bold tabular-nums text-error-500" data-testid={`match-clock-${game.id}`}>
+              {clock}
+            </span>
+          )}
           <span className="ml-xs font-semibold text-content-muted">
             {game.home.name} <span className="text-content-subtle">vs</span> {game.away.name}
           </span>

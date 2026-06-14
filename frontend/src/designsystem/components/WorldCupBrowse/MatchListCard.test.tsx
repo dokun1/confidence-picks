@@ -63,4 +63,34 @@ describe('MatchListCard', () => {
     render(<MatchListCard game={game()} now={NOW} onPick={noop} />);
     expect(screen.queryByRole('button', { name: /more/i })).toBeNull();
   });
+
+  it('shows the live minute mark next to the LIVE badge for an in-progress game', () => {
+    render(
+      <MatchListCard
+        game={game({ id: 77, status: 'IN_PROGRESS', displayClock: "63'", homeScore: 1, awayScore: 0 })}
+        now={NOW}
+        onPick={noop}
+      />,
+    );
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+    expect(screen.getByTestId('match-clock-77')).toHaveTextContent("63'");
+  });
+
+  it('collapses a halftime break to HT on the card', () => {
+    render(
+      <MatchListCard
+        game={game({ id: 78, status: 'IN_PROGRESS', displayClock: "45'", statusDetail: 'Halftime' })}
+        now={NOW}
+        onPick={noop}
+      />,
+    );
+    expect(screen.getByTestId('match-clock-78')).toHaveTextContent('HT');
+  });
+
+  it('renders no clock chip for a scheduled or final game', () => {
+    const { rerender } = render(<MatchListCard game={game({ id: 79 })} now={NOW} onPick={noop} />);
+    expect(screen.queryByTestId('match-clock-79')).toBeNull();
+    rerender(<MatchListCard game={game({ id: 79, status: 'FINAL', homeScore: 2, awayScore: 1 })} now={NOW} onPick={noop} />);
+    expect(screen.queryByTestId('match-clock-79')).toBeNull();
+  });
 });
