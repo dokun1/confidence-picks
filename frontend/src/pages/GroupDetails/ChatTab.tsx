@@ -89,24 +89,33 @@ export default function ChatTab(props: ChatTabProps) {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className='mt-lg flex items-start gap-sm'>
-        <div className='flex-1'>
-          <TextField
-            value={text}
-            onChange={setText}
-            placeholder='Type your message...'
-            disabled={posting}
-          />
-        </div>
-        <Button
-          type='submit'
-          disabled={text.trim().length === 0 || posting}
-          loading={posting}
-        >
-          Send
-        </Button>
-      </form>
-      {error && <p className='mt-sm text-sm text-error-600 dark:text-error-400'>{error}</p>}
+      {/* Spacer so the sticky bar never obscures the last message. */}
+      <div className='h-20' aria-hidden='true' />
+
+      {/* Sticky compose bar — pinned to the viewport bottom so the user can
+          type from anywhere in the message list. Negative margins cancel the
+          page gutters (px-sm / sm:px-lg) so the bar spans edge-to-edge,
+          matching the WorldCupPicksTab sticky submit bar pattern. */}
+      <div className='sticky bottom-0 -mx-sm sm:-mx-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95'>
+        {error && <p className='mb-sm text-sm text-error-600 dark:text-error-400'>{error}</p>}
+        <form onSubmit={handleSubmit} className='flex items-start gap-sm'>
+          <div className='flex-1'>
+            <TextField
+              value={text}
+              onChange={setText}
+              placeholder='Type your message...'
+              disabled={posting}
+            />
+          </div>
+          <Button
+            type='submit'
+            disabled={text.trim().length === 0 || posting}
+            loading={posting}
+          >
+            Send
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
