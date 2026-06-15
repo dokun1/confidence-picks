@@ -81,4 +81,12 @@ test('group chat tab renders the message log without a card or duplicate title',
   // with no card wrapper repeating the heading.
   await expect(page.getByRole('tab', { name: 'Chat' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Chat' })).toHaveCount(0)
+
+  // The compose bar must be pinned to the viewport bottom so it stays visible
+  // while the user scrolls through the message history.
+  const composeBar = page.getByPlaceholder('Type your message...').locator('xpath=ancestor::div[contains(@class,"sticky")]').first()
+  const position = await composeBar.evaluate((el) => window.getComputedStyle(el).position)
+  const bottom = await composeBar.evaluate((el) => window.getComputedStyle(el).bottom)
+  expect(position).toBe('sticky')
+  expect(bottom).toBe('0px')
 })

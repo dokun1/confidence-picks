@@ -73,6 +73,19 @@ describe('ChatTab', () => {
     expect(container.querySelector('.max-h-96')).toBeNull();
   });
 
+  it('compose bar wrapper is sticky to the bottom of the viewport', () => {
+    const { container } = renderChat();
+    // The sticky wrapper must carry both classes so the browser pins it.
+    const stickyBar = container.querySelector('.sticky.bottom-0');
+    expect(stickyBar).not.toBeNull();
+  });
+
+  it('renders a spacer above the sticky bar so the last message is not obscured', () => {
+    const { container } = renderChat();
+    const spacer = container.querySelector('[aria-hidden="true"]');
+    expect(spacer).not.toBeNull();
+  });
+
   it('renders each seeded message author and content from initialMessages', () => {
     renderChat();
     for (const msg of initialMessages) {
