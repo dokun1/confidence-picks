@@ -500,9 +500,13 @@ export default function WorldCupPicksTab({
           end. It lives inside this component, so it appears when the picks
           surface mounts (e.g. entering the group's Picks tab) and disappears
           when it unmounts. The negative margins cancel the px-sm/sm:px-lg
-          gutters both host pages use, so the bar spans edge-to-edge. */}
+          gutters both host pages use, so the bar spans edge-to-edge. z-20
+          keeps it above the list's sticky search/filter controls (z-10) as the
+          two bars cross while scrolling, but below the match detail panel
+          (z-40) — so the filter bar reads as tethered to the content sliding
+          under it while this bar floats cleanly on top. */}
       {fetchState.matches.length > 0 && (
-        <div className="sticky bottom-0 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
+        <div className="sticky bottom-0 z-20 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">
               <span className="text-sm text-content-muted">
