@@ -263,6 +263,25 @@ export class GameService {
     }
   }
 
+  // The seven World Cup stages, in calendar order. Kept here next to the fetch
+  // so the single-request "all stages" endpoint and any future sweep share one
+  // source of truth.
+  static WORLD_CUP_STAGE_ORDER = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final'];
+
+  // One-shot fetch of every stage, flattened in calendar order. Lets the client
+  // pull the whole tournament slate in a SINGLE round-trip instead of fanning out
+  // to seven /stage/:stage requests on every Picks-tab mount. Each stage still
+  // routes through getWorldCupStage, so the per-stage DB cache + live-refresh
+  // rules are unchanged; this only collapses the fan-out to the network edge.
+  static async getAllWorldCupStages(forceRefresh = false) {
+    const perStage = await Promise.all(
+      GameService.WORLD_CUP_STAGE_ORDER.map((stage) =>
+        GameService.getWorldCupStage(stage, forceRefresh),
+      ),
+    );
+    return perStage.flat();
+  }
+
   // Read the homeAway side ESPN flags as the result. ESPN sets
   // competitors[].winner === true on the advancing team — notably on PK
   // shootouts, where the 90' scoreline is level and is the only signal of who

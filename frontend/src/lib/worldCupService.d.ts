@@ -29,6 +29,13 @@ export interface LeaderboardResponse {
 export function getStageMatches(stage: WorldCupStage): Promise<StageMatchesResponse>;
 
 /**
+ * Fetch every tournament stage in a SINGLE request — the games are flattened
+ * across all stages in calendar order. Replaces the client-side seven-stage
+ * fan-out so a cold Picks-tab load is one round-trip.
+ */
+export function getAllWorldCupStages(): Promise<StageMatchesResponse>;
+
+/**
  * Persist a member's World Cup picks for a group. Each pick names a game and the
  * picked result (home/away/draw). Resolves to the parsed response body.
  */

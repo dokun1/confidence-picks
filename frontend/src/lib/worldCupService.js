@@ -31,6 +31,19 @@ export async function getStageMatches(stage) {
   return res.json();
 }
 
+// Whole-tournament slate in ONE request. Replaces the client-side seven-stage
+// fan-out (Promise.all over getStageMatches) so a cold Picks-tab load is a single
+// round-trip. Returns the same { games, count, cached } shape as getStageMatches,
+// with games already flattened across every stage in calendar order.
+export async function getAllWorldCupStages() {
+  const res = await authFetch(`${apiBase()}/api/games/world-cup-2026/stages`);
+  if (!res.ok) {
+    const data = await res.json().catch(()=>({}));
+    throw new Error(data.error || 'Failed to load matches');
+  }
+  return res.json();
+}
+
 export async function submitWorldCupPicks(groupId, picks) {
   const res = await authFetch(`${apiBase()}/api/picks/group/${groupId}/world-cup`, { method: 'POST', body: JSON.stringify({ picks }) });
   if (!res.ok) {

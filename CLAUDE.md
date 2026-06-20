@@ -130,18 +130,54 @@ render's data leaks into the next — most visibly breaking the "shows the loadi
 state" cases (a warm cache means no spinner). The cache module is imported
 *real* (unmocked) in those tests, alongside the mocked `worldCupService.js`.
 
+### Follow-ups: cold-load round-trips + the shell waterfall (2026-06, done)
+
+Both done in the pass that followed the SWR cache.
+
+**1. Single-request stage slate.** The Picks tab's seven-stage fan-out is now one
+round-trip. `GameService.getAllWorldCupStages(forceRefresh)`
+(`backend/src/services/GameService.js`) `Promise.all`s the seven
+`getWorldCupStage` reads server-side and flattens them in calendar order
+(`WORLD_CUP_STAGE_ORDER`); the per-stage DB cache + live-refresh rules are
+unchanged. Exposed at `GET /api/games/world-cup-2026/stages`
+(`backend/src/routes/api.js`, registered before the NFL `/:year/...` param route
+like the other literal world-cup routes) returning the same
+`{ games, count, cached }` shape with the grafted `winnerTeamId`. Frontend:
+`getAllWorldCupStages()` in `worldCupService.js`; `WorldCupPicksTab` calls it in
+place of `Promise.all(WORLD_CUP_STAGES.map(getStageMatches))` in BOTH the initial
+fetch and the live-poll `refreshMatchesSilently`. `getStageMatches` is still
+exported (single-stage callers/tests), but no component fans out anymore.
+
+**2. Broke the `GroupDetailsPage` waterfall.** Two changes:
+- The shell `Promise.all` is now just `[getGroup, getMembers]` — `getMessages`
+  was dropped from the critical path and is **lazy-loaded the first time the Chat
+  tab opens** (`ensureMessagesLoaded`, guarded so it fetches once; the tab shows
+  a spinner until `messagesLoaded`). Chat history no longer delays first paint.
+- For `world_cup_2026` pools the page **prefetches the leaderboard in parallel**
+  with the shell: as soon as `getGroup` resolves and the pool type is known, it
+  fires `getWorldCupLeaderboard` and `writeCache`s it under
+  `wcCacheKeys.leaderboard(id)`. The default Leaderboard tab seeds from that
+  cache and paints instantly instead of starting its fetch only after the shell
+  resolves. (The tab still revalidates on mount — one extra background call, by
+  SWR design.)
+
+**Test-seam notes:**
+- `WorldCupPicksTab.test.tsx`, `WorldCupPicksPage.test.tsx`, and
+  `GroupDetailsPage.test.tsx` now mock `getAllWorldCupStages` (a single resolved
+  `{ games }`) instead of per-stage `getStageMatches`.
+- `GroupDetailsPage.test.tsx` imports the **real** cache and calls
+  `clearWorldCupCache()` in `beforeEach` (the leaderboard prefetch + the embedded
+  WC tabs both touch it); chat assertions are now `await findByText(...)` because
+  messages lazy-load; and `getMessages` must NOT be called on mount.
+- Backend: `tests/api-worldcup-route.test.js` covers the `/stages` route (flattened
+  multi-stage payload + grafted knockout `winnerTeamId`).
+
 ### Open follow-ups (not yet done)
 
-- Collapse the seven-stage fan-out into one backend endpoint
-  (`/api/games/world-cup-2026/stages` or `?stage=all`) so even a cold Picks load
-  is a single round-trip. The backend already DB-caches per stage
-  (`api.js` → `GameService.getWorldCupStage`), so this is mostly a route + a
-  `getAllWorldCupStages()` service wrapper.
-- Break the `GroupDetailsPage` waterfall: kick off the leaderboard fetch in
-  parallel with the shell instead of after it, and lazy-load `getMessages` when
-  the Chat tab opens rather than eagerly on mount.
 - The NFL `PicksTab`/scoreboard via `picksService.js` has the same
-  re-fetch-on-mount shape; the same cache pattern applies.
+  re-fetch-on-mount shape; the SWR cache pattern (and the parallel-prefetch trick)
+  applies there too. The NFL `LeaderboardTab` has no cache yet, so the
+  parallel-prefetch optimization is currently World-Cup-only.
 
 ## Commands
 

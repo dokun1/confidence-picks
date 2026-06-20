@@ -4,13 +4,12 @@ import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
 import {
-  WORLD_CUP_STAGES,
   type MatchPick,
   type MatchPickResult,
   type WorldCupMatch,
 } from '../../lib/types';
 import {
-  getStageMatches,
+  getAllWorldCupStages,
   submitWorldCupPicks,
   getMyWorldCupPicks,
   getUserWorldCupPicks,
@@ -145,10 +144,10 @@ export default function WorldCupPicksTab({
     if (isCold) setFetchState((s) => ({ ...s, loading: true, error: '' }));
     (async () => {
       try {
-        // Fetch every stage in parallel and flatten into one list; the browse list handles ordering/grouping.
-        const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
+        // One request for the whole tournament; the browse list handles ordering/grouping.
+        const resp = await getAllWorldCupStages();
         if (cancelled) return;
-        const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+        const matches = Array.isArray(resp?.games) ? resp.games : [];
         writeCache(wcCacheKeys.stages, matches);
         setFetchState({ loading: false, error: '', matches });
       } catch (err) {
@@ -179,8 +178,8 @@ export default function WorldCupPicksTab({
   // events into the rows (and their timelines) while a match is live.
   const refreshMatchesSilently = useCallback(async () => {
     try {
-      const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
-      const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+      const resp = await getAllWorldCupStages();
+      const matches = Array.isArray(resp?.games) ? resp.games : [];
       // Keep the cache current so a tab switch mid-tournament re-seeds from the
       // latest scores/statuses, not a stale pre-kickoff slate.
       writeCache(wcCacheKeys.stages, matches);
