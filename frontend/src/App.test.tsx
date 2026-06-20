@@ -11,8 +11,12 @@ import { AuthProvider } from './contexts/AuthContext';
 vi.mock('./lib/authService.js', () => ({
   default: {
     getUser: vi.fn(),
-    // Returns undefined → AuthProvider skips the silent-refresh path, keeping
-    // these routing tests synchronous.
+    // Returns undefined → AuthProvider has no cached profile to hydrate.
+    getCachedUser: vi.fn(),
+    // Returns undefined (falsy) → AuthProvider's effect treats the token as
+    // expired, but with no refresh token below it skips the silent-refresh
+    // path entirely, keeping these routing tests synchronous.
+    isAccessTokenValid: vi.fn(),
     getRefreshToken: vi.fn(),
     setTokens: vi.fn(),
     getCurrentUser: vi.fn(),
