@@ -23,6 +23,9 @@ import {
   submitUserWorldCupPicks,
 } from '../../lib/worldCupService.js';
 import { getMyGroups } from '../../lib/groupsService.js';
+// Real (unmocked) cache module — the tab seeds its match slate from it, so clear
+// it between cases or a prior render's matches leak into the next.
+import { clearWorldCupCache } from '../../lib/worldCupCache';
 const mockGetStageMatches = vi.mocked(getStageMatches);
 const mockSubmitPicks = vi.mocked(submitWorldCupPicks);
 const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
@@ -106,6 +109,7 @@ function pickButton(homeName: string, label: string): HTMLElement {
 describe('WorldCupPicksTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWorldCupCache();
     mockGetStageMatches.mockImplementation(stageResponder([groupMatch, r16Match]));
     // Default: source group is the user's only WC group. Tests exercising the
     // dropdown re-mock with multiple groups.
@@ -153,6 +157,29 @@ describe('WorldCupPicksTab', () => {
     renderTab();
     expect(await screen.findByText('Loading matches…')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
+  });
+
+  // Stale-while-revalidate: re-entering the Picks tab must paint the cached
+  // match slate immediately — no "Loading matches…" blank behind the seven-stage
+  // fan-out — while a background revalidate runs.
+  it('paints the cached match slate instantly on a re-mount without a loading flash', async () => {
+    // First mount warms the stage cache.
+    const first = renderTab();
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
+    first.unmount();
+
+    // Second mount: a never-resolving fetch would normally pin the loading state,
+    // but the cached slate paints first so "Loading matches…" never appears.
+    mockGetStageMatches.mockReturnValue(new Promise<never>(() => {}));
+    renderTab();
+    expect(screen.queryByText('Loading matches…')).not.toBeInTheDocument();
+    expect(
+      screen.getByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('fetches every tournament stage and renders matches in the flat browse list', async () => {
