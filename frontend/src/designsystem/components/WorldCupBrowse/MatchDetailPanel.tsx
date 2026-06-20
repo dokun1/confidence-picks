@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BrowseGame, MatchResult } from '../../../lib/wcGamesView';
 import { isLocked, liveClockLabel } from '../../../lib/wcGamesView';
 import type { EventDetail, MatchStat, PlayerMark, TeamLineup } from '../../../lib/wcMatchDetail';
@@ -156,10 +156,44 @@ export default function MatchDetailPanel({ game, detail, loading, now, onPick, o
   const meta = venue ? `${dateLabel} · ${timeLabel} · ${venue}` : `${dateLabel} · ${timeLabel}`;
   const events = game.events ?? [];
 
+  // Lock the page behind the overlay while it's open. The panel only mounts
+  // when open, so this effect's lifetime == the overlay's. iOS Safari ignores
+  // `body { overflow: hidden }`, so we pin the body with `position: fixed` and
+  // restore the scroll position on unmount — the only reliable cross-browser
+  // lock. `overscroll-contain` on the scroll area below stops scroll chaining;
+  // this stops the background drifting under the dim backdrop.
+  useEffect(() => {
+    const { scrollY } = window;
+    const body = document.body;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 flex h-full w-full max-w-[460px] flex-col overflow-y-auto bg-surface shadow-2xl">
+      <div className="relative z-10 flex h-full w-full max-w-[460px] flex-col overflow-y-auto overscroll-contain bg-surface shadow-2xl">
         {/* header */}
         <div className="px-md pb-sm pt-md">
           <button type="button" onClick={onClose} className="mb-md text-sm font-semibold text-content-muted">‹ Back</button>
