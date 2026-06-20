@@ -9,6 +9,9 @@ vi.mock('../../lib/worldCupService.js', () => ({
 }));
 
 import { getWorldCupLeaderboard } from '../../lib/worldCupService.js';
+// Real (unmocked) cache module — the tab seeds initial state from it, so it must
+// be cleared between cases or a prior render's rows leak into the next.
+import { clearWorldCupCache } from '../../lib/worldCupCache';
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
 
 const identifier = 'wc-group';
@@ -41,7 +44,10 @@ const rows: TournamentLeaderboardRow[] = [
 ];
 
 describe('WorldCupLeaderboardTab', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearWorldCupCache();
+  });
 
   it('fetches and renders the tournament leaderboard table', async () => {
     mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: rows });
@@ -88,5 +94,43 @@ describe('WorldCupLeaderboardTab', () => {
     await waitFor(() => {
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
+  });
+
+  // Stale-while-revalidate: a second mount (e.g. switching back to the tab) must
+  // paint the cached standings synchronously — no "Loading…" blank — while a
+  // background refresh runs.
+  it('paints cached standings instantly on a re-mount without a loading flash', async () => {
+    mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: rows });
+
+    // First mount warms the cache.
+    const first = render(<WorldCupLeaderboardTab identifier={identifier} />);
+    await screen.findByRole('table');
+    first.unmount();
+
+    // Second mount: rows are present immediately and the spinner never shows.
+    render(<WorldCupLeaderboardTab identifier={identifier} />);
+    expect(screen.queryByText('Loading leaderboard…')).not.toBeInTheDocument();
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('keeps showing cached standings when a background revalidate fails', async () => {
+    mockGetWorldCupLeaderboard.mockResolvedValueOnce({ leaderboard: rows });
+
+    const first = render(<WorldCupLeaderboardTab identifier={identifier} />);
+    await screen.findByRole('table');
+    first.unmount();
+
+    // The revalidate on re-mount rejects, but the cached table must stay put and
+    // no error message replaces it.
+    mockGetWorldCupLeaderboard.mockRejectedValueOnce(new Error('flaky network'));
+    render(<WorldCupLeaderboardTab identifier={identifier} />);
+
+    await waitFor(() => {
+      expect(mockGetWorldCupLeaderboard).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText('flaky network')).not.toBeInTheDocument();
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('Alice')).toBeInTheDocument();
   });
 });
