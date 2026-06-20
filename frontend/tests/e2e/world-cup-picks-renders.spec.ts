@@ -1,14 +1,12 @@
 import { test, expect } from '@playwright/test'
 
-// WorldCupPicksPage sits behind ProtectedRoute and renders a stage-grouped match
-// list. It fetches every WORLD_CUP_STAGES entry in parallel via
-// worldCupService.getStageMatches -> GET ${apiBaseUrl}/api/games/world-cup-2026/stage/<stage>.
+// WorldCupPicksPage sits behind ProtectedRoute and renders a flat match list. It
+// pulls the whole tournament in one request via
+// worldCupService.getAllWorldCupStages -> GET ${apiBaseUrl}/api/games/world-cup-2026/stages.
 // We seed a valid, far-future JWT-shaped accessToken in localStorage (same
 // pattern as profile-page-shows-user.spec.ts) so AuthProvider treats us as
-// authenticated and ProtectedRoute lets /world-cup through, then stub the stage
-// endpoint: only the group-stage request returns the synthetic match (the other
-// six stages return an empty list) so the single match renders once with no
-// duplicate React keys.
+// authenticated and ProtectedRoute lets /world-cup through, then stub the stages
+// endpoint with the synthetic match slate.
 //
 // Route coverage: the live App route is '/world-cup' (see App.tsx), which is
 // what we navigate below. check-page-spec-coverage.mjs, however, derives the
@@ -37,64 +35,56 @@ test('world cup picks page renders the stage match list with pick buttons', asyn
   // precedence — the specific stage stub below must win over this catch-all.
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
 
-  // Stub the per-stage endpoint. The page fetches all seven stages; the group
-  // request returns the playable match, the r32 request returns a knockout
-  // fixture whose away slot is still ESPN's TBD placeholder, and every other
-  // stage returns an empty list so each match renders exactly once.
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const url = route.request().url()
-    let games: object[] = []
-    if (url.includes('/stage/group')) {
-      games = [
-        {
-          id: 101,
-          stage: 'group',
-          isKnockout: false,
-          status: 'SCHEDULED',
-          homeScore: 0,
-          awayScore: 0,
-          gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          winnerTeamId: null,
-          homeTeam: {
-            id: '1',
-            name: 'Mexico',
-            abbreviation: 'MEX',
-            logo: 'https://example.test/mex.png',
-          },
-          awayTeam: {
-            id: '2',
-            name: 'Canada',
-            abbreviation: 'CAN',
-            logo: 'https://example.test/can.png',
-          },
+  // Stub the whole-tournament endpoint (GET .../stages). It returns the full flat
+  // slate in one request: the playable group match plus an r32 knockout fixture
+  // whose away slot is still ESPN's TBD placeholder.
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    const games = [
+      {
+        id: 101,
+        stage: 'group',
+        isKnockout: false,
+        status: 'SCHEDULED',
+        homeScore: 0,
+        awayScore: 0,
+        gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        winnerTeamId: null,
+        homeTeam: {
+          id: '1',
+          name: 'Mexico',
+          abbreviation: 'MEX',
+          logo: 'https://example.test/mex.png',
         },
-      ]
-    } else if (url.includes('/stage/r32')) {
-      games = [
-        {
-          id: 201,
-          stage: 'r32',
-          isKnockout: true,
-          status: 'SCHEDULED',
-          homeScore: 0,
-          awayScore: 0,
-          gameDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          winnerTeamId: null,
-          homeTeam: {
-            id: '3',
-            name: 'France',
-            abbreviation: 'FRA',
-            logo: 'https://example.test/fra.png',
-          },
-          awayTeam: {
-            id: 'tbd-1',
-            name: 'TBD',
-            abbreviation: 'TBD',
-            logo: '',
-          },
+        awayTeam: {
+          id: '2',
+          name: 'Canada',
+          abbreviation: 'CAN',
+          logo: 'https://example.test/can.png',
         },
-      ]
-    }
+      },
+      {
+        id: 201,
+        stage: 'r32',
+        isKnockout: true,
+        status: 'SCHEDULED',
+        homeScore: 0,
+        awayScore: 0,
+        gameDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        winnerTeamId: null,
+        homeTeam: {
+          id: '3',
+          name: 'France',
+          abbreviation: 'FRA',
+          logo: 'https://example.test/fra.png',
+        },
+        awayTeam: {
+          id: 'tbd-1',
+          name: 'TBD',
+          abbreviation: 'TBD',
+          logo: '',
+        },
+      },
+    ]
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -197,36 +187,33 @@ test('makes world cup picks inline on the group detail Picks tab', async ({ page
     })
   })
 
-  // Same per-stage stub as the page-level test: the group stage returns one match,
-  // every other stage returns an empty list so the match renders exactly once.
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const isGroup = route.request().url().includes('/stage/group')
-    const games = isGroup
-      ? [
-          {
-            id: 101,
-            stage: 'group',
-            isKnockout: false,
-            status: 'SCHEDULED',
-            homeScore: 0,
-            awayScore: 0,
-            gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            winnerTeamId: null,
-            homeTeam: {
-              id: '1',
-              name: 'Mexico',
-              abbreviation: 'MEX',
-              logo: 'https://example.test/mex.png',
-            },
-            awayTeam: {
-              id: '2',
-              name: 'Canada',
-              abbreviation: 'CAN',
-              logo: 'https://example.test/can.png',
-            },
-          },
-        ]
-      : []
+  // Same single-request stub as the page-level test: the whole-tournament endpoint
+  // returns the one group match.
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    const games = [
+      {
+        id: 101,
+        stage: 'group',
+        isKnockout: false,
+        status: 'SCHEDULED',
+        homeScore: 0,
+        awayScore: 0,
+        gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        winnerTeamId: null,
+        homeTeam: {
+          id: '1',
+          name: 'Mexico',
+          abbreviation: 'MEX',
+          logo: 'https://example.test/mex.png',
+        },
+        awayTeam: {
+          id: '2',
+          name: 'Canada',
+          abbreviation: 'CAN',
+          logo: 'https://example.test/can.png',
+        },
+      },
+    ]
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

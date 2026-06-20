@@ -66,26 +66,23 @@ async function stubGroup(page: Page, userRole: 'admin' | 'member') {
   })
 }
 
-// One group-stage match; every other stage is empty so it renders exactly once.
+// One group-stage match, served via the single whole-tournament endpoint.
 async function stubStages(page: Page) {
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const isGroup = route.request().url().includes('/stage/group')
-    const games = isGroup
-      ? [
-          {
-            id: 101,
-            stage: 'group',
-            isKnockout: false,
-            status: 'SCHEDULED',
-            homeScore: 0,
-            awayScore: 0,
-            gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            winnerTeamId: null,
-            homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: 'https://example.test/mex.png' },
-            awayTeam: { id: '2', name: 'Canada', abbreviation: 'CAN', logo: 'https://example.test/can.png' },
-          },
-        ]
-      : []
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    const games = [
+      {
+        id: 101,
+        stage: 'group',
+        isKnockout: false,
+        status: 'SCHEDULED',
+        homeScore: 0,
+        awayScore: 0,
+        gameDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        winnerTeamId: null,
+        homeTeam: { id: '1', name: 'Mexico', abbreviation: 'MEX', logo: 'https://example.test/mex.png' },
+        awayTeam: { id: '2', name: 'Canada', abbreviation: 'CAN', logo: 'https://example.test/can.png' },
+      },
+    ]
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

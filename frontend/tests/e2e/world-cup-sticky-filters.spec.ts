@@ -41,9 +41,9 @@ async function seed(page: import('@playwright/test').Page) {
     localStorage.setItem('accessToken', `header.${btoa(JSON.stringify(payload))}.sig`)
   })
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const list = route.request().url().includes('/stage/group') ? games : []
-    await route.fulfill({ json: { games: list, count: list.length, cached: false } })
+  // One request for the whole tournament (GET .../stages) → return the full slate.
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    await route.fulfill({ json: { games, count: games.length, cached: false } })
   })
   await page.goto('/world-cup?group=test-group')
   await expect(page.getByRole('heading', { name: 'World Cup 2026 Picks' })).toBeVisible()
