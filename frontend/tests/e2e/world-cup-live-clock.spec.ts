@@ -37,42 +37,38 @@ test('world cup picks page shows the live minute mark on the card and in the det
     route.fulfill({ json: { venue: null, stats: [], lineups: null } }),
   )
 
-  // Stub the per-stage endpoint. Only the group stage returns the live match;
-  // every other stage returns an empty list so the match renders exactly once.
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const isGroup = route.request().url().includes('/stage/group')
-    const games = isGroup
-      ? [
-          {
-            id: 301,
-            espnId: '760603',
-            stage: 'group',
-            isKnockout: false,
-            status: 'IN_PROGRESS',
-            homeScore: 1,
-            awayScore: 0,
-            // Kicked off ~70 minutes ago; the Live view filters purely on status.
-            gameDate: new Date(Date.now() - 70 * 60 * 1000).toISOString(),
-            winnerTeamId: null,
-            // ESPN live-match progress fields, parsed by the backend and persisted.
-            displayClock: "63'",
-            statusDetail: '2nd Half',
-            period: 2,
-            homeTeam: {
-              id: '1',
-              name: 'Argentina',
-              abbreviation: 'ARG',
-              logo: 'https://example.test/arg.png',
-            },
-            awayTeam: {
-              id: '2',
-              name: 'France',
-              abbreviation: 'FRA',
-              logo: 'https://example.test/fra.png',
-            },
-          },
-        ]
-      : []
+  // Stub the whole-tournament endpoint (GET .../stages) with the single live match.
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    const games = [
+      {
+        id: 301,
+        espnId: '760603',
+        stage: 'group',
+        isKnockout: false,
+        status: 'IN_PROGRESS',
+        homeScore: 1,
+        awayScore: 0,
+        // Kicked off ~70 minutes ago; the Live view filters purely on status.
+        gameDate: new Date(Date.now() - 70 * 60 * 1000).toISOString(),
+        winnerTeamId: null,
+        // ESPN live-match progress fields, parsed by the backend and persisted.
+        displayClock: "63'",
+        statusDetail: '2nd Half',
+        period: 2,
+        homeTeam: {
+          id: '1',
+          name: 'Argentina',
+          abbreviation: 'ARG',
+          logo: 'https://example.test/arg.png',
+        },
+        awayTeam: {
+          id: '2',
+          name: 'France',
+          abbreviation: 'FRA',
+          logo: 'https://example.test/fra.png',
+        },
+      },
+    ]
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

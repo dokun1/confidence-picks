@@ -4,19 +4,19 @@ import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
 import {
-  WORLD_CUP_STAGES,
   type MatchPick,
   type MatchPickResult,
   type WorldCupMatch,
 } from '../../lib/types';
 import {
-  getStageMatches,
+  getAllWorldCupStages,
   submitWorldCupPicks,
   getMyWorldCupPicks,
   getUserWorldCupPicks,
   submitUserWorldCupPicks,
 } from '../../lib/worldCupService.js';
 import { getMyGroups } from '../../lib/groupsService.js';
+import { peekCache, writeCache, wcCacheKeys } from '../../lib/worldCupCache';
 import { pollIntervalFor } from '../../lib/matchPolling';
 import SaveTargetsDropdown, { type SaveTarget } from '../../components/SaveTargetsDropdown';
 import PickPersonSelector, { type PickPersonOption } from '../../components/PickPersonSelector';
@@ -115,10 +115,16 @@ export default function WorldCupPicksTab({
     : personOptions.find((m) => m.id === selectedUserId)?.name ?? 'this member';
   const selectedFirstName = selectedName.split(' ')[0];
 
+  // Seed the match slate from cache so re-entering the Picks tab (or revisiting
+  // the group) paints the tournament instantly instead of blanking behind the
+  // seven-stage fetch. The stage schedule is tournament-global, so the cache key
+  // isn't group-scoped; live scores/statuses are reconciled by the fetch below
+  // and the background poll.
+  const cachedStages = peekCache<WorldCupMatch[]>(wcCacheKeys.stages);
   const [fetchState, setFetchState] = useState<FetchState>({
     loading: false,
     error: '',
-    matches: [],
+    matches: cachedStages ?? [],
   });
   const [draft, setDraft] = useState<DraftMap>({});
   const [submitting, setSubmitting] = useState(false);
@@ -132,20 +138,29 @@ export default function WorldCupPicksTab({
 
   useEffect(() => {
     let cancelled = false;
-    setFetchState((s) => ({ ...s, loading: true, error: '' }));
+    // Only show the blocking "Loading matches…" state on a cold load. With a warm
+    // cache the slate is already on screen, so this fetch just revalidates it.
+    const isCold = peekCache(wcCacheKeys.stages) === undefined;
+    if (isCold) setFetchState((s) => ({ ...s, loading: true, error: '' }));
     (async () => {
       try {
-        // Fetch every stage in parallel and flatten into one list; the browse list handles ordering/grouping.
-        const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
+        // One request for the whole tournament; the browse list handles ordering/grouping.
+        const resp = await getAllWorldCupStages();
         if (cancelled) return;
-        const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+        const matches = Array.isArray(resp?.games) ? resp.games : [];
+        writeCache(wcCacheKeys.stages, matches);
         setFetchState({ loading: false, error: '', matches });
       } catch (err) {
         if (cancelled) return;
+        // Keep the cached slate on a failed revalidate; only surface the error
+        // when there was nothing to show.
         setFetchState((s) => ({
           ...s,
           loading: false,
-          error: `Failed to fetch matches: ${err instanceof Error ? err.message : 'unknown error'}`,
+          error:
+            peekCache(wcCacheKeys.stages) === undefined
+              ? `Failed to fetch matches: ${err instanceof Error ? err.message : 'unknown error'}`
+              : s.error,
         }));
       }
     })();
@@ -163,8 +178,11 @@ export default function WorldCupPicksTab({
   // events into the rows (and their timelines) while a match is live.
   const refreshMatchesSilently = useCallback(async () => {
     try {
-      const responses = await Promise.all(WORLD_CUP_STAGES.map((stage) => getStageMatches(stage)));
-      const matches = responses.flatMap((r) => (Array.isArray(r?.games) ? r.games : []));
+      const resp = await getAllWorldCupStages();
+      const matches = Array.isArray(resp?.games) ? resp.games : [];
+      // Keep the cache current so a tab switch mid-tournament re-seeds from the
+      // latest scores/statuses, not a stale pre-kickoff slate.
+      writeCache(wcCacheKeys.stages, matches);
       setFetchState((s) => ({ ...s, matches }));
     } catch {
       // Keep the existing slate; the next tick retries.

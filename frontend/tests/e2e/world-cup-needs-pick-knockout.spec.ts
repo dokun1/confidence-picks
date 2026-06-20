@@ -38,10 +38,12 @@ async function seed(page: import('@playwright/test').Page) {
     const payload = { userId: 1, email: 'ada@example.com', name: 'Ada Lovelace', pictureUrl: null, exp: 9999999999 }
     localStorage.setItem('accessToken', `header.${btoa(JSON.stringify(payload))}.sig`)
   })
-  // Catch-all so nothing escapes to a real backend; the stage stub wins (registered last).
+  // Catch-all so nothing escapes to a real backend; the stages stub wins (registered last).
   await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
-  await page.route('**/api/games/world-cup-2026/stage/**', async (route) => {
-    const games = route.request().url().includes('/stage/r32') ? [decidedGame, undecidedGame] : []
+  // The tab now pulls the whole tournament in one request (GET .../stages), so the
+  // stub returns the full flat slate rather than per-stage subsets.
+  await page.route('**/api/games/world-cup-2026/stages', async (route) => {
+    const games = [decidedGame, undecidedGame]
     await route.fulfill({ json: { games, count: games.length, cached: false } })
   })
   await page.goto('/world-cup?group=test-group')

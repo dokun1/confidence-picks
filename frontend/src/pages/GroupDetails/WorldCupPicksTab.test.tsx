@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import WorldCupPicksTab from './WorldCupPicksTab';
-import type { WorldCupMatch, WorldCupStage } from '../../lib/types';
+import type { WorldCupMatch } from '../../lib/types';
 
 vi.mock('../../lib/worldCupService.js', () => ({
-  getStageMatches: vi.fn(),
+  getAllWorldCupStages: vi.fn(),
   submitWorldCupPicks: vi.fn(),
   getMyWorldCupPicks: vi.fn(),
   getUserWorldCupPicks: vi.fn(),
@@ -16,14 +16,17 @@ vi.mock('../../lib/groupsService.js', () => ({
 }));
 
 import {
-  getStageMatches,
+  getAllWorldCupStages,
   submitWorldCupPicks,
   getMyWorldCupPicks,
   getUserWorldCupPicks,
   submitUserWorldCupPicks,
 } from '../../lib/worldCupService.js';
 import { getMyGroups } from '../../lib/groupsService.js';
-const mockGetStageMatches = vi.mocked(getStageMatches);
+// Real (unmocked) cache module — the tab seeds its match slate from it, so clear
+// it between cases or a prior render's matches leak into the next.
+import { clearWorldCupCache } from '../../lib/worldCupCache';
+const mockGetAllWorldCupStages = vi.mocked(getAllWorldCupStages);
 const mockSubmitPicks = vi.mocked(submitWorldCupPicks);
 const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
 const mockGetUserWorldCupPicks = vi.mocked(getUserWorldCupPicks);
@@ -62,13 +65,10 @@ function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
 const groupMatch = match({ id: 10, stage: 'group', homeTeam: mex, awayTeam: usa });
 const r16Match = match({ id: 20, stage: 'r16', isKnockout: true, homeTeam: can, awayTeam: arg });
 
-// Route every stage fetch to its matching subset so the tab flattens a known
-// two-match tournament (one group, one knockout).
-function stageResponder(matches: WorldCupMatch[]) {
-  return (stage: WorldCupStage) => {
-    const games = matches.filter((m) => m.stage === stage);
-    return Promise.resolve({ games, count: games.length, cached: false });
-  };
+// The single /stages endpoint returns every match flattened in one payload, so
+// the tab renders a known two-match tournament (one group, one knockout).
+function stagesResponse(matches: WorldCupMatch[]) {
+  return { games: matches, count: matches.length, cached: false };
 }
 
 function renderTab(identifier = 'la-crew') {
@@ -106,7 +106,8 @@ function pickButton(homeName: string, label: string): HTMLElement {
 describe('WorldCupPicksTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetStageMatches.mockImplementation(stageResponder([groupMatch, r16Match]));
+    clearWorldCupCache();
+    mockGetAllWorldCupStages.mockResolvedValue(stagesResponse([groupMatch, r16Match]));
     // Default: source group is the user's only WC group. Tests exercising the
     // dropdown re-mock with multiple groups.
     mockGetMyGroups.mockResolvedValue([
@@ -149,18 +150,42 @@ describe('WorldCupPicksTab', () => {
   it('shows the loading indicator while a stage fetch is in flight', async () => {
     // A never-resolving promise pins the tab in its loading state — and the
     // sticky submit bar must not render before any matches exist.
-    mockGetStageMatches.mockReturnValue(new Promise<never>(() => {}));
+    mockGetAllWorldCupStages.mockReturnValue(new Promise<never>(() => {}));
     renderTab();
     expect(await screen.findByText('Loading matches…')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
   });
 
-  it('fetches every tournament stage and renders matches in the flat browse list', async () => {
+  // Stale-while-revalidate: re-entering the Picks tab must paint the cached
+  // match slate immediately — no "Loading matches…" blank behind the seven-stage
+  // fan-out — while a background revalidate runs.
+  it('paints the cached match slate instantly on a re-mount without a loading flash', async () => {
+    // First mount warms the stage cache.
+    const first = renderTab();
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
+    first.unmount();
+
+    // Second mount: a never-resolving fetch would normally pin the loading state,
+    // but the cached slate paints first so "Loading matches…" never appears.
+    mockGetAllWorldCupStages.mockReturnValue(new Promise<never>(() => {}));
+    renderTab();
+    expect(screen.queryByText('Loading matches…')).not.toBeInTheDocument();
+    expect(
+      screen.getByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('fetches the whole tournament in one request and renders matches in the flat browse list', async () => {
     renderTab();
     await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
       selector: 'span',
     });
-    expect(mockGetStageMatches).toHaveBeenCalledTimes(7);
+    // One round-trip for the whole slate — no seven-stage fan-out.
+    expect(mockGetAllWorldCupStages).toHaveBeenCalledTimes(1);
 
     // Both matchups render in the flat list (no per-stage <h2> sections anymore).
     expect(cardFor('Mexico')).toBeInTheDocument();
@@ -174,15 +199,15 @@ describe('WorldCupPicksTab', () => {
     expect(pickButton('Mexico', 'USA')).toBeInTheDocument();
   });
 
-  it('shows an error state with a retry when a stage fetch fails', async () => {
-    mockGetStageMatches.mockRejectedValue(new Error('boom'));
+  it('shows an error state with a retry when the stages fetch fails', async () => {
+    mockGetAllWorldCupStages.mockRejectedValue(new Error('boom'));
     renderTab();
     expect(await screen.findByText(/Failed to fetch matches/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
   });
 
-  it('shows the empty state when no stage returns matches', async () => {
-    mockGetStageMatches.mockResolvedValue({ games: [], count: 0, cached: false });
+  it('shows the empty state when the tournament returns no matches', async () => {
+    mockGetAllWorldCupStages.mockResolvedValue({ games: [], count: 0, cached: false });
     renderTab();
     expect(await screen.findByText('No matches found for this tournament.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();

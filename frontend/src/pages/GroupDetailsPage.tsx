@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages, getUnreadStatus, markMessagesRead } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
+import { getWorldCupLeaderboard } from '../lib/worldCupService.js';
+import { writeCache, wcCacheKeys } from '../lib/worldCupCache';
 import Button from '../designsystem/components/Button';
 import PageContainer from '../designsystem/components/PageContainer';
 import Spinner from '../designsystem/components/Spinner';
@@ -66,7 +68,6 @@ export default function GroupDetailsPage() {
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
-  const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('leaderboard');
@@ -74,6 +75,12 @@ export default function GroupDetailsPage() {
   // (a failure here must not collapse the whole page into the Not Found UI), and
   // cleared the moment the user opens the chat.
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  // Chat messages are lazy-loaded the first time the Chat tab opens (see
+  // ensureMessagesLoaded) rather than eagerly on mount — Chat isn't the default
+  // tab, so fetching its history up front only delayed the leaderboard.
+  const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   useEffect(() => {
     if (!identifier) return;
@@ -86,17 +93,34 @@ export default function GroupDetailsPage() {
       setLoading(true);
       setError(null);
       try {
-        // Promise.all so a failure in ANY branch surfaces ONE error UI, never
-        // three. Mirrors the GroupsPage/EditGroupPage cancelled-guard pattern.
-        const [groupResp, membersResp, messagesResp] = await Promise.all([
-          getGroup(id),
-          getMembers(id),
-          getMessages(id),
-        ]);
+        const groupPromise = getGroup(id);
+
+        // Break the waterfall: the moment we know this is a World Cup pool, warm
+        // the leaderboard cache IN PARALLEL with the rest of the shell. The
+        // default Leaderboard tab seeds from that cache, so it paints the instant
+        // it mounts instead of starting its own fetch only after the shell
+        // resolves. Best-effort — a failure just falls back to a cold tab fetch.
+        groupPromise
+          .then((g) => {
+            if (g?.poolType === 'world_cup_2026') {
+              getWorldCupLeaderboard(id)
+                .then((resp) =>
+                  writeCache(
+                    wcCacheKeys.leaderboard(id),
+                    Array.isArray(resp?.leaderboard) ? resp.leaderboard : [],
+                  ),
+                )
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+
+        // Promise.all so a failure in either branch surfaces ONE error UI, never
+        // two. getMessages is no longer here — Chat loads on demand.
+        const [groupResp, membersResp] = await Promise.all([groupPromise, getMembers(id)]);
         if (!cancelled) {
           setGroup(groupResp);
           setMembers(membersResp);
-          setMessages(messagesResp);
         }
       } catch (err) {
         if (!cancelled) {
@@ -162,14 +186,32 @@ export default function GroupDetailsPage() {
     );
   }
 
-  // Switch tabs; opening Chat clears the unread dot and marks the chat read
-  // server-side (fire-and-forget — the local clear is what the user sees, and a
-  // failed write just means the dot reappears on the next visit).
+  // Lazy-load the chat history the first time Chat is opened. A failed fetch
+  // soft-falls to an empty thread (the user can still post) rather than blocking
+  // the tab — chat history is non-critical to the rest of the page.
+  function ensureMessagesLoaded() {
+    if (messagesLoaded || messagesLoading || !identifier) return;
+    setMessagesLoading(true);
+    getMessages(identifier)
+      .then((msgs) => setMessages(msgs))
+      .catch(() => setMessages([]))
+      .finally(() => {
+        setMessagesLoaded(true);
+        setMessagesLoading(false);
+      });
+  }
+
+  // Switch tabs; opening Chat lazy-loads its history, clears the unread dot, and
+  // marks the chat read server-side (fire-and-forget — the local clear is what
+  // the user sees, and a failed write just means the dot reappears next visit).
   function handleSelectTab(key: TabKey) {
     setActiveTab(key);
-    if (key === 'chat' && hasUnreadChat && identifier) {
-      setHasUnreadChat(false);
-      markMessagesRead(identifier).catch(() => {});
+    if (key === 'chat') {
+      ensureMessagesLoaded();
+      if (hasUnreadChat && identifier) {
+        setHasUnreadChat(false);
+        markMessagesRead(identifier).catch(() => {});
+      }
     }
   }
 
@@ -280,9 +322,14 @@ export default function GroupDetailsPage() {
           ) : (
             <PicksTab identifier={identifier} members={members} />
           ))}
-        {activeTab === 'chat' && (
-          <ChatTab identifier={identifier} initialMessages={messages} />
-        )}
+        {activeTab === 'chat' &&
+          (messagesLoaded ? (
+            <ChatTab identifier={identifier} initialMessages={messages} />
+          ) : (
+            <div className="flex justify-center py-12">
+              <Spinner size="md" label="Loading chat..." />
+            </div>
+          ))}
         {activeTab === 'settings' && (
           <SettingsTab
             group={group}

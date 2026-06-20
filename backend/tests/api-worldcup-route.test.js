@@ -93,6 +93,72 @@ describe('GET /api/games/world-cup-2026/stage/:stage', () => {
   });
 });
 
+describe('GET /api/games/world-cup-2026/stages', () => {
+  let server;
+  let baseURL;
+
+  before(async () => {
+    const app = express();
+    app.use('/api', apiRouter);
+    await new Promise((resolve) => {
+      server = app.listen(0, () => {
+        baseURL = `http://localhost:${server.address().port}`;
+        resolve();
+      });
+    });
+  });
+
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+    mock.method(Game, 'findByLeagueStage', async () => []);
+    mock.method(Game, 'findByESPNIds', async () => new Map());
+    mock.method(Game.prototype, 'save', async function save() {
+      this.id = this.id || 1;
+      return this;
+    });
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+  });
+
+  test('returns every stage flattened into one { games, count, cached } payload', async () => {
+    const response = await fetch(`${baseURL}/api/games/world-cup-2026/stages`);
+    assert.strictEqual(response.status, 200);
+    const data = await response.json();
+
+    assert.ok(Array.isArray(data.games), 'games should be an array');
+    assert.strictEqual(data.count, data.games.length, 'count should match games length');
+    assert.strictEqual(data.cached, true, 'no refresh requested means cached');
+
+    // The flattened slate spans multiple stages — not just the group round — so a
+    // single request stands in for the old seven-call fan-out.
+    const stages = new Set(data.games.map((g) => g.stage));
+    assert.ok(stages.has('group'), 'flattened slate includes the group stage');
+    assert.ok(stages.size > 1, 'flattened slate spans more than one stage');
+    assert.ok('winnerTeamId' in data.games[0], 'winnerTeamId must be present in the payload');
+  });
+
+  test('carries the resolved knockout winnerTeamId through the combined route', async () => {
+    const response = await fetch(`${baseURL}/api/games/world-cup-2026/stages`);
+    assert.strictEqual(response.status, 200);
+    const data = await response.json();
+
+    const reg = data.games.find(
+      (g) => g.homeTeam?.abbreviation === 'ENG' && g.awayTeam?.abbreviation === 'GER'
+    );
+    assert.ok(reg, 'flattened slate should include the ENG vs GER knockout fixture');
+    assert.strictEqual(reg.winnerTeamId, WORLD_CUP_2026_TEAMS.ENG.id, 'advancing team surfaces in JSON');
+  });
+});
+
 describe('GET /api/games/world-cup-2026/event/:espnId', () => {
   let server;
   let baseURL;

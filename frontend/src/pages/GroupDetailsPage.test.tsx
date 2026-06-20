@@ -7,7 +7,10 @@ import type {
   GroupMember,
   GroupMessage,
 } from '../lib/groupsService';
-import type { WorldCupMatch, WorldCupStage } from '../lib/types';
+import type { WorldCupMatch } from '../lib/types';
+// Real (unmocked) cache module: the page now prefetches the WC leaderboard into
+// it, and the WC tabs seed from it, so clear it per case to stop cross-test leaks.
+import { clearWorldCupCache, peekCache, wcCacheKeys } from '../lib/worldCupCache';
 
 // Mock the groups service so the three mount fetches are controllable per test
 // without touching the network or auth tokens.
@@ -38,7 +41,7 @@ vi.mock('../lib/picksService.js', () => ({
 // control every fetch without a network call; the real components render.
 vi.mock('../lib/worldCupService.js', () => ({
   getWorldCupLeaderboard: vi.fn(),
-  getStageMatches: vi.fn(),
+  getAllWorldCupStages: vi.fn(),
   submitWorldCupPicks: vi.fn(),
   getMyWorldCupPicks: vi.fn(),
 }));
@@ -75,7 +78,7 @@ import {
 import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
 import {
   getWorldCupLeaderboard,
-  getStageMatches,
+  getAllWorldCupStages,
   getMyWorldCupPicks,
 } from '../lib/worldCupService.js';
 const mockGetGroup = vi.mocked(getGroup);
@@ -88,7 +91,7 @@ const mockGetClosestWeek = vi.mocked(getClosestWeek);
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const mockGetScoreboard = vi.mocked(getScoreboard);
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
-const mockGetStageMatches = vi.mocked(getStageMatches);
+const mockGetAllWorldCupStages = vi.mocked(getAllWorldCupStages);
 const mockGetMyWorldCupPicks = vi.mocked(getMyWorldCupPicks);
 
 const ownerGroup: GroupDetail = {
@@ -144,6 +147,7 @@ function renderPage(query = '?group=sunday-squad') {
 describe('GroupDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWorldCupCache();
     // Hold the picks fetch open so the picks tab stays in its loading state for
     // the tab-switching assertions (this suite covers navigation, not picks data).
     mockGetClosestWeek.mockReturnValue(new Promise(() => {}));
@@ -168,10 +172,32 @@ describe('GroupDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: ownerGroup.name })
     ).toBeInTheDocument();
-    // All three mount fetches run with the query-string identifier.
+    // The shell fetch is now just group + members; messages are lazy-loaded when
+    // the Chat tab opens, so getMessages must NOT fire on mount.
     expect(mockGetGroup).toHaveBeenCalledWith('sunday-squad');
     expect(mockGetMembers).toHaveBeenCalledWith('sunday-squad');
-    expect(mockGetMessages).toHaveBeenCalledWith('sunday-squad');
+    expect(mockGetMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch chat messages until the Chat tab is opened', async () => {
+    mockGetGroup.mockResolvedValue(ownerGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+
+    renderPage();
+    await screen.findByRole('heading', { name: ownerGroup.name });
+
+    // Sitting on the default Leaderboard tab, chat history stays unfetched.
+    expect(mockGetMessages).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
+    await screen.findByText('Welcome!');
+    expect(mockGetMessages).toHaveBeenCalledTimes(1);
+
+    // Re-opening Chat reuses the already-loaded history — no refetch.
+    fireEvent.click(screen.getByRole('tab', { name: /leaderboard/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
+    expect(mockGetMessages).toHaveBeenCalledTimes(1);
   });
 
   it('shows the Owner badge for an admin and switches between tab bodies', async () => {
@@ -192,8 +218,10 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByText('Loading picks…')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
-    // ChatTab renders the seeded messages passed from the page mount.
-    expect(screen.getByText('Welcome!')).toBeInTheDocument();
+    // ChatTab now lazy-loads its history on first open, so the message appears
+    // after the fetch resolves rather than synchronously.
+    expect(await screen.findByText('Welcome!')).toBeInTheDocument();
+    expect(mockGetMessages).toHaveBeenCalledWith('sunday-squad');
 
     fireEvent.click(screen.getByRole('tab', { name: /settings/i }));
     // SettingsTab leads with the Members roster section.
@@ -303,10 +331,7 @@ describe('GroupDetailsPage', () => {
       // pickable whenever CI runs.
       gameDate: (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
     };
-    const stageResponder = (stage: WorldCupStage) => {
-      const games = stage === 'group' ? [wcMatch] : [];
-      return Promise.resolve({ games, count: games.length, cached: false });
-    };
+    const stagesResponse = { games: [wcMatch], count: 1, cached: false };
 
     beforeEach(() => {
       mockGetGroup.mockResolvedValue(worldCupGroup);
@@ -347,9 +372,36 @@ describe('GroupDetailsPage', () => {
       expect(within(screen.getByRole('table')).getByText('Alice')).toBeInTheDocument();
     });
 
+    it('prefetches the World Cup leaderboard into the cache during the shell load', async () => {
+      const lbRows = [
+        {
+          userId: 1,
+          name: 'Alice',
+          pictureUrl: null,
+          rank: 1,
+          tied: false,
+          points: 12,
+          wins_correct: 4,
+          losses: 1,
+          draws_correct: 2,
+          draws_incorrect: 1,
+        },
+      ];
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: lbRows });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      // The parallel prefetch warms the per-group cache so the Leaderboard tab
+      // paints from it instead of waterfalling its own fetch after the shell.
+      await waitFor(() =>
+        expect(peekCache(wcCacheKeys.leaderboard('sunday-squad'))).toEqual(lbRows),
+      );
+    });
+
     it('embeds the World Cup pick-making surface on the Picks tab', async () => {
       mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
-      mockGetStageMatches.mockImplementation(stageResponder);
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
       mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
       mockGetMyGroups.mockResolvedValue([
         { id: 1, identifier: 'sunday-squad', name: 'World Cup Squad', poolType: 'world_cup_2026' },
@@ -379,7 +431,7 @@ describe('GroupDetailsPage', () => {
 
     it('shows the save bar on the Picks tab and removes it when switching away', async () => {
       mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
-      mockGetStageMatches.mockImplementation(stageResponder);
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
       mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
       mockGetMyGroups.mockResolvedValue([
         { id: 1, identifier: 'sunday-squad', name: 'World Cup Squad', poolType: 'world_cup_2026' },
@@ -455,8 +507,8 @@ describe('GroupDetailsPage', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
 
-      // Chat content renders, the dot disappears, and the read marker persists.
-      expect(screen.getByText('Welcome!')).toBeInTheDocument();
+      // Chat content lazy-loads, the dot disappears, and the read marker persists.
+      expect(await screen.findByText('Welcome!')).toBeInTheDocument();
       expect(screen.queryByTestId('chat-unread-indicator')).not.toBeInTheDocument();
       expect(mockMarkMessagesRead).toHaveBeenCalledWith('sunday-squad');
     });
@@ -470,7 +522,7 @@ describe('GroupDetailsPage', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
 
-      expect(screen.getByText('Welcome!')).toBeInTheDocument();
+      expect(await screen.findByText('Welcome!')).toBeInTheDocument();
       expect(mockMarkMessagesRead).not.toHaveBeenCalled();
     });
   });

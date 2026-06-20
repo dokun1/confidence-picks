@@ -55,6 +55,33 @@ router.get('/games/world-cup-2026/stage/:stage', async (req, res) => {
   }
 });
 
+// Whole-tournament slate in ONE request. The Picks tab previously fanned out to
+// seven /stage/:stage calls on every mount; this collapses them server-side so a
+// cold Picks load is a single round-trip. Registered before /games/:year/... for
+// the same reason as the stage route (literal world-cup-2026 prefix must win).
+router.get('/games/world-cup-2026/stages', async (req, res) => {
+  try {
+    const forceRefresh = (req.query.refresh === 'true') || (req.query.force === 'true') || (req.query.force === '1');
+
+    const games = await GameService.getAllWorldCupStages(forceRefresh);
+
+    res.json({
+      // Same per-game shape as the single-stage handler, including the grafted
+      // winnerTeamId (not part of Game.toJSON()) so knockout advancing-team
+      // signals survive in the flattened payload.
+      games: games.map(g => {
+        const json = (typeof g.toJSON === 'function' ? g.toJSON() : { ...g });
+        json.winnerTeamId = g.winnerTeamId ?? null;
+        return json;
+      }),
+      count: games.length,
+      cached: !forceRefresh
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // On-demand, resilient, no-schema per-match detail for the World Cup detail panel.
 // Registered before /games/:year/:seasonType/:week for the same reason as the stage
 // route: world-cup-2026/event/:espnId is a literal-prefixed 4-segment path the NFL
