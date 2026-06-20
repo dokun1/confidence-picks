@@ -7,6 +7,8 @@ import type { User } from './AuthContext';
 vi.mock('../lib/authService.js', () => ({
   default: {
     getUser: vi.fn(),
+    getCachedUser: vi.fn(),
+    isAccessTokenValid: vi.fn(),
     getRefreshToken: vi.fn(),
     refreshToken: vi.fn(),
     getCurrentUser: vi.fn(),
@@ -16,6 +18,8 @@ vi.mock('../lib/authService.js', () => ({
 
 import AuthService from '../lib/authService.js';
 const mockGetUser = vi.mocked(AuthService.getUser);
+const mockGetCachedUser = vi.mocked(AuthService.getCachedUser);
+const mockIsAccessTokenValid = vi.mocked(AuthService.isAccessTokenValid);
 const mockGetRefreshToken = vi.mocked(AuthService.getRefreshToken);
 const mockRefreshToken = vi.mocked(AuthService.refreshToken);
 const mockGetCurrentUser = vi.mocked(AuthService.getCurrentUser);
@@ -32,6 +36,10 @@ const testUser: User = {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // Safe defaults: no cached profile, access token treated as expired. Tests
+    // that exercise the warm-cache / valid-token paths override these.
+    mockGetCachedUser.mockReturnValue(null);
+    mockIsAccessTokenValid.mockReturnValue(false);
   });
 
   // Test 1: getUser() returns null → isAuthenticated=false, user=null
@@ -177,6 +185,7 @@ describe('AuthContext', () => {
 
   it('does not attempt a refresh when the access token is still valid', () => {
     mockGetUser.mockReturnValue(testUser as any);
+    mockIsAccessTokenValid.mockReturnValue(true);
     mockGetRefreshToken.mockReturnValue('valid-refresh-token');
 
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
@@ -184,6 +193,32 @@ describe('AuthContext', () => {
     expect(result.current.isRestoring).toBe(false);
     expect(result.current.isAuthenticated).toBe(true);
     expect(mockRefreshToken).not.toHaveBeenCalled();
+  });
+
+  // The key returning-visitor optimization: when the access token has expired
+  // but we still have the cached profile + a refresh token, the app paints the
+  // user immediately (no logged-out flash, no blocking) and refreshes silently
+  // in the background.
+  it('optimistically authenticates from the cached profile while refreshing in the background', async () => {
+    mockGetUser.mockReturnValue(null); // access token expired
+    mockGetCachedUser.mockReturnValue(testUser as any); // but profile is cached
+    mockGetRefreshToken.mockReturnValue('valid-refresh-token');
+    mockRefreshToken.mockResolvedValue('new-access-token');
+    mockGetCurrentUser.mockResolvedValue(testUser as any); // background reconcile
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    // Painted immediately — no blank/logged-out interstitial.
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.user).toEqual(testUser);
+    expect(result.current.isRestoring).toBe(false);
+
+    // And the token is refreshed silently in the background.
+    await waitFor(() => {
+      expect(mockRefreshToken).toHaveBeenCalledTimes(1);
+    });
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(mockClearTokens).not.toHaveBeenCalled();
   });
 
   it('setAuthUser followed by clearAuth returns to unauthenticated state', () => {

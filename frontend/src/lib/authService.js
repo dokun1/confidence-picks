@@ -41,32 +41,59 @@ class AuthService {
     localStorage.setItem('user', JSON.stringify(user));
   }
   
+  // Decode the access token payload, or null if missing/malformed.
+  static decodeToken() {
+    const token = this.getToken();
+    if (!token) return null;
+    try {
+      return JSON.parse(atob(token.split('.')[1]));
+    } catch {
+      return null;
+    }
+  }
+
+  // True only while the access token is present and unexpired. Used to decide
+  // whether a silent refresh is needed before the UI can trust API calls.
+  static isAccessTokenValid() {
+    const payload = this.decodeToken();
+    if (!payload) return false;
+    if (payload.exp && Date.now() / 1000 >= payload.exp) return false;
+    return true;
+  }
+
+  // The last full profile we fetched from /auth/me, persisted across reloads.
+  // Unlike getUser(), this does NOT depend on the access token still being
+  // valid — it lets the app paint a returning user's identity immediately on
+  // load while a refresh happens in the background. Returns null if no cached
+  // profile exists.
+  static getCachedUser() {
+    try {
+      const stored = localStorage.getItem('user');
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      return parsed && parsed.id ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
   static getUser() {
     // Prefer enriched cached user (may include pictureUrl) if available and token valid
     const token = this.getToken();
     if (!token) return null;
 
-    let payload;
-    try {
-      payload = JSON.parse(atob(token.split('.')[1]));
-    } catch {
-      return null;
-    }
+    const payload = this.decodeToken();
+    if (!payload) return null;
 
-    if (payload?.exp && Date.now() / 1000 >= payload.exp) {
+    if (payload.exp && Date.now() / 1000 >= payload.exp) {
       return null; // caller should attempt refresh
     }
 
     // If we previously fetched the full profile (/auth/me) use that (ensures pictureUrl present)
-    try {
-      const stored = localStorage.getItem('user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.id === payload.userId) {
-          return parsed;
-        }
-      }
-    } catch {/* ignore */}
+    const cached = this.getCachedUser();
+    if (cached && cached.id === payload.userId) {
+      return cached;
+    }
 
     // Fallback to basic token-derived user (without pictureUrl)
     return {
@@ -143,25 +170,39 @@ class AuthService {
   }
   
   static async refreshToken() {
+    // De-duplicate concurrent refreshes. On a returning visit the silent
+    // restore in AuthContext and the first protected API calls can all notice
+    // the expired token at once; without this they would each POST /auth/refresh
+    // and stampede the endpoint (and the DB lookup behind it). Share one
+    // in-flight request so every caller awaits the same new token.
+    if (this._refreshPromise) return this._refreshPromise;
+
+    this._refreshPromise = this._performRefresh().finally(() => {
+      this._refreshPromise = null;
+    });
+    return this._refreshPromise;
+  }
+
+  static async _performRefresh() {
     const apiBase = this.getApiBaseUrl();
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) throw new Error('No refresh token');
-    
+
     const response = await fetch(`${apiBase}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken })
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to refresh token');
     }
-    
+
     const data = await response.json();
     if (data.accessToken) {
       localStorage.setItem('accessToken', data.accessToken);
     }
-    
+
     return data.accessToken;
   }
   
