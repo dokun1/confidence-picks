@@ -3,9 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages, getUnreadStatus, markMessagesRead } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
-import { getWorldCupLeaderboard } from '../lib/worldCupService.js';
+import { getWorldCupLeaderboard, getAllWorldCupStages, getMyWorldCupPicks } from '../lib/worldCupService.js';
 import { writeCache, wcCacheKeys } from '../lib/worldCupCache';
+import { countNeedsPick } from '../lib/wcNeedsPick';
+import type { SavedView } from '../lib/wcGamesView';
+import type { WorldCupMatch } from '../lib/types';
+import Banner from '../designsystem/components/Banner';
 import Button from '../designsystem/components/Button';
+import NotificationDot from '../designsystem/components/NotificationDot';
 import PageContainer from '../designsystem/components/PageContainer';
 import Spinner from '../designsystem/components/Spinner';
 import LeaderboardTab from './GroupDetails/LeaderboardTab';
@@ -62,15 +67,29 @@ function GroupNotFound({ message, onBack }: { message: string; onBack: () => voi
 
 export default function GroupDetailsPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const identifier = searchParams.get('group');
   const { user } = useAuth();
+
+  // Deeplink seeds (read once on mount): ?tab= picks the initial tab and ?view=
+  // pre-selects a saved view in the Picks tab — e.g. the leaderboard banner links
+  // to ?tab=picks&view=needs-pick so the "Needs pick" chip opens already chosen.
+  const tabParam = searchParams.get('tab');
+  const initialTab: TabKey = TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : 'leaderboard';
+  const viewParam = searchParams.get('view');
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>('leaderboard');
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  // Which saved view the Picks tab opens on; set by the banner CTA / a deeplink.
+  const [picksInitialView, setPicksInitialView] = useState<SavedView | undefined>(
+    viewParam === 'needs-pick' ? 'needs-pick' : undefined,
+  );
+  // How many picks the viewer still owes in this (World Cup) pool. Drives the
+  // leaderboard warning banner; 0 keeps it hidden.
+  const [needsPickCount, setNeedsPickCount] = useState(0);
   // Drives the red dot on the Chat tab. Fetched independently of the mount fetch
   // (a failure here must not collapse the whole page into the Not Found UI), and
   // cleared the moment the user opens the chat.
@@ -157,6 +176,34 @@ export default function GroupDetailsPage() {
     };
   }, [identifier]);
 
+  // Compute the viewer's outstanding-pick count for the leaderboard banner.
+  // World Cup pools only, and only while the Leaderboard tab is showing (that's
+  // the only place the banner renders) — re-running when the user returns from
+  // the Picks tab keeps the count fresh after they pick. Best-effort and off the
+  // critical path: a failure just leaves the banner hidden. Reuses the SAME
+  // matches + picks endpoints (and `wc:stages` cache) the Picks tab feeds on.
+  useEffect(() => {
+    if (!identifier || group?.poolType !== 'world_cup_2026' || activeTab !== 'leaderboard') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [stagesResp, picksResp] = await Promise.all([
+          getAllWorldCupStages(),
+          getMyWorldCupPicks(identifier),
+        ]);
+        if (cancelled) return;
+        const matches: WorldCupMatch[] = Array.isArray(stagesResp?.games) ? stagesResp.games : [];
+        writeCache(wcCacheKeys.stages, matches);
+        setNeedsPickCount(countNeedsPick(matches, picksResp?.picks, new Date()));
+      } catch {
+        /* non-fatal: leave the banner hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [identifier, group?.poolType, activeTab]);
+
   // No identifier in the query string: nothing to load, show the error UI early.
   if (!identifier) {
     return (
@@ -215,6 +262,17 @@ export default function GroupDetailsPage() {
     }
   }
 
+  // Banner CTA: jump to the Picks tab with the "Needs pick" chip pre-selected,
+  // and reflect it in the URL so the destination is a real, refresh-safe deeplink.
+  function goToNeedsPick() {
+    setPicksInitialView('needs-pick');
+    setActiveTab('picks');
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'picks');
+    next.set('view', 'needs-pick');
+    setSearchParams(next, { replace: true });
+  }
+
   // getGroup returns userRole (NOT isOwner); admin is the owning role.
   const isOwner = group.userRole === 'admin';
   // World Cup pools render the tournament-shaped tab variants. Absent/NFL pools
@@ -267,6 +325,15 @@ export default function GroupDetailsPage() {
           </div>
         </div>
 
+        {/* Picks-available warning — spans between the member count and the tab
+            bar, shown on the Leaderboard tab when the viewer still owes picks.
+            Tapping the CTA deeplinks to the Picks tab on the "Needs pick" chip. */}
+        {isWorldCup && activeTab === 'leaderboard' && needsPickCount > 0 && (
+          <Banner variant="warning" action={{ label: 'Make your picks', onClick: goToNeedsPick }}>
+            You have {needsPickCount} {needsPickCount === 1 ? 'pick' : 'picks'} available to make.
+          </Banner>
+        )}
+
         {/* Tab Navigation */}
         <div className="border-b border-secondary-200 dark:border-secondary-700">
           {/* pt-1 gives the Chat tab's unread dot room: overflow-x-auto forces
@@ -288,10 +355,10 @@ export default function GroupDetailsPage() {
               >
                 {tab.label}
                 {tab.key === 'chat' && hasUnreadChat && (
-                  <span
+                  <NotificationDot
+                    label="Unread messages"
                     data-testid="chat-unread-indicator"
-                    aria-label="Unread messages"
-                    className="absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full bg-error-500"
+                    className="absolute -top-0.5 -right-1.5"
                   />
                 )}
               </button>
@@ -318,6 +385,7 @@ export default function GroupDetailsPage() {
               members={members}
               currentUserId={user?.id ?? null}
               isAdmin={isOwner}
+              initialView={picksInitialView}
             />
           ) : (
             <PicksTab identifier={identifier} members={members} />

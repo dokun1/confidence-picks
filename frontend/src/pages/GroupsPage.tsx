@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMyGroups, leaveGroup, deleteGroup } from '../lib/groupsService.js';
+import { getAllWorldCupStages, getMyWorldCupPicks } from '../lib/worldCupService.js';
+import { peekCache, writeCache, wcCacheKeys } from '../lib/worldCupCache';
+import { countNeedsPick } from '../lib/wcNeedsPick';
+import type { WorldCupMatch } from '../lib/types';
 import GroupsList from '../designsystem/components/GroupsList';
 import type { GroupData } from '../designsystem/components/GroupCard/GroupCard';
 import Button from '../designsystem/components/Button';
@@ -25,6 +29,9 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-group "you have picks to make" flags (World Cup pools), keyed by
+  // identifier. Drives the notification dot on each card.
+  const [needsPickByGroup, setNeedsPickByGroup] = useState<Record<string, boolean>>({});
 
   // Search + filter selections from the GroupsSearchFilter bar. Applied to the
   // loaded groups to produce the visible subset; an empty filter set shows all.
@@ -60,6 +67,47 @@ export default function GroupsPage() {
       cancelled = true;
     };
   }, [refreshKey]);
+
+  // Compute the notification dot per World Cup group: reuse the SAME open/unpicked
+  // rule the picks-tab "Needs pick" chip uses (countNeedsPick). The tournament
+  // slate is fetched once and shared via the wc:stages cache; each group only
+  // needs its own lightweight my-picks read. Best-effort — failures leave a card
+  // without a dot rather than erroring the page.
+  useEffect(() => {
+    const wcGroups = groups.filter((g) => g.poolType === 'world_cup_2026');
+    if (wcGroups.length === 0) {
+      setNeedsPickByGroup({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        let matches = peekCache<WorldCupMatch[]>(wcCacheKeys.stages);
+        if (matches === undefined) {
+          const resp = await getAllWorldCupStages();
+          matches = Array.isArray(resp?.games) ? resp.games : [];
+          writeCache(wcCacheKeys.stages, matches);
+        }
+        const now = new Date();
+        const entries = await Promise.all(
+          wcGroups.map(async (g) => {
+            try {
+              const picksResp = await getMyWorldCupPicks(g.identifier);
+              return [g.identifier, countNeedsPick(matches as WorldCupMatch[], picksResp?.picks, now) > 0] as const;
+            } catch {
+              return [g.identifier, false] as const;
+            }
+          }),
+        );
+        if (!cancelled) setNeedsPickByGroup(Object.fromEntries(entries));
+      } catch {
+        if (!cancelled) setNeedsPickByGroup({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groups]);
 
   async function handleLeaveGroup(group: GroupData) {
     try {
@@ -174,6 +222,7 @@ export default function GroupsPage() {
             ) : (
               <GroupsList
                 groups={visibleGroups}
+                needsPickByGroup={needsPickByGroup}
                 showHeader={false}
                 onCreateNew={() => navigate('/create-group')}
                 onJoinExisting={() => navigate('/join-group')}

@@ -18,6 +18,9 @@ export interface WorldCupGamesListProps {
   now: Date;
   onPick: (gameId: number, result: MatchResult) => void;
   disabled?: boolean;           // read-only viewer (optional; pass through if convenient)
+  /** Which saved view the list opens on. Defaults to 'today'; a deeplink can
+   *  open straight on 'needs-pick' so the "what do I still owe?" chip is preselected. */
+  initialView?: SavedView;
 }
 
 const VIEWS: { key: SavedView; label: string }[] = [
@@ -62,8 +65,8 @@ function Chip({ label, count, active, onClick }: { label: string; count?: number
 const selectCls =
   'rounded-md border border-border bg-neutral-0 px-xs py-xxs text-sm text-content dark:bg-secondary-900';
 
-export default function WorldCupGamesList({ games, now, onPick, disabled }: WorldCupGamesListProps) {
-  const [view, setView] = useState<SavedView>('today');
+export default function WorldCupGamesList({ games, now, onPick, disabled, initialView = 'today' }: WorldCupGamesListProps) {
+  const [view, setView] = useState<SavedView>(initialView);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>('kickoff');

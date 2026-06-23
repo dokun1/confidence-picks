@@ -337,6 +337,12 @@ describe('GroupDetailsPage', () => {
       mockGetGroup.mockResolvedValue(worldCupGroup);
       mockGetMembers.mockResolvedValue(members);
       mockGetMessages.mockResolvedValue(messages);
+      // Defaults for the leaderboard banner's needs-pick probe (stages + my-picks),
+      // so the background fetch resolves deterministically; tests that care about
+      // the banner override these.
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
     });
 
     it('renders the TournamentLeaderboard on the Leaderboard tab for a world_cup_2026 pool', async () => {
@@ -455,6 +461,50 @@ describe('GroupDetailsPage', () => {
       fireEvent.click(screen.getByRole('tab', { name: /chat/i }));
       expect(screen.queryByRole('button', { name: 'Submit Picks' })).not.toBeInTheDocument();
       expect(screen.queryByText('0 picks selected')).not.toBeInTheDocument();
+    });
+
+    it('shows the picks-available banner on the Leaderboard tab when the viewer owes picks', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] }); // nothing picked → 1 owed
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      // The one open, unpicked, decided match surfaces the banner with its count.
+      expect(await screen.findByText(/1 pick available to make/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /make your picks/i })).toBeInTheDocument();
+    });
+
+    it('hides the banner once every open match is picked', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [{ gameId: 10, pickedResult: 'home' }] });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+      await waitFor(() => expect(mockGetMyWorldCupPicks).toHaveBeenCalled());
+
+      expect(screen.queryByText(/available to make/i)).not.toBeInTheDocument();
+    });
+
+    it('banner CTA deeplinks to the Picks tab with the "Needs pick" chip pre-selected', async () => {
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
+      mockGetMyGroups.mockResolvedValue([
+        { id: 1, identifier: 'sunday-squad', name: 'World Cup Squad', poolType: 'world_cup_2026' },
+      ] as any);
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      fireEvent.click(await screen.findByRole('button', { name: /make your picks/i }));
+
+      // The Picks surface is now mounted (submit bar present)...
+      expect(await screen.findByRole('button', { name: 'Submit Picks' })).toBeInTheDocument();
+      // ...and the "Needs pick" view chip is the active one (accent styling).
+      expect(screen.getByRole('button', { name: /Needs pick/i })).toHaveClass('bg-accent');
     });
   });
 

@@ -31,6 +31,17 @@ describe('WorldCupGamesList', () => {
     expect(screen.queryByTestId('match-card-2')).toBeNull();
   });
 
+  it('opens on the initialView when given one (deeplink to "Needs pick")', () => {
+    // A tomorrow game would be hidden by the default Today view; opening on
+    // needs-pick (open + unpicked) surfaces it, proving initialView is honored.
+    const tomorrow = game({ id: 2, kickoff: '2026-06-13T20:00:00' });
+    render(
+      <WorldCupGamesList games={[tomorrow]} now={NOW} onPick={() => {}} initialView="needs-pick" />,
+    );
+    expect(screen.getByRole('button', { name: /Needs pick/i })).toHaveClass('bg-accent');
+    expect(screen.getByTestId('match-card-2')).toBeInTheDocument();
+  });
+
   it('filters games by World Cup group via the group dropdown', () => {
     const groupD = game({
       id: 1,
