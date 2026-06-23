@@ -1,6 +1,7 @@
 import Avatar from '../Avatar/Avatar';
 import Button from '../Button/Button';
 import Card from '../Card/Card';
+import NotificationDot from '../NotificationDot/NotificationDot';
 
 export interface GroupData {
   id: string;
@@ -29,6 +30,12 @@ export interface GroupCardProps {
   onLeave?: () => void;
   /** Called when the owner clicks "Delete". */
   onDelete?: () => void;
+  /**
+   * When true, shows a red notification dot (same affordance as the Chat tab's
+   * unread indicator) signalling the viewer has picks waiting to be made in this
+   * group. Computed by the groups list from the pool's open/unpicked matches.
+   */
+  hasPicksToMake?: boolean;
 }
 
 function formatDate(dateString: string): string {
@@ -48,9 +55,17 @@ export default function GroupCard({
   onEdit,
   onLeave,
   onDelete,
+  hasPicksToMake = false,
 }: GroupCardProps) {
   return (
-    <Card padding="lg" className="hover:shadow-md transition-shadow">
+    <Card padding="lg" className="relative hover:shadow-md transition-shadow">
+      {hasPicksToMake && (
+        <NotificationDot
+          size="md"
+          label="Picks available to make"
+          className="absolute right-3 top-3 ring-2 ring-neutral-0 dark:ring-secondary-800"
+        />
+      )}
       {/* Header & Badges: stack on mobile, row on desktop */}
       <div className="flex flex-col mb-4">
         <h3

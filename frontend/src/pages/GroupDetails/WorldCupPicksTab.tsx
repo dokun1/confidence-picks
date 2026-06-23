@@ -21,6 +21,7 @@ import { pollIntervalFor } from '../../lib/matchPolling';
 import SaveTargetsDropdown, { type SaveTarget } from '../../components/SaveTargetsDropdown';
 import PickPersonSelector, { type PickPersonOption } from '../../components/PickPersonSelector';
 import WorldCupGamesList from '../../designsystem/components/WorldCupBrowse/WorldCupGamesList';
+import type { SavedView } from '../../lib/wcGamesView';
 import { toBrowseGames } from '../../lib/worldCupBrowseAdapter';
 
 // The World Cup pick-making surface: the whole tournament as one stage-grouped
@@ -70,6 +71,8 @@ export interface WorldCupPicksTabProps {
   currentUserId?: string | number | null;
   /** Whether the caller is a group admin. Gates editing OTHER members' picks. */
   isAdmin?: boolean;
+  /** Saved view the embedded games list opens on (e.g. 'needs-pick' from a deeplink). */
+  initialView?: SavedView;
 }
 
 export default function WorldCupPicksTab({
@@ -77,6 +80,7 @@ export default function WorldCupPicksTab({
   members = [],
   currentUserId = null,
   isAdmin = false,
+  initialView,
 }: WorldCupPicksTabProps) {
   const groupId = identifier;
 
@@ -506,6 +510,7 @@ export default function WorldCupPicksTab({
             now={now}
             onPick={pickResult}
             disabled={submitting || readOnly}
+            initialView={initialView}
           />
         )}
       </div>

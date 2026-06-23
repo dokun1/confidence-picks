@@ -25,6 +25,11 @@ export interface GroupsListProps {
   onRefresh?: () => void;
   /** When false, hides the built-in header and subheader. */
   showHeader?: boolean;
+  /**
+   * Per-group "viewer has picks to make" flags, keyed by group identifier.
+   * A truthy entry surfaces the notification dot on that group's card.
+   */
+  needsPickByGroup?: Record<string, boolean>;
 }
 
 /**
@@ -44,6 +49,7 @@ export default function GroupsList({
   onDeleteGroup,
   onRefresh,
   showHeader = true,
+  needsPickByGroup = {},
 }: GroupsListProps) {
   function handleViewGroup(group: GroupData) {
     onViewGroup?.(group);
@@ -147,6 +153,7 @@ export default function GroupsList({
             <GroupCard
               key={group.id}
               group={group}
+              hasPicksToMake={!!needsPickByGroup[group.identifier]}
               onView={() => handleViewGroup(group)}
               onEdit={() => handleEditGroup(group)}
               onLeave={() => handleLeaveGroup(group)}

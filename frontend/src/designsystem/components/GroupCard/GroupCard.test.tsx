@@ -108,6 +108,18 @@ describe('GroupCard', () => {
     });
   });
 
+  describe('picks-available notification dot', () => {
+    it('shows the dot when hasPicksToMake is true', () => {
+      render(<GroupCard group={BASE_GROUP} hasPicksToMake />);
+      expect(screen.getByRole('status', { name: 'Picks available to make' })).toBeInTheDocument();
+    });
+
+    it('hides the dot by default', () => {
+      render(<GroupCard group={BASE_GROUP} />);
+      expect(screen.queryByRole('status', { name: 'Picks available to make' })).toBeNull();
+    });
+  });
+
   describe('member view', () => {
     it('renders Leave Group button for non-owner', () => {
       render(<GroupCard group={MEMBER_GROUP} />);
