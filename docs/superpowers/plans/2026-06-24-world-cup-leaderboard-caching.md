@@ -21,6 +21,23 @@
 
 ---
 
+## Execution Reconciliation (2026-06-24, discovered during build)
+
+The investigation this plan was written from was partly stale. Verified against the real branch state (`main` @ `7506421`):
+
+- **Task 2 (persist `winner_team_id`) already existed on `main`.** Schema column, `Game.fromDbRow`/`upsert` read-write, and the pre-save `resolveWinnerTeamId` assignment in `GameService.getWorldCupStage` are all present. Task 2 therefore only added the missing regression test (done, commit `a29065b`). The earlier "winnerTeamId is memory-only" finding was incorrect.
+- **A per-stage DB cache already exists.** `GameService.isStageCacheFresh()` + cache-first `getWorldCupStage()` serve a fresh persisted slate from one DB query with no ESPN call; only stale/live/imminent slates hit ESPN. So the "7 ESPN round-trips per viewer" premise is already mitigated at the stage layer.
+- **`GameService.getAllWorldCupStages(forceRefresh)` already exists** — `Promise.all` over `WORLD_CUP_STAGE_ORDER`, each routing through the cached `getWorldCupStage`, flattened in calendar order. Output equals the leaderboard route's current sequential `for stage of WORLD_CUP_STAGES` loop (same games, same order).
+
+**Consequences for the remaining tasks:**
+- **Task 3 (DB-only game reader): SUPERSEDED — not built.** A "never-ESPN" reader is the wrong tool for the cached path: the fresh path MUST be allowed to hit ESPN when a slate is stale, otherwise finalizations are never detected and the watermark never advances. The correct game source is the existing `getAllWorldCupStages()` (cache-first).
+- **Task 4 (custom throttle): SUPERSEDED — not built as specified.** The per-stage cache already prevents an ESPN stampede. The cached orchestration sources games directly from `getAllWorldCupStages()`.
+- **Task 7 `computeLive`** sources games from `GameService.getAllWorldCupStages()` (not a hand-rolled stage loop), and the cached path's "ensure games fresh" step is simply `getAllWorldCupStages()`.
+- Real symbol names to use: `Game.fromDbRow(row)` (row→Game mapper, already grafts `winnerTeamId`), `GameService.WORLD_CUP_STAGE_ORDER`, `GameService.getAllWorldCupStages()`.
+- The streamlined remaining work is **Task 5 (watermark) → Task 6 (snapshot table+model) → Task 7 (orchestration) → Task 8 (flag)**. Tasks 5, 6, 8 are unchanged; Task 7 uses `getAllWorldCupStages()` as above.
+
+---
+
 ## Background: the current path (what we are changing)
 
 `backend/src/routes/worldCupPicks.js:162-238` (`GET /group/:groupId/world-cup/leaderboard`) does this **on every request, per group, per viewer**:
