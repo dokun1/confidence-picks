@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { Group } from '../models/Group.js';
 import { UserPick, WORLD_CUP_RESULTS } from '../models/UserPick.js';
-import { computeLive, getGroupLeaderboardCached } from '../services/WorldCupLeaderboardService.js';
+import { computeLive, getGroupLeaderboardCached, leaderboardsMatch } from '../services/WorldCupLeaderboardService.js';
 import pool from '../config/database.js';
 
 const router = express.Router();
@@ -196,7 +196,7 @@ router.get('/group/:groupId/world-cup/leaderboard', authenticateToken, async (re
       const live = await computeLive(pool, group);
       try {
         const { leaderboard: cached, source } = await getGroupLeaderboardCached(pool, group);
-        if (JSON.stringify(cached) !== JSON.stringify(live)) {
+        if (!leaderboardsMatch(cached, live)) {
           console.warn('[wc-leaderboard-shadow] MISMATCH', {
             groupId: group.id, source,
             liveLen: live.length, cachedLen: cached.length,

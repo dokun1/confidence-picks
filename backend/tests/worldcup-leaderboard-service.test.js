@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached } from '../src/services/WorldCupLeaderboardService.js';
+import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached, leaderboardsMatch } from '../src/services/WorldCupLeaderboardService.js';
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -126,5 +126,60 @@ describe('getGroupLeaderboardCached', () => {
     const res = await getGroupLeaderboardCached(emptyPool, group, d);
     assert.equal(res.source, 'fallback');
     assert.ok(Array.isArray(res.leaderboard));
+  });
+});
+
+describe('leaderboardsMatch', () => {
+  // Canonical row as built by buildGroupLeaderboard (JS insertion order).
+  const rowA = {
+    userId: 1, name: 'Ann', pictureUrl: null,
+    rank: 1, tied: false, points: 3,
+    wins_correct: 1, losses: 0, draws_correct: 0, draws_incorrect: 0,
+  };
+  // Same logical row but with JSONB-style key order (alphabetical / arbitrary).
+  const rowA_jsonbOrder = {
+    draws_correct: 0, draws_incorrect: 0, losses: 0,
+    name: 'Ann', pictureUrl: null,
+    points: 3, rank: 1, tied: false,
+    userId: 1, wins_correct: 1,
+  };
+
+  const rowB = {
+    userId: 2, name: 'Bob', pictureUrl: null,
+    rank: 2, tied: false, points: 0,
+    wins_correct: 0, losses: 1, draws_correct: 0, draws_incorrect: 0,
+  };
+
+  test('(a) same rows in different key order are equal — the JSONB regression', () => {
+    // JSON.stringify would produce different strings here; leaderboardsMatch must not.
+    assert.notEqual(JSON.stringify(rowA), JSON.stringify(rowA_jsonbOrder));   // confirm they differ
+    assert.equal(leaderboardsMatch([rowA], [rowA_jsonbOrder]), true);
+    assert.equal(leaderboardsMatch([rowA, rowB], [rowA_jsonbOrder, rowB]), true);
+  });
+
+  test('(b) a difference in points returns false', () => {
+    const rowA_mutated = { ...rowA, points: 99 };
+    assert.equal(leaderboardsMatch([rowA], [rowA_mutated]), false);
+  });
+
+  test('(b) a difference in rank returns false', () => {
+    const rowA_mutated = { ...rowA, rank: 2 };
+    assert.equal(leaderboardsMatch([rowA], [rowA_mutated]), false);
+  });
+
+  test('(c) different lengths return false', () => {
+    assert.equal(leaderboardsMatch([rowA], [rowA, rowB]), false);
+    assert.equal(leaderboardsMatch([rowA, rowB], [rowA]), false);
+    assert.equal(leaderboardsMatch([], [rowA]), false);
+  });
+
+  test('two empty arrays are equal', () => {
+    assert.equal(leaderboardsMatch([], []), true);
+  });
+
+  test('non-array inputs return false', () => {
+    assert.equal(leaderboardsMatch(null, []), false);
+    assert.equal(leaderboardsMatch([], null), false);
+    assert.equal(leaderboardsMatch('x', 'x'), false);
   });
 });

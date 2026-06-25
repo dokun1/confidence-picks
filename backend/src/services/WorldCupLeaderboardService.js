@@ -94,6 +94,25 @@ export async function buildGroupLeaderboard(pool, group, games) {
 }
 
 /**
+ * Order-insensitive (per row-key) equality for two leaderboard arrays. Rows are
+ * already in deterministic rank order from buildLeaderboard, so this compares
+ * row-by-row on the known fields — avoiding false mismatches from JSONB key-order
+ * normalization when one side was round-tripped through a jsonb column.
+ */
+export function leaderboardsMatch(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const key = (r) => [
+    r.userId, r.rank, r.tied, r.points,
+    r.wins_correct, r.losses, r.draws_correct, r.draws_incorrect,
+    r.name ?? null, r.pictureUrl ?? null,
+  ];
+  for (let i = 0; i < a.length; i++) {
+    if (JSON.stringify(key(a[i])) !== JSON.stringify(key(b[i]))) return false;
+  }
+  return true;
+}
+
+/**
  * Legacy compute: fetch the whole World Cup slate via the existing cache-first
  * getAllWorldCupStages() and score it. This is the fallback path and the shadow
  * baseline; its output matches today's leaderboard endpoint exactly. gameService
