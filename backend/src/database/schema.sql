@@ -368,6 +368,15 @@ BEGIN
   END IF;
 END $$;
 
+-- Per-group cached World Cup leaderboard. payload is the full ranked board (JSONB);
+-- source_version is the watermark it was computed against (see getLeaderboardVersion).
+CREATE TABLE IF NOT EXISTS wc_leaderboard_cache (
+  group_id INTEGER PRIMARY KEY REFERENCES groups(id) ON DELETE CASCADE,
+  source_version TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  computed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Fix duplicate confidence constraint issue (remove incorrect constraint that lacks group_id)
 DO $$
 BEGIN
