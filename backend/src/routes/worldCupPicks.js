@@ -1,16 +1,11 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { Group } from '../models/Group.js';
-import { GameService } from '../services/GameService.js';
 import { UserPick, WORLD_CUP_RESULTS } from '../models/UserPick.js';
-import { buildGroupLeaderboard } from '../services/WorldCupLeaderboardService.js';
+import { computeLive, getGroupLeaderboardCached } from '../services/WorldCupLeaderboardService.js';
 import pool from '../config/database.js';
 
 const router = express.Router();
-
-// The full set of tournament stages, in calendar order. The leaderboard sweeps
-// every stage so a member's group-stage and knockout picks all score together.
-const WORLD_CUP_STAGES = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final'];
 
 // Membership gate, identical in shape to the NFL picks routes: resolve the group
 // for this user and reject when the group is missing or the caller isn't a member.
@@ -175,10 +170,12 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
 /**
  * World Cup tournament leaderboard for a group.
  *
- * Loads every member's World Cup picks, joins them to the stage-resolved games
- * (GameService.getWorldCupStage carries the knockout `winnerTeamId`), and feeds
- * the pairs to SoccerScoringService.buildLeaderboard, which aggregates each
- * user's flat-per-match score and orders them with the tiebreaker comparator.
+ * Path selected by WC_LEADERBOARD_CACHE:
+ *   off (default) — computeLive: fetch all stages, score, return. Behavior-
+ *     identical to the legacy inline loop.
+ *   shadow — compute live, also run the cached path, log any mismatch, but
+ *     ALWAYS serve the live result (production parity gate).
+ *   on — serve the cached snapshot (recompute on version miss).
  *
  * Members with no picks are surfaced as zero rows so the leaderboard lists the
  * whole group. Each row carries the four tiebreaker counts plus identity + rank.
@@ -188,15 +185,34 @@ router.get('/group/:groupId/world-cup/leaderboard', authenticateToken, async (re
     const { groupId } = req.params;
     const group = await ensureMembership(groupId, req.user.id);
 
-    // Resolved games for every stage (unchanged live behavior).
-    const games = [];
-    for (const stage of WORLD_CUP_STAGES) {
-      const stageGames = await GameService.getWorldCupStage(stage);
-      games.push(...stageGames);
+    const mode = process.env.WC_LEADERBOARD_CACHE || 'off';
+
+    if (mode === 'on') {
+      const { leaderboard } = await getGroupLeaderboardCached(pool, group);
+      return res.json({ leaderboard });
     }
 
-    const leaderboard = await buildGroupLeaderboard(pool, group, games);
-    res.json({ leaderboard });
+    if (mode === 'shadow') {
+      const live = await computeLive(pool, group);
+      try {
+        const { leaderboard: cached, source } = await getGroupLeaderboardCached(pool, group);
+        if (JSON.stringify(cached) !== JSON.stringify(live)) {
+          console.warn('[wc-leaderboard-shadow] MISMATCH', {
+            groupId: group.id, source,
+            liveLen: live.length, cachedLen: cached.length,
+          });
+        } else {
+          console.log('[wc-leaderboard-shadow] match', { groupId: group.id, source, n: live.length });
+        }
+      } catch (err) {
+        console.error('[wc-leaderboard-shadow] cached path threw', err);
+      }
+      return res.json({ leaderboard: live }); // always serve the trusted live result
+    }
+
+    // mode === 'off' (default): behavior-identical to the legacy inline loop
+    const leaderboard = await computeLive(pool, group);
+    return res.json({ leaderboard });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });

@@ -424,4 +424,71 @@ describe('World Cup picks router', () => {
       assert.match(data.error, /Invalid gameId/);
     });
   });
+
+  describe('leaderboard flag modes', () => {
+    // These tests drive the WC_LEADERBOARD_CACHE flag (off / shadow / on) through
+    // the leaderboard route. Because ES module named exports are non-configurable
+    // live bindings, we cannot mock computeLive/getGroupLeaderboardCached directly.
+    // Instead we stub at the dependency level — the same seam the existing
+    // leaderboard tests use: mock GameService.getWorldCupStage (so computeLive's
+    // getAllWorldCupStages fan-out returns controlled data) and pool.query (so
+    // buildGroupLeaderboard, getLeaderboardVersion, readSnapshot, and writeSnapshot
+    // all resolve without a live DB). This is exactly equivalent to mocking the
+    // orchestrators because they have no logic of their own — they just delegate.
+    const groupGame = (id) => ({
+      id,
+      stage: 'group',
+      status: 'FINAL',
+      completed: true,
+      homeTeam: { id: 'MEX' },
+      awayTeam: { id: 'USA' },
+      homeScore: 2,
+      awayScore: 1,
+      winnerTeamId: null,
+    });
+
+    // Shared pool.query stub: handles every DB pattern these orchestrators issue.
+    function makePoolStub() {
+      return mock.method(pool, 'query', async (sql) => {
+        // getLeaderboardVersion: game watermark, member signal, picks watermark
+        if (/MAX\(last_updated\)/.test(sql)) return { rows: [{ watermark: null }] };
+        if (/cnt.*maxid|maxid.*cnt/s.test(sql) || (/COUNT\(\*\)/.test(sql) && /group_memberships/.test(sql))) return { rows: [{ cnt: '1', maxid: '1' }] };
+        if (/MAX\(updated_at\)/.test(sql) && /user_picks/.test(sql)) return { rows: [{ watermark: null }] };
+        // readSnapshot — returns null (cache miss) so getGroupLeaderboardCached recomputes
+        if (/wc_leaderboard_cache/.test(sql) && /SELECT/.test(sql)) return { rows: [] };
+        // writeSnapshot
+        if (/wc_leaderboard_cache/.test(sql) && /INSERT/.test(sql)) return { rows: [] };
+        // buildGroupLeaderboard: members and picks
+        if (/group_memberships/.test(sql) && /JOIN users/.test(sql)) {
+          return { rows: [{ id: 1, name: 'Alice', picture_url: null }] };
+        }
+        if (/FROM user_picks/.test(sql)) return { rows: [] };
+        // Fallback — fail loudly so a new query doesn't silently return empty.
+        throw new Error(`[flag-modes] unexpected query: ${sql}`);
+      });
+    }
+
+    afterEach(() => {
+      // Restore the env var so it doesn't leak into other tests.
+      delete process.env.WC_LEADERBOARD_CACHE;
+    });
+
+    for (const mode of ['off', 'shadow', 'on']) {
+      test(`WC_LEADERBOARD_CACHE=${mode} returns a leaderboard`, async () => {
+        process.env.WC_LEADERBOARD_CACHE = mode;
+        mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+        mock.method(GameService, 'getWorldCupStage', async (stage) =>
+          stage === 'group' ? [groupGame(201)] : []
+        );
+        makePoolStub();
+
+        const res = await fetch(`${baseURL}/api/picks/group/test-group/world-cup/leaderboard`, {
+          headers: { Authorization: 'Bearer test' },
+        });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.ok(Array.isArray(body.leaderboard));
+      });
+    }
+  });
 });
