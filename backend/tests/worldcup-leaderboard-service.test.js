@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion } from '../src/services/WorldCupLeaderboardService.js';
+import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached } from '../src/services/WorldCupLeaderboardService.js';
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -70,5 +70,61 @@ describe('version watermark', () => {
     const v = await getLeaderboardVersion(pool, { id: 7 });
     assert.equal(typeof v, 'string');
     assert.ok(v.includes('42'));
+  });
+});
+
+describe('getGroupLeaderboardCached', () => {
+  const group = { id: 7 };
+  const board = [{ userId: 1, rank: 1, points: 5 }];
+
+  function deps(overrides = {}) {
+    return {
+      gameService: { getAllWorldCupStages: async () => [{ id: 1 }] },
+      getLeaderboardVersion: async () => 'v1',
+      buildGroupLeaderboard: async () => board,
+      readSnapshot: async () => null,
+      writeSnapshot: async () => {},
+      ...overrides,
+    };
+  }
+
+  test('cold miss computes and stores', async () => {
+    let wrote = null;
+    const d = deps({ writeSnapshot: async (_p, _g, v, p) => { wrote = { v, p }; } });
+    const res = await getGroupLeaderboardCached({}, group, d);
+    assert.equal(res.source, 'miss');
+    assert.deepEqual(res.leaderboard, board);
+    assert.equal(wrote.v, 'v1');
+    assert.deepEqual(wrote.p, board);
+  });
+
+  test('warm hit serves snapshot WITHOUT recomputing', async () => {
+    let built = 0;
+    const d = deps({
+      readSnapshot: async () => ({ version: 'v1', payload: board, computedAt: 'x' }),
+      buildGroupLeaderboard: async () => { built++; return board; },
+    });
+    const res = await getGroupLeaderboardCached({}, group, d);
+    assert.equal(res.source, 'hit');
+    assert.equal(built, 0);            // the whole point: no O(members*games) work on a hit
+    assert.deepEqual(res.leaderboard, board);
+  });
+
+  test('stale snapshot (version moved) recomputes', async () => {
+    const d = deps({ readSnapshot: async () => ({ version: 'OLD', payload: [], computedAt: 'x' }) });
+    const res = await getGroupLeaderboardCached({}, group, d);
+    assert.equal(res.source, 'miss');
+    assert.deepEqual(res.leaderboard, board);
+  });
+
+  test('any error falls back to live compute', async () => {
+    // getVersion throws -> catch runs computeLive, which uses the injected fake
+    // gameService.getAllWorldCupStages() ([{id:1}]) and the default buildGroupLeaderboard
+    // against a pool that returns no members/picks -> empty board, source 'fallback'.
+    const emptyPool = { query: async () => ({ rows: [] }) };
+    const d = deps({ getLeaderboardVersion: async () => { throw new Error('boom'); } });
+    const res = await getGroupLeaderboardCached(emptyPool, group, d);
+    assert.equal(res.source, 'fallback');
+    assert.ok(Array.isArray(res.leaderboard));
   });
 });

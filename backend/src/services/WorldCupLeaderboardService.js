@@ -1,4 +1,6 @@
 import { buildLeaderboard } from './SoccerScoringService.js';
+import { GameService } from './GameService.js';
+import { readSnapshot as readSnap, writeSnapshot as writeSnap } from '../models/WorldCupLeaderboardSnapshot.js';
 
 export function buildVersionString({ gameWatermark, memberCount, memberMaxId, picksWatermark }) {
   return [gameWatermark ?? 'none', memberCount ?? 0, memberMaxId ?? 0, picksWatermark ?? 'none'].join('|');
@@ -89,4 +91,46 @@ export async function buildGroupLeaderboard(pool, group, games) {
       draws_incorrect: row.draws_incorrect,
     };
   });
+}
+
+/**
+ * Legacy compute: fetch the whole World Cup slate via the existing cache-first
+ * getAllWorldCupStages() and score it. This is the fallback path and the shadow
+ * baseline; its output matches today's leaderboard endpoint exactly. gameService
+ * and build are injectable for hermetic tests.
+ */
+export async function computeLive(pool, group, { gameService = GameService, build = buildGroupLeaderboard } = {}) {
+  const games = await gameService.getAllWorldCupStages();
+  return build(pool, group, games);
+}
+
+/**
+ * Cached read: refresh games (cache-first), compute the cheap version watermark,
+ * serve the stored snapshot on a hit, recompute + store on a miss. On ANY thrown
+ * error, fall back to live computation so the endpoint never errors or goes stale
+ * due to a cache bug. deps allows injecting collaborators for tests.
+ */
+export async function getGroupLeaderboardCached(pool, group, deps = {}) {
+  const {
+    gameService = GameService,
+    getLeaderboardVersion: getVersion = getLeaderboardVersion,
+    buildGroupLeaderboard: build = buildGroupLeaderboard,
+    readSnapshot: read = readSnap,
+    writeSnapshot: write = writeSnap,
+  } = deps;
+  try {
+    const games = await gameService.getAllWorldCupStages();
+    const version = await getVersion(pool, group);
+    const snap = await read(pool, group.id);
+    if (snap && snap.version === version) {
+      return { leaderboard: snap.payload, source: 'hit' };
+    }
+    const leaderboard = await build(pool, group, games);
+    await write(pool, group.id, version, leaderboard);
+    return { leaderboard, source: 'miss' };
+  } catch (err) {
+    console.error('[wc-leaderboard-cache] falling back to live compute:', err);
+    const leaderboard = await computeLive(pool, group, { gameService, build });
+    return { leaderboard, source: 'fallback' };
+  }
 }
