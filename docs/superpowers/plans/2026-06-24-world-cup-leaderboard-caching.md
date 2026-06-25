@@ -34,6 +34,7 @@ The investigation this plan was written from was partly stale. Verified against 
 - **Task 4 (custom throttle): SUPERSEDED — not built as specified.** The per-stage cache already prevents an ESPN stampede. The cached orchestration sources games directly from `getAllWorldCupStages()`.
 - **Task 7 `computeLive`** sources games from `GameService.getAllWorldCupStages()` (not a hand-rolled stage loop), and the cached path's "ensure games fresh" step is simply `getAllWorldCupStages()`.
 - Real symbol names to use: `Game.fromDbRow(row)` (row→Game mapper, already grafts `winnerTeamId`), `GameService.WORLD_CUP_STAGE_ORDER`, `GameService.getAllWorldCupStages()`.
+- **CORRECTION (post-review):** the claim throughout this doc that "WC picks have no server-side lock" is WRONG. `worldCupPicks.js` enforces a kickoff lock via `game_date <= now` on BOTH the self and admin write paths, so a pick cannot change once its game starts. Consequently the picks signal in Task 5 is **scoped to picks on FINAL games** (joined to `games WHERE status='FINAL'`), not all picks — pre-kickoff pick edits can't change the board and must not bust the cache. The picks signal is now the defensive complement to the game-finalization watermark rather than a primary correctness requirement. There is no integrity hole to flag (the "out of scope" pick-lock item below is moot).
 - The streamlined remaining work is **Task 5 (watermark) → Task 6 (snapshot table+model) → Task 7 (orchestration) → Task 8 (flag)**. Tasks 5, 6, 8 are unchanged; Task 7 uses `getAllWorldCupStages()` as above.
 
 ---

@@ -71,6 +71,29 @@ describe('version watermark', () => {
     assert.equal(typeof v, 'string');
     assert.ok(v.includes('42'));
   });
+
+  test('picks watermark is scoped to FINAL games (no churn on pre-kickoff edits)', async () => {
+    // Capture each query's SQL. The picks signal must be scoped to picks on FINAL
+    // games so that pre-kickoff pick edits — which cannot change the leaderboard,
+    // since WC picks lock at kickoff — do not needlessly invalidate the cache.
+    const sqls = [];
+    const pool = { query: async (sql) => {
+      sqls.push(sql);
+      const results = [
+        [{ watermark: '2026-06-20T18:00:00.000Z' }],   // games
+        [{ cnt: '3', maxid: '42' }],                    // members
+        [{ watermark: '2026-06-20T17:00:00.000Z' }],   // picks
+      ];
+      return { rows: results[sqls.length - 1] };
+    }};
+    await getLeaderboardVersion(pool, { id: 7 });
+
+    assert.equal(sqls.length, 3, 'should issue exactly three queries');
+    const picksSql = sqls[2];
+    assert.match(picksSql, /from\s+user_picks/i);
+    assert.match(picksSql, /join\s+games/i, 'picks query must join games to read status');
+    assert.match(picksSql, /status\s*=\s*'FINAL'/i, "picks query must be scoped to FINAL games");
+  });
 });
 
 describe('getGroupLeaderboardCached', () => {

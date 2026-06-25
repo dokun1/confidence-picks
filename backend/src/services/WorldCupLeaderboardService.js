@@ -18,10 +18,22 @@ export async function getLeaderboardVersion(pool, group) {
        FROM group_memberships WHERE group_id = $1`,
     [group.id]
   );
-  // Picks signal: latest pick edit in this group (picks are NOT server-locked).
+  // Picks signal: latest edit among picks on FINAL games only. WC picks lock at
+  // kickoff — worldCupPicks.js enforces `game_date <= now` on BOTH the self and
+  // admin write paths — so a pick can only be added/changed before its game
+  // starts, i.e. while that game cannot yet affect the leaderboard. Scoping to
+  // FINAL games means pre-kickoff pick churn does not needlessly bust the cache
+  // (the board hasn't changed), while still catching any post-finalization edit
+  // were the lock ever bypassed. A newly-finalized game is already covered by the
+  // game watermark above; this signal is the defensive complement to it.
   const { rows: pw } = await pool.query(
-    `SELECT MAX(updated_at) AS watermark
-       FROM user_picks WHERE group_id = $1 AND picked_result IS NOT NULL`,
+    `SELECT MAX(up.updated_at) AS watermark
+       FROM user_picks up
+       JOIN games g ON g.id = up.game_id
+      WHERE up.group_id = $1
+        AND up.picked_result IS NOT NULL
+        AND g.league = 'world_cup'
+        AND g.status = 'FINAL'`,
     [group.id]
   );
   return buildVersionString({
