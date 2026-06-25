@@ -3,7 +3,6 @@ import { authenticateToken } from '../middleware/auth.js';
 import { Group } from '../models/Group.js';
 import { GameService } from '../services/GameService.js';
 import { UserPick, WORLD_CUP_RESULTS } from '../models/UserPick.js';
-import { buildLeaderboard } from '../services/SoccerScoringService.js';
 import { buildGroupLeaderboard } from '../services/WorldCupLeaderboardService.js';
 import pool from '../config/database.js';
 
