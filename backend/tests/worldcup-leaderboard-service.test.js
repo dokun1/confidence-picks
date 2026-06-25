@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { buildGroupLeaderboard } from '../src/services/WorldCupLeaderboardService.js';
+import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion } from '../src/services/WorldCupLeaderboardService.js';
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -43,5 +43,32 @@ describe('buildGroupLeaderboard', () => {
     assert.equal(board.length, 1);
     assert.equal(board[0].userId, 9);
     assert.equal(board[0].points, 0);
+  });
+});
+
+describe('version watermark', () => {
+  test('buildVersionString is stable for equal inputs and changes on any field', () => {
+    const base = { gameWatermark: '2026-06-20T18:00:00.000Z', memberCount: 3, memberMaxId: 42, picksWatermark: '2026-06-20T17:00:00.000Z' };
+    const v0 = buildVersionString(base);
+    assert.equal(v0, buildVersionString({ ...base }));                       // stable
+    assert.notEqual(v0, buildVersionString({ ...base, memberCount: 4 }));    // member joined
+    assert.notEqual(v0, buildVersionString({ ...base, memberMaxId: 43 }));   // member churn
+    assert.notEqual(v0, buildVersionString({ ...base, gameWatermark: '2026-06-21T00:00:00.000Z' })); // game finalized
+    assert.notEqual(v0, buildVersionString({ ...base, picksWatermark: '2026-06-20T19:00:00.000Z' })); // pick edited
+  });
+
+  test('getLeaderboardVersion assembles from three queries', async () => {
+    let i = 0;
+    const pool = { query: async () => {
+      const results = [
+        [{ watermark: '2026-06-20T18:00:00.000Z' }],   // games
+        [{ cnt: '3', maxid: '42' }],                    // members
+        [{ watermark: '2026-06-20T17:00:00.000Z' }],   // picks
+      ];
+      return { rows: results[i++] };
+    }};
+    const v = await getLeaderboardVersion(pool, { id: 7 });
+    assert.equal(typeof v, 'string');
+    assert.ok(v.includes('42'));
   });
 });

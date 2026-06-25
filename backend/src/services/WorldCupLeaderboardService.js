@@ -1,5 +1,35 @@
 import { buildLeaderboard } from './SoccerScoringService.js';
 
+export function buildVersionString({ gameWatermark, memberCount, memberMaxId, picksWatermark }) {
+  return [gameWatermark ?? 'none', memberCount ?? 0, memberMaxId ?? 0, picksWatermark ?? 'none'].join('|');
+}
+
+export async function getLeaderboardVersion(pool, group) {
+  // Finalized-game watermark: the latest change-time among FINAL World Cup games.
+  const { rows: gw } = await pool.query(
+    `SELECT MAX(last_updated) AS watermark
+       FROM games WHERE league = 'world_cup' AND status = 'FINAL'`
+  );
+  // Member-set signal: count + highest membership id (catches joins AND leaves/rejoins).
+  const { rows: mr } = await pool.query(
+    `SELECT COUNT(*) AS cnt, MAX(id) AS maxid
+       FROM group_memberships WHERE group_id = $1`,
+    [group.id]
+  );
+  // Picks signal: latest pick edit in this group (picks are NOT server-locked).
+  const { rows: pw } = await pool.query(
+    `SELECT MAX(updated_at) AS watermark
+       FROM user_picks WHERE group_id = $1 AND picked_result IS NOT NULL`,
+    [group.id]
+  );
+  return buildVersionString({
+    gameWatermark: gw[0]?.watermark ? new Date(gw[0].watermark).toISOString() : null,
+    memberCount: Number(mr[0]?.cnt ?? 0),
+    memberMaxId: Number(mr[0]?.maxid ?? 0),
+    picksWatermark: pw[0]?.watermark ? new Date(pw[0].watermark).toISOString() : null,
+  });
+}
+
 /**
  * Given an already-fetched set of World Cup games, build the ranked leaderboard
  * for one group. DB reads (members + picks) happen here; game fetching does NOT —
