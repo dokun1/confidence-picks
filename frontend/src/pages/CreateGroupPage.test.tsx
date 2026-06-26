@@ -58,6 +58,7 @@ describe('CreateGroupPage', () => {
       description: '',
       poolType: 'nfl_weekly',
       knockoutOnly: false,
+      maxMembers: 50,
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');
@@ -85,6 +86,7 @@ describe('CreateGroupPage', () => {
       description: '',
       poolType: 'world_cup_2026',
       knockoutOnly: false,
+      maxMembers: 50,
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');

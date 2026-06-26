@@ -8,14 +8,16 @@ const router = express.Router();
 // Create a new group
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, identifier, description, isPublic = true, maxMembers = 40, avatarUrl, poolType, knockoutOnly } = req.body;
+    const { name, identifier, description, isPublic = true, maxMembers = 50, avatarUrl, poolType, knockoutOnly } = req.body;
 
     if (!name || !identifier) {
       return res.status(400).json({ error: 'Name and identifier are required' });
     }
 
-    if (maxMembers > 40) {
-      return res.status(400).json({ error: 'Maximum members cannot exceed 40' });
+    // Member limit is configurable per group, bounded to [2, 500] (the absolute
+    // cap). The DB CHECK enforces the same range; we surface a 400 first.
+    if (!Number.isInteger(maxMembers) || maxMembers < 2 || maxMembers > 500) {
+      return res.status(400).json({ error: 'Member limit must be a whole number between 2 and 500' });
     }
 
     // poolType is optional. The CHECK constraint on groups.pool_type would
@@ -387,6 +389,14 @@ router.put('/:identifier', authenticateToken, async (req, res) => {
   } catch (error) {
     if (error.message.includes('Only group admins')) {
       return res.status(403).json({ error: error.message });
+    }
+    // Lowering the limit below the current member count is a conflict the admin
+    // must resolve (have members leave) before it can be applied.
+    if (error.message.includes('below the current member count')) {
+      return res.status(409).json({ error: error.message });
+    }
+    if (error.message.includes('Member limit must be')) {
+      return res.status(400).json({ error: error.message });
     }
     res.status(500).json({ error: error.message });
   }

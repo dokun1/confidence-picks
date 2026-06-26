@@ -65,7 +65,7 @@ export async function createGroup(payload) {
     identifier: payload.identifier,
     description: payload.description,
     isPublic: true,
-    maxMembers: 40
+    maxMembers: payload.maxMembers ?? 50
   };
   // Only forward poolType when provided so existing NFL group creation is unchanged.
   if (payload.poolType) body.poolType = payload.poolType;
@@ -197,6 +197,12 @@ export async function updateGroup(identifier, updates) {
   if (res.status === 400) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Invalid group update');
+  }
+  // 409: the new member limit is below the current member count. Surface the
+  // server's message verbatim so the admin sees that members must leave first.
+  if (res.status === 409) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Member limit is below the current member count; members must leave first');
   }
   if (!res.ok) throw new Error('Failed to update group');
   return await res.json();
