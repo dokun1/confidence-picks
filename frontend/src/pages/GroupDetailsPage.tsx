@@ -204,7 +204,7 @@ export default function GroupDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [identifier, group?.poolType, activeTab]);
+  }, [identifier, group?.poolType, group?.knockoutOnly, activeTab]);
 
   // No identifier in the query string: nothing to load, show the error UI early.
   if (!identifier) {
