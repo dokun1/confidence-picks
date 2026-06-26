@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS user_picks (
   season_type INTEGER NOT NULL,
   won BOOLEAN NULL, -- populated when game final
   points INTEGER NULL, -- confidence if won else 0 when final
+  predicted_home_score INTEGER NULL, -- World Cup knockout score prediction (home side)
+  predicted_away_score INTEGER NULL, -- World Cup knockout score prediction (away side)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, group_id, game_id), -- one pick record per game per user per group
@@ -432,4 +434,16 @@ BEGIN
   -- DEFAULT above only applies to fresh CREATE TABLE; this catches legacy rows'
   -- table default. Idempotent.
   ALTER TABLE groups ALTER COLUMN max_members SET DEFAULT 50;
+END $$;
+
+-- Add predicted score columns to user_picks for World Cup knockout score-bonus feature.
+-- Idempotent: safe to re-run on a database that already has these columns.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='predicted_home_score') THEN
+    ALTER TABLE user_picks ADD COLUMN predicted_home_score INTEGER NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='predicted_away_score') THEN
+    ALTER TABLE user_picks ADD COLUMN predicted_away_score INTEGER NULL;
+  END IF;
 END $$;

@@ -4,6 +4,7 @@ import pool from '../config/database.js';
 // CHECK constraint and SoccerScoringService's `picked_result` contract.
 export const WORLD_CUP_RESULTS = ['home', 'away', 'draw'];
 
+
 /**
  * Build the parameterized bulk-upsert for World Cup picks.
  *
@@ -23,13 +24,15 @@ export function buildWorldCupUpsert({ userId, groupId, season, seasonType, week,
     if (!WORLD_CUP_RESULTS.includes(p.pickedResult)) {
       throw new Error(`Invalid picked_result: ${p.pickedResult}`);
     }
-    // 7 columns per row; base offset keeps parameter numbers contiguous.
-    const base = i * 7;
-    values.push(userId, groupId, p.gameId, p.pickedResult, week, season, seasonType);
-    return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7})`;
+    const ph = p.predictedHomeScore == null ? null : p.predictedHomeScore;
+    const pa = p.predictedAwayScore == null ? null : p.predictedAwayScore;
+    // 9 columns per row; base offset keeps parameter numbers contiguous.
+    const base = i * 9;
+    values.push(userId, groupId, p.gameId, p.pickedResult, week, season, seasonType, ph, pa);
+    return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9})`;
   }).join(',');
 
-  const sql = `INSERT INTO user_picks (user_id, group_id, game_id, picked_result, week, season, season_type)
+  const sql = `INSERT INTO user_picks (user_id, group_id, game_id, picked_result, week, season, season_type, predicted_home_score, predicted_away_score)
          VALUES ${placeholders}
          ON CONFLICT (user_id, group_id, game_id) DO UPDATE SET
                    picked_result = EXCLUDED.picked_result,
@@ -38,6 +41,8 @@ export function buildWorldCupUpsert({ userId, groupId, season, seasonType, week,
                    week = EXCLUDED.week,
                    season = EXCLUDED.season,
                    season_type = EXCLUDED.season_type,
+                   predicted_home_score = EXCLUDED.predicted_home_score,
+                   predicted_away_score = EXCLUDED.predicted_away_score,
                    updated_at = NOW()
                  RETURNING *`;
   return { sql, values };
@@ -51,6 +56,12 @@ export function buildWorldCupUpsert({ userId, groupId, season, seasonType, week,
  *   World Cup  — picked_result ('home'|'away'|'draw') set, the other two NULL.
  */
 export class UserPick {
+  // Self-heal latch for the predicted_home_score / predicted_away_score columns
+  // (mirrors Group._knockoutOnlyColumnEnsured). Once the columns are confirmed
+  // present in this process, every later bulkUpsertWorldCupPicks skips even the
+  // catalog lookup — the migration cost is paid at most once per warm lambda.
+  static _scoreColumnsEnsured = false;
+
   constructor(row) {
     this.id = row.id;
     this.userId = row.user_id;
@@ -68,6 +79,45 @@ export class UserPick {
     this.points = row.points;
     this.createdAt = row.created_at ? new Date(row.created_at) : null;
     this.updatedAt = row.updated_at ? new Date(row.updated_at) : null;
+  }
+
+  // Ensure the predicted_home_score and predicted_away_score columns exist.
+  // Production resilience: prod runs with INIT_DB unset, so schema.sql is NOT
+  // synced on deploy — mirror Group.ensureKnockoutOnlyColumn so these columns
+  // land automatically on the first World Cup pick upsert after a deploy. The
+  // INSERT names both columns, so a missing column would 500 every WC pick save.
+  // Idempotent: two catalog lookups that early-return once latched, and each
+  // ALTER is ADD COLUMN IF NOT EXISTS (safe under concurrent cold starts). Does
+  // NOT latch on failure — a transient error must let the next call retry.
+  static async ensureScorePredictionColumns() {
+    if (this._scoreColumnsEnsured) return; // warm-instance fast path: no query
+    try {
+      const checkHome = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'user_picks' AND column_name = 'predicted_home_score'`
+      );
+      if (checkHome.rows.length === 0) {
+        console.log('[user_picks] Missing predicted_home_score column – adding');
+        await pool.query(
+          `ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_home_score INTEGER NULL`
+        );
+        console.log('[user_picks] predicted_home_score column added');
+      }
+      const checkAway = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'user_picks' AND column_name = 'predicted_away_score'`
+      );
+      if (checkAway.rows.length === 0) {
+        console.log('[user_picks] Missing predicted_away_score column – adding');
+        await pool.query(
+          `ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_away_score INTEGER NULL`
+        );
+        console.log('[user_picks] predicted_away_score column added');
+      }
+      // Latch only after both columns are confirmed present/added.
+      this._scoreColumnsEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next call retry.
+      console.warn('[user_picks] Failed to ensure score prediction columns (may already exist):', e.message);
+    }
   }
 
   static async findForUserWeek({ userId, groupId, season, seasonType, week }) {
@@ -128,6 +178,7 @@ export class UserPick {
    */
   static async bulkUpsertWorldCupPicks({ userId, groupId, season, seasonType, week, picks }) {
     if (!picks || picks.length === 0) return [];
+    await UserPick.ensureScorePredictionColumns();
   console.log('[user_picks] bulkUpsertWorldCupPicks incoming', { userId, groupId, season, seasonType, week, picks });
     const { sql, values } = buildWorldCupUpsert({ userId, groupId, season, seasonType, week, picks });
     const { rows } = await pool.query(sql, values);
