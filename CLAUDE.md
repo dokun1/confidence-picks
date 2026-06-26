@@ -187,12 +187,18 @@ group stage (`stage = 'group'`) is hidden in the UI and rejected server-side.
 Scoring/leaderboard are unchanged — they already sum per-match over whatever picks
 exist.
 
-- **Column:** `groups.knockout_only BOOLEAN NOT NULL DEFAULT false`. Added the same
-  way as `pool_type`: in `schema.sql` (CREATE + idempotent `DO $$` ALTER) and in
-  `backend/scripts/addWorldCupColumns.js`. **Deploy note:** prod runs with
-  `INIT_DB` unset, so the column does NOT appear on a normal deploy — land it with
-  one `INIT_DB=true` deploy *or* `node backend/scripts/addWorldCupColumns.js`. The
-  `DEFAULT false` backfills existing rows, so it's non-destructive.
+- **Column:** `groups.knockout_only BOOLEAN NOT NULL DEFAULT false`. Defined in
+  `schema.sql` (CREATE + idempotent `DO $$` ALTER) and `backend/scripts/addWorldCupColumns.js`.
+- **Deploy (automatic, self-healing):** prod runs with `INIT_DB` unset, so neither
+  `schema.sql` nor the migration script runs on a normal deploy — and `create()`'s
+  INSERT names `knockout_only`, so a missing column would 500 *every* new group.
+  `Group.ensureKnockoutOnlyColumn()` closes this the same way `ensureChatReadsSchema`
+  / `GroupInvite.ensureLinkInviteSchema` do: `create()` calls it first, it adds the
+  column (`ADD COLUMN IF NOT EXISTS`) on the first group creation after deploy, then
+  a static `Group._knockoutOnlyColumnEnsured` latch makes every later create a
+  zero-query no-op ("back to normal"). Reads already tolerate a missing column
+  (`SELECT g.*` → undefined → false). `INIT_DB=true` and the migration script remain
+  as explicit/ops alternatives but are no longer required.
 - **Model:** `Group` carries `knockoutOnly` (camelCase) through the constructor,
   `create()`, `findByIdentifier()`, `getUserGroups()`. Left out of `update()`'s
   `allowedFields` on purpose (immutable).
