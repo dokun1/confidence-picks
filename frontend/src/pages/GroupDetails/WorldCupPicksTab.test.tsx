@@ -545,6 +545,97 @@ describe('WorldCupPicksTab', () => {
       });
     });
 
+    it('a knockout pick with NO score inputs sends no score fields (optional guarantee)', async () => {
+      mockSubmitPicks.mockResolvedValue({});
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+
+      // Pick the knockout game but leave both score inputs blank.
+      fireEvent.click(pickButton('Canada', 'CAN'));
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith(
+          'la-crew',
+          expect.arrayContaining([
+            expect.objectContaining({ gameId: 20, pickedResult: 'home' }),
+          ]),
+        ),
+      );
+      const [, calledPicks] = mockSubmitPicks.mock.calls[0];
+      const knockoutPick = calledPicks.find((p: { gameId: number }) => p.gameId === 20);
+      expect(knockoutPick).not.toHaveProperty('predictedHomeScore');
+      expect(knockoutPick).not.toHaveProperty('predictedAwayScore');
+    });
+
+    it('a one-sided score (only home filled) is omitted — neither field is sent', async () => {
+      mockSubmitPicks.mockResolvedValue({});
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+
+      // Pick the knockout game and fill in ONLY the home score.
+      fireEvent.click(pickButton('Canada', 'CAN'));
+      const homeInput = await screen.findByRole('spinbutton', {
+        name: 'Predicted score for Canada',
+      });
+      fireEvent.change(homeInput, { target: { value: '2' } });
+      // Away input is left blank.
+
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith(
+          'la-crew',
+          expect.arrayContaining([
+            expect.objectContaining({ gameId: 20, pickedResult: 'home' }),
+          ]),
+        ),
+      );
+      const [, calledPicks] = mockSubmitPicks.mock.calls[0];
+      const knockoutPick = calledPicks.find((p: { gameId: number }) => p.gameId === 20);
+      // Both score fields must be absent when only one was filled.
+      expect(knockoutPick).not.toHaveProperty('predictedHomeScore');
+      expect(knockoutPick).not.toHaveProperty('predictedAwayScore');
+    });
+
+    it('a one-sided score (only away filled) is omitted — neither field is sent', async () => {
+      mockSubmitPicks.mockResolvedValue({});
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+
+      // Pick the knockout game and fill in ONLY the away score.
+      fireEvent.click(pickButton('Canada', 'CAN'));
+      const awayInput = await screen.findByRole('spinbutton', {
+        name: 'Predicted score for Argentina',
+      });
+      fireEvent.change(awayInput, { target: { value: '1' } });
+      // Home input is left blank.
+
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith(
+          'la-crew',
+          expect.arrayContaining([
+            expect.objectContaining({ gameId: 20, pickedResult: 'home' }),
+          ]),
+        ),
+      );
+      const [, calledPicks] = mockSubmitPicks.mock.calls[0];
+      const knockoutPick = calledPicks.find((p: { gameId: number }) => p.gameId === 20);
+      expect(knockoutPick).not.toHaveProperty('predictedHomeScore');
+      expect(knockoutPick).not.toHaveProperty('predictedAwayScore');
+    });
+
     it('score inputs appear only on knockout cards, not on group-stage cards', async () => {
       renderTab();
       await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {

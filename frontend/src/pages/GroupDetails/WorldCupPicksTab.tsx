@@ -353,9 +353,12 @@ export default function WorldCupPicksTab({
         // send no score fields.
         if (knockoutIds.has(id)) {
           const s = scoreDraft[id];
-          if (s) {
-            if (s.home != null) pick.predictedHomeScore = s.home;
-            if (s.away != null) pick.predictedAwayScore = s.away;
+          // Both-or-neither: only include score prediction when BOTH fields are
+          // present and are valid numbers. A one-sided entry is treated as no
+          // prediction (omit both) so the server never sees an invalid payload.
+          if (s && s.home != null && !isNaN(s.home) && s.away != null && !isNaN(s.away)) {
+            pick.predictedHomeScore = s.home;
+            pick.predictedAwayScore = s.away;
           }
         }
         return pick;

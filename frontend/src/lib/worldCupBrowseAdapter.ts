@@ -66,8 +66,9 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDr
       ? (teamGroup(m.homeTeam.abbreviation) ?? teamGroup(m.awayTeam.abbreviation))
       : undefined,
     // Score predictions — knockout matches only; sourced from the parallel
-    // scoreDraft in WorldCupPicksTab. Group-stage matches leave these absent.
-    predictedHomeScore: scoreDraft?.[m.id]?.home,
-    predictedAwayScore: scoreDraft?.[m.id]?.away,
+    // scoreDraft in WorldCupPicksTab. Group-stage matches always leave these
+    // absent (isKnockout guard keeps the code and the comment in agreement).
+    predictedHomeScore: m.stage !== 'group' ? scoreDraft?.[m.id]?.home : undefined,
+    predictedAwayScore: m.stage !== 'group' ? scoreDraft?.[m.id]?.away : undefined,
   }));
 }

@@ -115,7 +115,19 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
       </div>
 
       {locked ? (
-        <ResultStrip game={game} />
+        <>
+          <ResultStrip game={game} />
+          {/* Read-only prediction: shown when kickoff has passed and the user had
+              saved a score prediction for this knockout match. Mirrors MatchPickRow. */}
+          {game.isKnockout && (game.predictedHomeScore != null || game.predictedAwayScore != null) && (
+            <div className="mt-xs flex items-center justify-center gap-xs text-xs text-content-muted" data-testid={`prediction-${game.id}`}>
+              <span>Your prediction:</span>
+              <span className="font-semibold tabular-nums">
+                {game.home.abbr} {game.predictedHomeScore ?? '–'} – {game.predictedAwayScore ?? '–'} {game.away.abbr}
+              </span>
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
           <div className="flex gap-xs">
@@ -132,42 +144,59 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
           {/* Score prediction inputs — editable knockout matches only.
               `step="any"` prevents native browser validation from blocking submit;
               bounds ([0, 20]) are enforced server-side. Hidden for group-stage. */}
-          {game.isKnockout && onScoreChange && (
-            <div className="mt-sm flex items-center gap-sm border-t border-border pt-sm" aria-label="Predict the score">
-              <span className="text-xs text-content-muted">Predicted score:</span>
-              <div className="flex items-center gap-xs">
-                <label className="flex items-center gap-xxs text-xs">
-                  <span className="font-medium">{game.home.abbr}</span>
-                  <input
-                    type="number"
-                    step="any"
-                    aria-label={`Predicted score for ${game.home.name}`}
-                    value={game.predictedHomeScore ?? ''}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      onScoreChange(game.id, 'home', raw === '' ? null : Number(raw));
-                    }}
-                    className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  />
-                </label>
-                <span className="text-xs text-content-muted">–</span>
-                <label className="flex items-center gap-xxs text-xs">
-                  <span className="font-medium">{game.away.abbr}</span>
-                  <input
-                    type="number"
-                    step="any"
-                    aria-label={`Predicted score for ${game.away.name}`}
-                    value={game.predictedAwayScore ?? ''}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      onScoreChange(game.id, 'away', raw === '' ? null : Number(raw));
-                    }}
-                    className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  />
-                </label>
+          {game.isKnockout && onScoreChange && (() => {
+            const homeVal = game.predictedHomeScore;
+            const awayVal = game.predictedAwayScore;
+            const homeFilled = homeVal != null && !isNaN(homeVal);
+            const awayFilled = awayVal != null && !isNaN(awayVal);
+            const oneSided = homeFilled !== awayFilled;
+            return (
+              <div className="mt-sm flex flex-col gap-xs border-t border-border pt-sm">
+                <div className="flex items-center gap-sm" aria-label="Predict the score">
+                  <span className="text-xs text-content-muted">Predicted score:</span>
+                  <div className="flex items-center gap-xs">
+                    <label className="flex items-center gap-xxs text-xs">
+                      <span className="font-medium">{game.home.abbr}</span>
+                      <input
+                        type="number"
+                        step="any"
+                        aria-label={`Predicted score for ${game.home.name}`}
+                        value={homeVal ?? ''}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          onScoreChange(game.id, 'home', raw === '' ? null : Number(raw));
+                        }}
+                        className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </label>
+                    <span className="text-xs text-content-muted">–</span>
+                    <label className="flex items-center gap-xxs text-xs">
+                      <span className="font-medium">{game.away.abbr}</span>
+                      <input
+                        type="number"
+                        step="any"
+                        aria-label={`Predicted score for ${game.away.name}`}
+                        value={awayVal ?? ''}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          onScoreChange(game.id, 'away', raw === '' ? null : Number(raw));
+                        }}
+                        className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </label>
+                  </div>
+                </div>
+                {/* Inline hint: shown when exactly one score is filled. The pick
+                    will still submit, but the score prediction is omitted (both-or-
+                    neither rule) so the user needs to know why it won't save. */}
+                {oneSided && (
+                  <p className="text-xs text-warning-700 dark:text-warning-400" data-testid={`score-hint-${game.id}`}>
+                    Enter both scores to earn the bonus
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>
