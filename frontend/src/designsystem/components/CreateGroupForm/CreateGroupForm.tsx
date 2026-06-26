@@ -10,6 +10,11 @@ export interface CreateGroupFormValues {
   identifier: string;
   description: string;
   poolType: PoolType;
+  /**
+   * World Cup 2026 sub-setting. When true, the group only allows picks on
+   * knockout-stage games. Always false unless poolType is 'world_cup_2026'.
+   */
+  knockoutOnly: boolean;
 }
 
 export interface CreateGroupFormProps {
@@ -67,6 +72,10 @@ export default function CreateGroupForm({
   const [identifier, setIdentifier] = useState(initialValues?.identifier ?? '');
   const [description, setDescription] = useState(initialValues?.description ?? '');
   const [poolType, setPoolType] = useState<PoolType>(initialValues?.poolType ?? 'nfl_weekly');
+  const [knockoutOnly, setKnockoutOnly] = useState<boolean>(initialValues?.knockoutOnly ?? false);
+  // The knockout-only setting is meaningful only for World Cup pools, so it lives
+  // behind the pool-type choice and rides along on it.
+  const isWorldCup = poolType === 'world_cup_2026';
   const [identifierManuallyEdited, setIdentifierManuallyEdited] = useState(
     !!initialValues?.identifier
   );
@@ -121,7 +130,9 @@ export default function CreateGroupForm({
 
     setLoading(true);
     try {
-      await onSubmit({ name, identifier, description, poolType });
+      // knockoutOnly only travels with a World Cup pool; force it off otherwise
+      // so a stale toggle from a since-changed pool type can never leak through.
+      await onSubmit({ name, identifier, description, poolType, knockoutOnly: isWorldCup && knockoutOnly });
       setToast({ open: true, message: 'Group created!', variant: 'success' });
     } catch (err) {
       setToast({
@@ -198,7 +209,13 @@ export default function CreateGroupForm({
           <select
             id="pool-type"
             value={poolType}
-            onChange={(e) => setPoolType(e.target.value as PoolType)}
+            onChange={(e) => {
+              const next = e.target.value as PoolType;
+              setPoolType(next);
+              // Leaving World Cup clears the sub-setting so it never travels with
+              // an NFL pool (the server rejects that combination anyway).
+              if (next !== 'world_cup_2026') setKnockoutOnly(false);
+            }}
             disabled={loading}
             className="block w-full rounded-md border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-500 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-100"
           >
@@ -206,6 +223,33 @@ export default function CreateGroupForm({
             <option value="world_cup_2026">World Cup 2026</option>
           </select>
         </div>
+
+        {/* World Cup 2026 sub-setting. Only shown for a World Cup pool — it has no
+            meaning for NFL. When on, the group's Picks tab hides group-stage games
+            and the server rejects any group-stage pick. */}
+        {isWorldCup && (
+          <div className="rounded-md border border-secondary-200 bg-secondary-50 p-3 dark:border-secondary-700 dark:bg-secondary-900/40">
+            <label htmlFor="knockout-only" className="flex items-start gap-3 cursor-pointer">
+              <input
+                id="knockout-only"
+                type="checkbox"
+                checked={knockoutOnly}
+                onChange={(e) => setKnockoutOnly(e.target.checked)}
+                disabled={loading}
+                className="mt-0.5 h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+              />
+              <span className="text-sm">
+                <span className="block font-medium text-secondary-900 dark:text-secondary-100">
+                  Knockout stage picks only
+                </span>
+                <span className="block text-secondary-500 dark:text-secondary-400">
+                  Members can only pick knockout games (Round of 32 onward). Group-stage
+                  games are excluded. This can&apos;t be changed after the group is created.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
 
         <div className="flex space-x-3 pt-4">
           <div className="relative inline-toast-anchor">

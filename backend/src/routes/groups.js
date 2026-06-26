@@ -8,7 +8,7 @@ const router = express.Router();
 // Create a new group
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, identifier, description, isPublic = true, maxMembers = 40, avatarUrl, poolType } = req.body;
+    const { name, identifier, description, isPublic = true, maxMembers = 40, avatarUrl, poolType, knockoutOnly = false } = req.body;
 
     if (!name || !identifier) {
       return res.status(400).json({ error: 'Name and identifier are required' });
@@ -24,6 +24,12 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid poolType' });
     }
 
+    // knockoutOnly is a World Cup 2026 sub-setting; it is meaningless for an NFL
+    // pool and would silently mislead, so reject the combination outright.
+    if (knockoutOnly && poolType !== 'world_cup_2026') {
+      return res.status(400).json({ error: 'knockoutOnly is only valid for world_cup_2026 pools' });
+    }
+
     const group = await Group.create({
       name,
       identifier,
@@ -32,6 +38,7 @@ router.post('/', authenticateToken, async (req, res) => {
       maxMembers,
       avatarUrl,
       poolType,
+      knockoutOnly: Boolean(knockoutOnly),
     }, req.user.id);
     
     res.status(201).json(group);

@@ -17,6 +17,9 @@ export interface GroupData {
   // predating #86. Forwarded by groupsService.getMyGroups so callers can
   // partition by pool type.
   poolType?: 'nfl_weekly' | 'world_cup_2026' | null;
+  // World Cup 2026 sub-setting forwarded by getMyGroups so the picks surface can
+  // hide group-stage games even without a loaded group object (standalone page).
+  knockoutOnly?: boolean;
 }
 
 export interface GroupCardProps {

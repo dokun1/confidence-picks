@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS groups (
   is_public BOOLEAN DEFAULT true,
   max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
   pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly' CHECK (pool_type IN ('nfl_weekly','world_cup_2026')), -- pick-pool variant
+  knockout_only BOOLEAN NOT NULL DEFAULT false, -- world_cup_2026 sub-setting: members may only pick knockout-stage games (no group stage)
   avatar_url VARCHAR(500),
   created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -251,6 +252,12 @@ BEGIN
   ) THEN
     ALTER TABLE groups ADD COLUMN pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly'
       CHECK (pool_type IN ('nfl_weekly','world_cup_2026'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'knockout_only'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN knockout_only BOOLEAN NOT NULL DEFAULT false;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns

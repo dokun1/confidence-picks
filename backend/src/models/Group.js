@@ -21,11 +21,15 @@ export class Group {
     // frontend's GroupDetailsPage can branch on group.poolType — without it
     // every WC group rendered the NFL PicksTab.
     this.poolType = data.poolType;
+    // World Cup 2026 sub-setting: when true, members may only pick knockout-stage
+    // games (no group stage). Defaults to false so NFL pools and ordinary WC pools
+    // are unaffected. The WC picks routes read this to reject group-stage picks.
+    this.knockoutOnly = data.knockoutOnly ?? false;
   }
 
   // Create new group
   static async create(groupData, creatorId) {
-    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType } = groupData;
+    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType, knockoutOnly } = groupData;
     
     // Ensure identifier is unique and URL-friendly
     // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
@@ -43,12 +47,12 @@ export class Group {
       // (see addWorldCupColumns.js migration), so omitting it preserves the
       // pre-WC behavior for NFL callers. Pass through when set.
       const groupQuery = `
-        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'))
+        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type, knockout_only)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'), COALESCE($9, false))
         RETURNING *
       `;
       const groupResult = await client.query(groupQuery, [
-        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null
+        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null, knockoutOnly ?? null
       ]);
       
       const group = groupResult.rows[0];
@@ -74,7 +78,9 @@ export class Group {
         createdAt: group.created_at,
         updatedAt: group.updated_at,
         memberCount: 1,
-        userRole: 'admin'
+        userRole: 'admin',
+        poolType: group.pool_type,
+        knockoutOnly: group.knockout_only,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -122,6 +128,7 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      knockoutOnly: row.knockout_only,
     });
   }
 
@@ -158,6 +165,7 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      knockoutOnly: row.knockout_only,
     }));
   }
 

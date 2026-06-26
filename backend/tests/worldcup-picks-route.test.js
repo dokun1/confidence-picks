@@ -160,6 +160,80 @@ describe('World Cup picks router', () => {
       const data = await res.json();
       assert.match(data.error, /Invalid gameId/);
     });
+
+    test('rejects a group-stage pick in a knockout-only group (400, no persistence)', async () => {
+      // knockoutOnly group: the group stage is off-limits. A group-stage gameId
+      // must be rejected with the offending ids, and nothing may persist.
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member', knockoutOnly: true }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 101, season: 2026, season_type: 1, week: 1, stage: 'group', game_date: new Date(Date.now() + 86400000).toISOString() },
+            { id: 201, season: 2026, season_type: 3, week: 1, stage: 'r16', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [
+          { gameId: 101, pickedResult: 'home' }, // group stage -> forbidden
+          { gameId: 201, pickedResult: 'home' }, // knockout -> would be fine on its own
+        ] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Group-stage picks are not allowed/);
+      assert.deepStrictEqual(data.gameIds, [101], 'reports the offending group-stage id');
+      assert.strictEqual(upsert.mock.callCount(), 0, 'a forbidden batch must never persist');
+    });
+
+    test('allows a knockout-stage pick in a knockout-only group', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member', knockoutOnly: true }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 201, season: 2026, season_type: 3, week: 1, stage: 'r16', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1);
+    });
+
+    test('still allows group-stage picks in an ordinary (non-knockout-only) WC group', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member', knockoutOnly: false }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 101, season: 2026, season_type: 1, week: 1, stage: 'group', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1, 'group-stage picks save normally when not knockout-only');
+    });
   });
 
   describe('GET /group/:groupId/world-cup/leaderboard', () => {
@@ -422,6 +496,32 @@ describe('World Cup picks router', () => {
       assert.strictEqual(res.status, 400);
       const data = await res.json();
       assert.match(data.error, /Invalid gameId/);
+    });
+
+    test('rejects an admin override of a group-stage pick in a knockout-only group', async () => {
+      // The knockout-only rule binds even an admin: a started/group-stage game is
+      // off-limits for everyone, so the override is rejected before any persistence.
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin', knockoutOnly: true }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 101, season: 2026, season_type: 1, week: 1, stage: 'group', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home' }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Group-stage picks are not allowed/);
+      assert.deepStrictEqual(data.gameIds, [101]);
+      assert.strictEqual(upsert.mock.callCount(), 0);
     });
   });
 

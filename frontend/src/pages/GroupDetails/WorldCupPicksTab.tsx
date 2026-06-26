@@ -71,6 +71,13 @@ export interface WorldCupPicksTabProps {
   currentUserId?: string | number | null;
   /** Whether the caller is a group admin. Gates editing OTHER members' picks. */
   isAdmin?: boolean;
+  /**
+   * Knockout-only group: hide group-stage games entirely so members can only pick
+   * knockout matches. Passed by GroupDetailsPage (which has the loaded group) for
+   * instant correctness on first paint; the standalone /world-cup page omits it,
+   * so the tab also derives it from its own getMyGroups fetch as a fallback.
+   */
+  knockoutOnly?: boolean;
   /** Saved view the embedded games list opens on (e.g. 'needs-pick' from a deeplink). */
   initialView?: SavedView;
 }
@@ -80,6 +87,7 @@ export default function WorldCupPicksTab({
   members = [],
   currentUserId = null,
   isAdmin = false,
+  knockoutOnly,
   initialView,
 }: WorldCupPicksTabProps) {
   const groupId = identifier;
@@ -276,9 +284,26 @@ export default function WorldCupPicksTab({
   // Derive the flat browse-list games from the fetched matches + the current
   // draft. The list itself owns view/filter/sort state; we just feed it data and
   // route picks back through pickResult.
+  // Fallback knockout-only flag derived from the getMyGroups fetch (below), for
+  // the standalone /world-cup page where no group object — and thus no prop — is
+  // passed. The explicit prop (from GroupDetailsPage) always wins so first paint
+  // is correct.
+  const [derivedKnockoutOnly, setDerivedKnockoutOnly] = useState(false);
+  const effectiveKnockoutOnly = knockoutOnly ?? derivedKnockoutOnly;
+
+  // In a knockout-only group the group stage is off-limits, so drop those matches
+  // before anything renders or counts them. Everything downstream (browse list,
+  // empty state, submit bar) keys off this filtered view.
+  const visibleMatches = useMemo(
+    () =>
+      effectiveKnockoutOnly
+        ? fetchState.matches.filter((m) => m.stage !== 'group')
+        : fetchState.matches,
+    [fetchState.matches, effectiveKnockoutOnly],
+  );
   const browseGames = useMemo(
-    () => toBrowseGames(fetchState.matches, draft),
-    [fetchState.matches, draft],
+    () => toBrowseGames(visibleMatches, draft),
+    [visibleMatches, draft],
   );
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
   // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
@@ -319,6 +344,10 @@ export default function WorldCupPicksTab({
     getMyGroups()
       .then((groups) => {
         if (cancelled) return;
+        // Derive this group's knockout-only flag from the roster fetch (used only
+        // when no explicit prop is supplied — e.g. the standalone /world-cup page).
+        const self = groups.find((g) => g.identifier === groupId);
+        if (self) setDerivedKnockoutOnly(Boolean(self.knockoutOnly));
         const wc: SaveTarget[] = groups
           .filter((g) => g.poolType === 'world_cup_2026')
           .map((g) => ({ identifier: g.identifier, name: g.name }));
@@ -478,11 +507,15 @@ export default function WorldCupPicksTab({
           the sum across every match you pick.
         </p>
         <ul className="mt-xs list-disc space-y-xxs pl-lg">
-          <li>
-            <span className="font-medium text-secondary-900 dark:text-neutral-0">Group stage:</span>{' '}
-            winning team = 3 pts · a team that draws = 1 · pick &ldquo;Draw&rdquo; = 2 if it draws (1
-            if a team wins) · losing team = 0.
-          </li>
+          {/* This is a knockout-only group, so the group-stage scoring line is
+              omitted — those games can't be picked here. */}
+          {!effectiveKnockoutOnly && (
+            <li>
+              <span className="font-medium text-secondary-900 dark:text-neutral-0">Group stage:</span>{' '}
+              winning team = 3 pts · a team that draws = 1 · pick &ldquo;Draw&rdquo; = 2 if it draws (1
+              if a team wins) · losing team = 0.
+            </li>
+          )}
           <li>
             <span className="font-medium text-secondary-900 dark:text-neutral-0">Knockout:</span>{' '}
             the team that advances = 3 pts, everyone else = 0. Penalties still count as advancing, so
@@ -502,8 +535,15 @@ export default function WorldCupPicksTab({
               Try Again
             </Button>
           </div>
-        ) : fetchState.matches.length === 0 ? (
-          <EmptyState title="No matches yet" description="No matches found for this tournament." />
+        ) : visibleMatches.length === 0 ? (
+          <EmptyState
+            title="No matches yet"
+            description={
+              effectiveKnockoutOnly
+                ? 'No knockout matches are available yet. They appear once the bracket is set.'
+                : 'No matches found for this tournament.'
+            }
+          />
         ) : (
           <WorldCupGamesList
             games={browseGames}
@@ -516,7 +556,7 @@ export default function WorldCupPicksTab({
       </div>
 
       {/* Spacer so the sticky bar never covers the last match row. */}
-      {fetchState.matches.length > 0 && <div className="h-20" aria-hidden="true" />}
+      {visibleMatches.length > 0 && <div className="h-20" aria-hidden="true" />}
 
       {/* Sticky submit bar — pinned to the bottom of the viewport so the user
           can submit from anywhere in the stage list without scrolling to the
@@ -528,7 +568,7 @@ export default function WorldCupPicksTab({
           two bars cross while scrolling, but below the match detail panel
           (z-40) — so the filter bar reads as tethered to the content sliding
           under it while this bar floats cleanly on top. */}
-      {fetchState.matches.length > 0 && (
+      {visibleMatches.length > 0 && (
         <div className="sticky bottom-0 z-20 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">

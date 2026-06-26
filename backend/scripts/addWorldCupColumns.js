@@ -80,6 +80,20 @@ async function addWorldCupColumns() {
     `);
     console.log('   ✅ groups.pool_type ensured');
 
+    // 4c. groups.knockout_only — world_cup_2026 sub-setting. When true, members may
+    //     only pick knockout-stage games; group-stage picks are rejected. Default
+    //     false so every existing group (NFL and World Cup alike) is unaffected.
+    //     NOT declared NOT NULL via the ADD here because adding a NOT NULL column
+    //     to a populated table requires the DEFAULT to backfill atomically; the
+    //     DEFAULT false does exactly that, and the backfill below + the schema.sql
+    //     CREATE keep the column NOT NULL on a fresh init.
+    console.log('\n4c. Adding groups.knockout_only (boolean default false)...');
+    await pool.query(`
+      ALTER TABLE groups
+      ADD COLUMN IF NOT EXISTS knockout_only BOOLEAN NOT NULL DEFAULT false
+    `);
+    console.log('   ✅ groups.knockout_only ensured');
+
     // 4b. games.winner_team_id — the resolved advancing-team id for soccer
     //     knockout matches. Persisted because ESPN's competitor.winner flag (the
     //     only signal on a PK shootout) isn't recoverable from a cached row's
@@ -102,7 +116,7 @@ async function addWorldCupColumns() {
       FROM information_schema.columns
       WHERE (table_name = 'games' AND column_name IN ('league', 'stage', 'winner_team_id'))
          OR (table_name = 'user_picks' AND column_name = 'picked_result')
-         OR (table_name = 'groups' AND column_name = 'pool_type')
+         OR (table_name = 'groups' AND column_name IN ('pool_type', 'knockout_only'))
       ORDER BY table_name, column_name
     `);
     verify.rows.forEach(col => {
