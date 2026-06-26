@@ -67,7 +67,11 @@ function slugifyName(name: string): string {
  * CreateGroupForm is a fully controlled form for creating (or editing) a group.
  *
  * - Auto-generates the Group ID slug from the name unless the user manually edits it.
- * - If `initialValues.identifier` is provided the Group ID field is locked.
+ * - Edit mode is signalled by `initialValues.identifier` being present — the same
+ *   single signal already used to lock the Group ID. In edit mode the Group ID
+ *   AND the immutable pool fields (pool type, knockout-only) are locked, because
+ *   the update route does not accept changes to any of them. (The only two callers
+ *   are CreateGroupPage — no initialValues — and EditGroupPage — identifier set.)
  * - Manages async submission with an internal loading state.
  * - Displays success/error feedback via InlineToast anchored above the submit button.
  */
@@ -89,8 +93,9 @@ export default function CreateGroupForm({
   // The knockout-only setting is meaningful only for World Cup pools, so it lives
   // behind the pool-type choice and rides along on it.
   const isWorldCup = poolType === 'world_cup_2026';
-  // In edit mode (identifier supplied) pool type + knockout-only are immutable —
-  // the update route ignores them — so the form locks those controls.
+  // Edit mode uses the same single signal as the Group ID lock below: a supplied
+  // identifier. In edit mode pool type + knockout-only are immutable (the update
+  // route ignores them), so the form locks those controls too.
   const isEditMode = !!initialValues?.identifier;
   const [identifierManuallyEdited, setIdentifierManuallyEdited] = useState(
     !!initialValues?.identifier
