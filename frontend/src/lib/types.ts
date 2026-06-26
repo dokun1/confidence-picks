@@ -228,6 +228,7 @@ export interface TournamentLeaderboardRow {
   /** True when this member shares its rank with an adjacent member. */
   tied: boolean;
   points: number;
+  bonus_points: number;
   wins_correct: number;
   losses: number;
   draws_correct: number;

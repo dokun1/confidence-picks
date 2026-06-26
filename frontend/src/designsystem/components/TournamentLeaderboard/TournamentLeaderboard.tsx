@@ -11,6 +11,12 @@ export interface TournamentLeaderboardProps {
    * tiebreaker resolution (see world-cup-picks-rules.md).
    */
   rows: TournamentLeaderboardRow[];
+  /**
+   * When true (knockout-only pool), the two draw columns (Draws Correct and
+   * Draws Incorrect) are hidden — no draw outcomes exist in knockout play.
+   * Defaults to false so regular World Cup groups still show draw stats.
+   */
+  knockoutOnly?: boolean;
 }
 
 const HEADER_CELL = 'px-sm py-xs text-left text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400';
@@ -51,8 +57,12 @@ const EMPTY_STATE = 'No standings yet — picks will appear here once the tourna
  *  - below `sm`: a card-free stacked list — each member is a row with rank +
  *    avatar + name + emphasized points, and the four tiebreakers below as a
  *    4-up stat-chip grid. No bordered card and no horizontal scroll on phones.
+ *
+ * When `knockoutOnly` is true (knockout-only pool), the two draw columns are
+ * hidden since knockout matches cannot end in a draw. The Bonus column is
+ * always shown for World Cup groups.
  */
-export default function TournamentLeaderboard({ rows }: TournamentLeaderboardProps) {
+export default function TournamentLeaderboard({ rows, knockoutOnly = false }: TournamentLeaderboardProps) {
   if (rows.length === 0) {
     return (
       <p className="text-sm text-secondary-500 dark:text-secondary-400 py-lg text-center">
@@ -60,6 +70,11 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
       </p>
     );
   }
+
+  // Filter stat columns for the mobile chip grid: drop draws when knockoutOnly.
+  const visibleStatColumns = knockoutOnly
+    ? STAT_COLUMNS.filter((col) => col.key !== 'draws_correct' && col.key !== 'draws_incorrect')
+    : STAT_COLUMNS;
 
   return (
     <>
@@ -85,7 +100,7 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
               </span>
             </div>
             <div className="mt-sm grid grid-cols-4 gap-xs">
-              {STAT_COLUMNS.map((col) => (
+              {visibleStatColumns.map((col) => (
                 <div
                   key={col.key}
                   style={SHADE_TINT[col.shade]}
@@ -99,6 +114,16 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
                   </div>
                 </div>
               ))}
+              <div
+                className="rounded-base border px-xs py-xs text-center"
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-secondary-400">
+                  Bonus
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-secondary-900 dark:text-neutral-0">
+                  {row.bonus_points}
+                </div>
+              </div>
             </div>
           </li>
         ))}
@@ -118,11 +143,19 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
               <th scope="col" className={`${HEADER_CELL} text-center`}>
                 Points
               </th>
-              {STAT_COLUMNS.map((col) => (
-                <th key={col.key} scope="col" className={`${HEADER_CELL} text-center`}>
-                  {col.label}
-                </th>
-              ))}
+              {STAT_COLUMNS.map((col) => {
+                if ((col.key === 'draws_correct' || col.key === 'draws_incorrect') && knockoutOnly) {
+                  return null;
+                }
+                return (
+                  <th key={col.key} scope="col" className={`${HEADER_CELL} text-center`}>
+                    {col.label}
+                  </th>
+                );
+              })}
+              <th scope="col" className={`${HEADER_CELL} text-center`}>
+                Bonus
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -140,11 +173,19 @@ export default function TournamentLeaderboard({ rows }: TournamentLeaderboardPro
                 <td className={`${BODY_CELL} text-center font-semibold tabular-nums`}>
                   {row.points}
                 </td>
-                {STAT_COLUMNS.map((col) => (
-                  <td key={col.key} className={`${BODY_CELL} text-center tabular-nums`}>
-                    {row[col.key]}
-                  </td>
-                ))}
+                {STAT_COLUMNS.map((col) => {
+                  if ((col.key === 'draws_correct' || col.key === 'draws_incorrect') && knockoutOnly) {
+                    return null;
+                  }
+                  return (
+                    <td key={col.key} className={`${BODY_CELL} text-center tabular-nums`}>
+                      {row[col.key]}
+                    </td>
+                  );
+                })}
+                <td className={`${BODY_CELL} text-center tabular-nums`}>
+                  {row.bonus_points}
+                </td>
               </tr>
             ))}
           </tbody>
