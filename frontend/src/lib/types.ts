@@ -17,6 +17,13 @@ export interface Group {
   createdAt: string;
   createdByName?: string | null;
   createdByPictureUrl?: string | null;
+  poolType?: PoolType | null;
+  /**
+   * World Cup 2026 sub-setting: when true the group only allows picks on
+   * knockout-stage games (group-stage games are hidden and rejected server-side).
+   * Always false/absent for NFL pools.
+   */
+  knockoutOnly?: boolean;
 }
 
 export interface GroupMember {

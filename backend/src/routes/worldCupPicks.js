@@ -16,6 +16,19 @@ async function ensureMembership(groupIdentifier, userId) {
   return group;
 }
 
+// Knockout-only enforcement. In a world_cup_2026 group created with
+// knockout_only=true, members may pick only knockout-stage games; the group stage
+// is off-limits. The frontend hides group-stage games for these pools, so a
+// group-stage gameId arriving here is anomalous — reject the whole batch with the
+// offending ids rather than silently dropping them. Returns the offending ids
+// (empty when the group is unrestricted or every pick is a knockout game).
+function groupStagePickViolations(group, picks, gameById) {
+  if (!group.knockoutOnly) return [];
+  return picks
+    .filter((p) => gameById.get(p.gameId)?.stage === 'group')
+    .map((p) => p.gameId);
+}
+
 /**
  * Submit World Cup picks for the authenticated user in a group.
  *
@@ -58,7 +71,7 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
     // slot columns (season/season_type/week) the upsert requires.
     const gameIds = picks.map(p => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date, stage FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map(g => [g.id, g]));
@@ -67,6 +80,12 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       if (!gameById.has(p.gameId)) {
         return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       }
+    }
+
+    // Knockout-only groups reject any group-stage pick outright (see helper).
+    const groupStageIds = groupStagePickViolations(group, picks, gameById);
+    if (groupStageIds.length > 0) {
+      return res.status(400).json({ error: 'Group-stage picks are not allowed in this group', gameIds: groupStageIds });
     }
 
     // Lock picks at kickoff. game_date (the scheduled start) is the authoritative,
@@ -335,7 +354,7 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
     // are upserted under targetUserId rather than the caller.
     const gameIds = picks.map((p) => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date, stage FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map((g) => [g.id, g]));
@@ -343,6 +362,12 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       if (!gameById.has(p.gameId)) {
         return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       }
+    }
+
+    // Knockout-only groups reject any group-stage pick, even from an admin override.
+    const groupStageIds = groupStagePickViolations(group, picks, gameById);
+    if (groupStageIds.length > 0) {
+      return res.status(400).json({ error: 'Group-stage picks are not allowed in this group', gameIds: groupStageIds });
     }
 
     // Kickoff lock applies to admin overrides too: a started match's pick is

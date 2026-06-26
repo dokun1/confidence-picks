@@ -385,6 +385,7 @@ export default function GroupDetailsPage() {
               members={members}
               currentUserId={user?.id ?? null}
               isAdmin={isOwner}
+              knockoutOnly={group?.knockoutOnly ?? false}
               initialView={picksInitialView}
             />
           ) : (

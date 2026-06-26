@@ -2,6 +2,12 @@ import pool from '../config/database.js';
 import crypto from 'crypto';
 
 export class Group {
+  // Self-heal latch for the knockout_only column (see ensureKnockoutOnlyColumn).
+  // Once the column is confirmed present in this process, every later create()
+  // skips even the catalog lookup — so the migration cost is paid at most once per
+  // warm lambda and then "goes back to normal" (zero extra queries).
+  static _knockoutOnlyColumnEnsured = false;
+
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -21,11 +27,52 @@ export class Group {
     // frontend's GroupDetailsPage can branch on group.poolType — without it
     // every WC group rendered the NFL PicksTab.
     this.poolType = data.poolType;
+    // World Cup 2026 sub-setting: when true, members may only pick knockout-stage
+    // games (no group stage). Defaults to false so NFL pools and ordinary WC pools
+    // are unaffected. The WC picks routes read this to reject group-stage picks.
+    this.knockoutOnly = data.knockoutOnly ?? false;
+  }
+
+  // Ensure the groups.knockout_only column exists. Production resilience: prod
+  // runs with INIT_DB unset, so schema.sql is NOT synced on deploy — mirror the
+  // ensureChatReadsSchema / GroupInvite.ensureLinkInviteSchema self-heal so the
+  // column lands automatically on the first group creation after a deploy, with no
+  // manual migration or INIT_DB toggle. This matters specifically for create():
+  // its INSERT names knockout_only, so a missing column would 500 EVERY new group
+  // (NFL included). Reads already tolerate a missing column (SELECT g.* yields
+  // undefined -> false), so only this write path needs the gate. Idempotent: a
+  // single indexed catalog lookup that early-returns once latched, and the ALTER
+  // itself is ADD COLUMN IF NOT EXISTS (safe under concurrent cold starts).
+  static async ensureKnockoutOnlyColumn() {
+    if (this._knockoutOnlyColumnEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'groups' AND column_name = 'knockout_only'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing knockout_only column – adding');
+        await pool.query(
+          `ALTER TABLE groups ADD COLUMN IF NOT EXISTS knockout_only BOOLEAN NOT NULL DEFAULT false`
+        );
+        console.log('[groups] knockout_only column added');
+      }
+      // Latch only after a confirmed present/added column, so the next create
+      // settles into the zero-query fast path.
+      this._knockoutOnlyColumnEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next create retry
+      // rather than permanently believing the column is present.
+      console.warn('[groups] Failed to ensure knockout_only column (may already exist):', e.message);
+    }
   }
 
   // Create new group
   static async create(groupData, creatorId) {
-    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType } = groupData;
+    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType, knockoutOnly } = groupData;
+
+    // Self-heal the knockout_only column before the INSERT references it. No-op
+    // once the column exists (latched), so this is free on the steady-state path.
+    await Group.ensureKnockoutOnlyColumn();
     
     // Ensure identifier is unique and URL-friendly
     // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
@@ -43,12 +90,12 @@ export class Group {
       // (see addWorldCupColumns.js migration), so omitting it preserves the
       // pre-WC behavior for NFL callers. Pass through when set.
       const groupQuery = `
-        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'))
+        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type, knockout_only)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'), COALESCE($9, false))
         RETURNING *
       `;
       const groupResult = await client.query(groupQuery, [
-        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null
+        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null, knockoutOnly ?? null
       ]);
       
       const group = groupResult.rows[0];
@@ -74,7 +121,9 @@ export class Group {
         createdAt: group.created_at,
         updatedAt: group.updated_at,
         memberCount: 1,
-        userRole: 'admin'
+        userRole: 'admin',
+        poolType: group.pool_type,
+        knockoutOnly: group.knockout_only,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -122,6 +171,7 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      knockoutOnly: row.knockout_only,
     });
   }
 
@@ -158,6 +208,7 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      knockoutOnly: row.knockout_only,
     }));
   }
 

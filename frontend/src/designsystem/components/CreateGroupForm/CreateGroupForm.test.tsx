@@ -223,6 +223,7 @@ describe('CreateGroupForm', () => {
         identifier: 'my-group',
         description: 'A cool group',
         poolType: 'nfl_weekly',
+        knockoutOnly: false,
       });
     });
 
@@ -283,6 +284,73 @@ describe('CreateGroupForm', () => {
       });
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ poolType: 'world_cup_2026' })
+      );
+    });
+  });
+
+  describe('knockout-only setting (World Cup sub-setting)', () => {
+    const knockoutLabel = /Knockout stage picks only/;
+
+    it('is hidden for an NFL pool', () => {
+      renderForm();
+      expect(screen.queryByLabelText(knockoutLabel)).not.toBeInTheDocument();
+    });
+
+    it('appears only after switching the pool type to World Cup', () => {
+      renderForm();
+      expect(screen.queryByLabelText(knockoutLabel)).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'world_cup_2026' },
+      });
+      expect(screen.getByLabelText(knockoutLabel)).toBeInTheDocument();
+    });
+
+    it('shows the toggle (unchecked) when initialValues select World Cup', () => {
+      renderForm({ initialValues: { poolType: 'world_cup_2026' } });
+      const checkbox = screen.getByLabelText(knockoutLabel) as HTMLInputElement;
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox.checked).toBe(false);
+    });
+
+    it('honors initialValues.knockoutOnly', () => {
+      renderForm({ initialValues: { poolType: 'world_cup_2026', knockoutOnly: true } });
+      expect((screen.getByLabelText(knockoutLabel) as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('submits knockoutOnly=true when checked for a World Cup pool', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'KO Crew' } });
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'world_cup_2026' },
+      });
+      fireEvent.click(screen.getByLabelText(knockoutLabel));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ poolType: 'world_cup_2026', knockoutOnly: true }),
+      );
+    });
+
+    it('clears knockoutOnly when switching back to NFL after checking it', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'Switcher' } });
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'world_cup_2026' },
+      });
+      fireEvent.click(screen.getByLabelText(knockoutLabel));
+      // Switch back to NFL — the toggle disappears and must not travel with the pool.
+      fireEvent.change(screen.getByLabelText(/Pool Type/), {
+        target: { value: 'nfl_weekly' },
+      });
+      expect(screen.queryByLabelText(knockoutLabel)).not.toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ poolType: 'nfl_weekly', knockoutOnly: false }),
       );
     });
   });

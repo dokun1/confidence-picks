@@ -22,6 +22,8 @@ export interface GroupDetail {
   userRole?: string;
   createdAt?: string;
   poolType?: PoolType;
+  // World Cup 2026 sub-setting: group allows only knockout-stage picks.
+  knockoutOnly?: boolean;
 }
 
 export interface GroupMember {
@@ -51,6 +53,7 @@ export function createGroup(payload: {
   identifier: string;
   description?: string;
   poolType?: PoolType;
+  knockoutOnly?: boolean;
 }): Promise<void>;
 export function getGroup(identifier: string): Promise<GroupDetail>;
 export function getMembers(identifier: string): Promise<GroupMember[]>;

@@ -147,6 +147,80 @@ describe('WorldCupPicksTab', () => {
     fireEvent.click(screen.getByRole('radio', { name }));
   }
 
+  // A knockout-only group hides every group-stage game so members can only pick
+  // knockout matches. The fixtures above are one group game (Mexico) + one
+  // knockout game (Canada), so the group game must vanish and the knockout stay.
+  describe('knockout-only group', () => {
+    function queryHome(homeName: string) {
+      return screen.queryByText(
+        (_c, n) => n?.textContent?.startsWith(homeName + ' vs ') ?? false,
+        { selector: 'span' },
+      );
+    }
+
+    it('hides group-stage games when the knockoutOnly prop is set', async () => {
+      render(<WorldCupPicksTab identifier="la-crew" knockoutOnly />);
+      // The knockout match (Canada vs Argentina) still renders…
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+      expect(cardFor('Canada')).toBeInTheDocument();
+      // …but the group-stage match (Mexico vs USA) is filtered out entirely.
+      expect(queryHome('Mexico')).not.toBeInTheDocument();
+      // The group-stage scoring bullet is omitted, since it can't be picked here.
+      expect(screen.queryByText(/Group stage:/)).not.toBeInTheDocument();
+    });
+
+    it('derives knockout-only from getMyGroups when no prop is passed (standalone page)', async () => {
+      mockGetMyGroups.mockResolvedValue([
+        { id: 1, identifier: 'la-crew', name: 'LA Crew', poolType: 'world_cup_2026', knockoutOnly: true },
+      ] as any);
+      renderTab(); // standalone surface: no knockoutOnly prop
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+      // Once getMyGroups resolves, the derived flag hides the group-stage game.
+      await waitFor(() => expect(queryHome('Mexico')).not.toBeInTheDocument());
+      expect(cardFor('Canada')).toBeInTheDocument();
+    });
+
+    it('never counts or submits a hydrated group-stage pick in a knockout-only group', async () => {
+      // Saved picks include a stale group-stage selection (id 10) alongside a
+      // knockout one (id 20). The group-stage pick is invisible here, so it must
+      // not be counted in the submit bar nor sent to the server.
+      mockGetMyWorldCupPicks.mockResolvedValue({
+        picks: [
+          { gameId: 10, pickedResult: 'home' }, // group stage — must be ignored
+          { gameId: 20, pickedResult: 'home' }, // knockout — counts
+        ],
+      });
+      mockSubmitPicks.mockResolvedValue({});
+      render(<WorldCupPicksTab identifier="la-crew" knockoutOnly />);
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      // Only the knockout pick is counted — not the hidden group-stage one.
+      expect(await screen.findByText('1 pick selected')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith('la-crew', [{ gameId: 20, pickedResult: 'home' }]),
+      );
+    });
+
+    it('keeps group-stage games visible when knockoutOnly is false', async () => {
+      render(<WorldCupPicksTab identifier="la-crew" knockoutOnly={false} />);
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+      expect(cardFor('Mexico')).toBeInTheDocument();
+      expect(cardFor('Canada')).toBeInTheDocument();
+    });
+  });
+
   it('shows the loading indicator while a stage fetch is in flight', async () => {
     // A never-resolving promise pins the tab in its loading state — and the
     // sticky submit bar must not render before any matches exist.

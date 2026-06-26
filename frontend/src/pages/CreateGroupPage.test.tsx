@@ -57,6 +57,7 @@ describe('CreateGroupPage', () => {
       identifier: 'my-group',
       description: '',
       poolType: 'nfl_weekly',
+      knockoutOnly: false,
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');
@@ -83,7 +84,32 @@ describe('CreateGroupPage', () => {
       identifier: 'my-group',
       description: '',
       poolType: 'world_cup_2026',
+      knockoutOnly: false,
     });
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/groups');
+    });
+  });
+
+  it('forwards the knockout-only World Cup sub-setting to createGroup', async () => {
+    mockCreateGroup.mockResolvedValue(undefined);
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/Group Name/), {
+      target: { value: 'My Group' },
+    });
+    fireEvent.change(screen.getByLabelText('Pool Type'), {
+      target: { value: 'world_cup_2026' },
+    });
+    fireEvent.click(screen.getByLabelText(/Knockout stage picks only/));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+    });
+
+    expect(mockCreateGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ poolType: 'world_cup_2026', knockoutOnly: true }),
+    );
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');
     });

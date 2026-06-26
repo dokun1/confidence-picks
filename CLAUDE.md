@@ -179,6 +179,43 @@ exported (single-stage callers/tests), but no component fans out anymore.
   applies there too. The NFL `LeaderboardTab` has no cache yet, so the
   parallel-prefetch optimization is currently World-Cup-only.
 
+## Feature: "knockout stage picks only" WC groups (2026-06)
+
+A `world_cup_2026` sub-setting, chosen at group creation and **immutable** (like
+`pool_type`). When on, the group only allows picks on knockout-stage games; the
+group stage (`stage = 'group'`) is hidden in the UI and rejected server-side.
+Scoring/leaderboard are unchanged — they already sum per-match over whatever picks
+exist.
+
+- **Column:** `groups.knockout_only BOOLEAN NOT NULL DEFAULT false`. Defined in
+  `schema.sql` (CREATE + idempotent `DO $$` ALTER) and `backend/scripts/addWorldCupColumns.js`.
+- **Deploy (automatic, self-healing):** prod runs with `INIT_DB` unset, so neither
+  `schema.sql` nor the migration script runs on a normal deploy — and `create()`'s
+  INSERT names `knockout_only`, so a missing column would 500 *every* new group.
+  `Group.ensureKnockoutOnlyColumn()` closes this the same way `ensureChatReadsSchema`
+  / `GroupInvite.ensureLinkInviteSchema` do: `create()` calls it first, it adds the
+  column (`ADD COLUMN IF NOT EXISTS`) on the first group creation after deploy, then
+  a static `Group._knockoutOnlyColumnEnsured` latch makes every later create a
+  zero-query no-op ("back to normal"). Reads already tolerate a missing column
+  (`SELECT g.*` → undefined → false). `INIT_DB=true` and the migration script remain
+  as explicit/ops alternatives but are no longer required.
+- **Model:** `Group` carries `knockoutOnly` (camelCase) through the constructor,
+  `create()`, `findByIdentifier()`, `getUserGroups()`. Left out of `update()`'s
+  `allowedFields` on purpose (immutable).
+- **Backend enforcement:** `POST /api/groups` rejects `knockoutOnly` when
+  `poolType !== 'world_cup_2026'` (400). Both WC pick routes in `worldCupPicks.js`
+  (self + admin-override) read `stage` back from the games row and reject any
+  group-stage pick via `groupStagePickViolations()` (400 `{ error, gameIds }`).
+- **Frontend:** `CreateGroupForm` shows the checkbox only for a WC pool (cleared
+  on switch to NFL). `WorldCupPicksTab` takes a `knockoutOnly` prop
+  (`GroupDetailsPage` passes `group.knockoutOnly`) and also derives it from its own
+  `getMyGroups` fetch as a fallback for the standalone `/world-cup` page; it filters
+  `stage === 'group'` matches out of `visibleMatches` before render/count.
+- **Test seams:** several exact-payload assertions
+  (`CreateGroupForm.test.tsx`, `CreateGroupPage.test.tsx`) now include
+  `knockoutOnly`. WC-pick-route tests stub `Group.findByIdentifier` to return
+  `{ ..., knockoutOnly: true }` and add `stage` to the `FROM games` row mock.
+
 ## Commands
 
 ```bash
