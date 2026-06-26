@@ -36,8 +36,9 @@ export const KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'fina
 export const BUCKETS = ['wins_correct', 'losses', 'draws_correct', 'draws_incorrect'];
 
 // Bump whenever scoring logic changes so the leaderboard cache invalidates once
-// (see WorldCupLeaderboardService.buildVersionString). '1' = pre-bonus; '2' = score bonus.
-export const SCORING_VERSION = '2';
+// (see WorldCupLeaderboardService.buildVersionString). '1' = pre-bonus; '2' = score
+// bonus; '3' = score bonus decoupled from advance-pick resolution.
+export const SCORING_VERSION = '3';
 
 export function isKnockoutStage(stage) {
   return KNOCKOUT_STAGES.has(stage);
@@ -182,9 +183,14 @@ export function aggregateUserScore(entries = []) {
 
   for (const { pick, game } of entries) {
     const { points, bucket, scored } = scoreSoccerPick(pick, game);
-    if (!scored) continue;
-    row.points += points;
-    row[bucket] += 1;
+    if (scored) {
+      row.points += points;
+      row[bucket] += 1;
+    }
+    // The knockout score bonus is independent of advance-pick resolution: a FINAL
+    // knockout's on-field score is known even when the PK winner (winnerTeamId)
+    // isn't resolved yet (deriveActualResult → decided:false → scored:false). Award
+    // it regardless, so a correct score prediction never hinges on winner data.
     const bonus = scoreKnockoutScoreBonus(pick, game);
     if (bonus > 0) { row.points += bonus; row.bonus_points += bonus; }
   }

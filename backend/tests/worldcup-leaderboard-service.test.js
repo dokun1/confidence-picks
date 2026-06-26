@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached, leaderboardsMatch } from '../src/services/WorldCupLeaderboardService.js';
+import { SCORING_VERSION } from '../src/services/SoccerScoringService.js';
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -106,8 +107,10 @@ describe('version watermark', () => {
     const v2 = buildVersionString({ ...base, scoringVersion: '2' });
     assert.notEqual(v1, v2, 'bumping scoringVersion must produce a different version string');
     // Also confirm the current SCORING_VERSION is embedded when not provided explicitly.
+    // It is the last '|'-delimited component, so check it exactly (a substring check
+    // would spuriously pass on digits inside watermarks/ids).
     const vDefault = buildVersionString({ gameWatermark: null, memberCount: 0, memberMaxId: 0, picksWatermark: null });
-    assert.ok(vDefault.includes('2'), 'default scoringVersion (SCORING_VERSION="2") should appear in the string');
+    assert.equal(vDefault.split('|').pop(), SCORING_VERSION, 'default scoringVersion (SCORING_VERSION) should be the trailing component');
   });
 
   test('getLeaderboardVersion assembles from three queries', async () => {
@@ -136,8 +139,9 @@ describe('version watermark', () => {
       return { rows: results[i++] };
     }};
     const v = await getLeaderboardVersion(pool, { id: 7 });
-    // SCORING_VERSION = '2'; the version string must embed it.
-    assert.ok(v.includes('2'), 'SCORING_VERSION ("2") must appear in the version string from getLeaderboardVersion');
+    // The version string must embed the current SCORING_VERSION as its trailing
+    // component so a scoring bump invalidates the cache.
+    assert.equal(v.split('|').pop(), SCORING_VERSION, 'SCORING_VERSION must be the trailing component of the version string');
   });
 
   test('picks watermark is scoped to FINAL games (no churn on pre-kickoff edits)', async () => {

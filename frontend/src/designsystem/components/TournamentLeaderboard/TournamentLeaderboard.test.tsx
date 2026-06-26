@@ -217,6 +217,20 @@ describe('TournamentLeaderboard', () => {
       });
     });
 
+    it('chip grid columns match the chip count — 5 in a regular pool, 3 when knockout-only', () => {
+      const { rerender } = render(<TournamentLeaderboard rows={ROWS} />);
+      // Regular: 4 tiebreaker chips + Bonus = 5 chips → an even single row.
+      const grid = mobileItemFor(ROWS[0].name).querySelector('div.grid');
+      expect(grid?.className).toMatch(/grid-cols-5/);
+      expect(grid?.children).toHaveLength(5);
+
+      rerender(<TournamentLeaderboard rows={ROWS} knockoutOnly />);
+      // Knockout-only: 2 chips (draws hidden) + Bonus = 3 chips → grid-cols-3.
+      const koGrid = mobileItemFor(ROWS[0].name).querySelector('div.grid');
+      expect(koGrid?.className).toMatch(/grid-cols-3/);
+      expect(koGrid?.children).toHaveLength(3);
+    });
+
     it('is a card-free list (no bordered card wrapper)', () => {
       render(<TournamentLeaderboard rows={ROWS} />);
       // The mobile root is the <ul>; it carries no border utility classes.

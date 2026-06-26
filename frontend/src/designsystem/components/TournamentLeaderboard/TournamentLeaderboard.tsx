@@ -76,6 +76,12 @@ export default function TournamentLeaderboard({ rows, knockoutOnly = false }: To
     ? STAT_COLUMNS.filter((col) => col.key !== 'draws_correct' && col.key !== 'draws_incorrect')
     : STAT_COLUMNS;
 
+  // Mobile chip-grid columns track the chip count (stat columns + the Bonus chip)
+  // so every chip lands in one evenly-spaced row instead of leaving a lonely chip
+  // on a fixed grid: 5 chips in a regular pool, 3 in a knockout-only pool. Literal
+  // class strings (not interpolated) so Tailwind generates both.
+  const chipGridCols = visibleStatColumns.length + 1 >= 5 ? 'grid-cols-5' : 'grid-cols-3';
+
   return (
     <>
       {/* Mobile (below sm): card-free stacked list with a stat-chip grid. */}
@@ -99,7 +105,7 @@ export default function TournamentLeaderboard({ rows, knockoutOnly = false }: To
                 </span>
               </span>
             </div>
-            <div className="mt-sm grid grid-cols-4 gap-xs">
+            <div className={`mt-sm grid ${chipGridCols} gap-xs`}>
               {visibleStatColumns.map((col) => (
                 <div
                   key={col.key}

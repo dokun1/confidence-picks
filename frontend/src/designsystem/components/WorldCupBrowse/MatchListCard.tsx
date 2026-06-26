@@ -142,14 +142,15 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
 
             // Digits-only text field (no steppers): only non-negative integers are
             // accepted, and an empty field means "no prediction" (default null). The
-            // field is disabled until a team is picked; a bonus is registered only
-            // when BOTH are present (enforced on submit).
+            // field is disabled until a team is picked AND whenever the card is
+            // disabled (e.g. a submit in flight), matching the pick buttons; a bonus
+            // is registered only when BOTH are present (enforced on submit).
             const scoreInput = (side: 'home' | 'away', val: number | null | undefined, teamName: string) => (
               <input
                 type="text"
                 inputMode="numeric"
                 maxLength={2}
-                disabled={!picked}
+                disabled={!picked || disabled}
                 aria-label={`Predicted score for ${teamName}`}
                 value={val == null ? '' : String(val)}
                 placeholder="–"

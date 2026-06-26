@@ -118,6 +118,12 @@ describe('MatchListCard', () => {
       expect(onScoreChange).toHaveBeenLastCalledWith(101, 'away', 0);
     });
 
+    it('disables the score inputs when the card is disabled (e.g. a submit in flight), even if picked', () => {
+      render(<MatchListCard game={game({ isKnockout: true, stage: 'r16', picked: 'home' })} now={NOW} onPick={noop} onScoreChange={vi.fn()} disabled />);
+      expect(screen.getByRole('textbox', { name: 'Predicted score for Mexico' })).toBeDisabled();
+      expect(screen.getByRole('textbox', { name: 'Predicted score for Canada' })).toBeDisabled();
+    });
+
     // A locked knockout match: kickoff in the past and status FINAL.
     function lockedKnockout(over: Partial<BrowseGame> = {}): BrowseGame {
       return game({

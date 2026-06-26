@@ -37,6 +37,17 @@ describe('aggregateUserScore includes bonus_points', () => {
     assert.equal(row.points, 5);
     assert.equal(row.bonus_points, 2);
   });
+  test('bonus is awarded even when the advance pick is undecided (FINAL, no winnerTeamId)', () => {
+    // FINAL knockout, level on-field score, advancer not yet resolved (winnerTeamId
+    // null) → the advance pick scores nothing, but the score prediction (1-1 exact)
+    // still earns its +2 bonus. Independent of winner resolution.
+    const game = ko(1, 1, { winnerTeamId: null });
+    const row = aggregateUserScore([{ pick: pred(1, 1), game }]);
+    assert.equal(row.points, 2, 'only the +2 bonus, no advance points');
+    assert.equal(row.bonus_points, 2);
+    assert.equal(row.wins_correct, 0, 'undecided advance pick lands in no tiebreaker bucket');
+    assert.equal(row.losses, 0);
+  });
 });
 
 test('SCORING_VERSION is exported', () => assert.equal(typeof SCORING_VERSION, 'string'));
