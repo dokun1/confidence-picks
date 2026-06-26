@@ -141,6 +141,11 @@ export default function WorldCupPicksTab({
     matches: cachedStages ?? [],
   });
   const [draft, setDraft] = useState<DraftMap>({});
+  // The picks already saved on the server for the selected person. Distinct from
+  // `draft` (which holds unsaved selections) so the "needs pick" filter keys off
+  // saved state — a drafted-but-unsubmitted pick keeps its game in the chip until
+  // Submit. Seeded on hydrate, merged on a successful submit, wiped on person switch.
+  const [savedDraft, setSavedDraft] = useState<DraftMap>({});
   const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', variant: 'info' });
@@ -236,6 +241,7 @@ export default function WorldCupPicksTab({
     // state when a prop/derived value changes; it bails out the in-progress
     // render and re-runs before paint, so no stale draft is ever shown.
     setDraft({});
+    setSavedDraft({});
     setScoreDraft({});
   }
 
@@ -247,6 +253,7 @@ export default function WorldCupPicksTab({
   useEffect(() => {
     if (!groupId) {
       setDraft({});
+      setSavedDraft({});
       return;
     }
     let cancelled = false;
@@ -272,6 +279,7 @@ export default function WorldCupPicksTab({
           }
         }
         setDraft(next);
+        setSavedDraft(next);
         setScoreDraft(nextScores);
       })
       .catch(() => {
@@ -336,8 +344,8 @@ export default function WorldCupPicksTab({
     [fetchState.matches, effectiveKnockoutOnly],
   );
   const browseGames = useMemo(
-    () => toBrowseGames(visibleMatches, draft, scoreDraft),
-    [visibleMatches, draft, scoreDraft],
+    () => toBrowseGames(visibleMatches, draft, scoreDraft, savedDraft),
+    [visibleMatches, draft, scoreDraft, savedDraft],
   );
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
   // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
@@ -433,6 +441,15 @@ export default function WorldCupPicksTab({
   async function submit() {
     if (!groupId || picks.length === 0) return;
 
+    // Promote the just-submitted picks into the saved baseline so their games
+    // leave the "needs pick" filter — only AFTER the server confirms the save.
+    const markSaved = () =>
+      setSavedDraft((prev) => {
+        const next = { ...prev };
+        for (const p of picks) next[p.gameId] = p.pickedResult;
+        return next;
+      });
+
     // Editing a teammate is a separate, deliberately narrow path: admins only,
     // this group only, no multi-group fan-out. The two guards here are belt-and
     // suspenders — the submit button is already disabled for read-only viewers
@@ -449,6 +466,7 @@ export default function WorldCupPicksTab({
       setSubmitting(true);
       try {
         await submitUserWorldCupPicks(groupId, selectedUserId, picks);
+        markSaved();
         setToast({
           open: true,
           message: `Saved ${selectedFirstName}'s picks`,
@@ -472,6 +490,7 @@ export default function WorldCupPicksTab({
       if (!targets.includes(groupId)) targets.push(groupId);
       if (targets.length === 1) {
         await submitWorldCupPicks(targets[0], picks);
+        markSaved();
         setToast({ open: true, message: 'Picks saved', variant: 'success' });
         return;
       }
@@ -480,6 +499,9 @@ export default function WorldCupPicksTab({
       );
       const ok = results.filter((r) => r.status === 'fulfilled').length;
       const fail = results.length - ok;
+      // Only clear the chip for THIS group's games once its own save succeeded.
+      const thisGroupIdx = targets.indexOf(groupId);
+      if (thisGroupIdx >= 0 && results[thisGroupIdx]?.status === 'fulfilled') markSaved();
       if (fail === 0) {
         setToast({
           open: true,

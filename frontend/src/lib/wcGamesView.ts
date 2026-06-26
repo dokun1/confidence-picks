@@ -56,6 +56,11 @@ export interface BrowseGame {
   period?: number;
   /** The viewer's current pick, if any. */
   picked?: MatchResult;
+  /** Whether the viewer has a SAVED (submitted) pick for this game. The "needs
+   *  pick" filter keys off this — not `picked` — so a draft selection doesn't
+   *  drop the game from the chip before it's submitted. Undefined when the caller
+   *  supplies no saved baseline, where needsPick falls back to `picked`. */
+  savedPicked?: boolean;
   /** Knockout matches can't end in a draw (PKs decide) — disables the Draw pick. */
   isKnockout: boolean;
   /** Goal/card timeline once the match has started. Absent before kickoff. */
@@ -139,12 +144,20 @@ export function teamsDecided(g: BrowseGame): boolean {
 }
 
 /**
- * Needs a pick = startable window still open, no pick recorded, and both teams
- * decided. The last guard matters in knockout rounds: a game whose participants
- * are still TBD can't be picked, so it must not appear in the "needs pick" view.
+ * Needs a pick = startable window still open, no SAVED pick recorded, and both
+ * teams decided. The last guard matters in knockout rounds: a game whose
+ * participants are still TBD can't be picked, so it must not appear in the
+ * "needs pick" view.
+ *
+ * "No pick recorded" reads `savedPicked` when the caller supplies it (the picks
+ * tab) so a not-yet-submitted draft selection doesn't drop the game from the
+ * chip — it stays until Submit. Callers that don't track a saved baseline (the
+ * leaderboard banner / group-card dot, which build `picked` straight from saved
+ * picks) leave `savedPicked` undefined, and it falls back to `picked`.
  */
 export function needsPick(g: BrowseGame, now: Date): boolean {
-  return !isLocked(g, now) && g.picked == null && teamsDecided(g);
+  const hasPick = g.savedPicked ?? g.picked != null;
+  return !isLocked(g, now) && !hasPick && teamsDecided(g);
 }
 
 function isSameDay(a: Date, b: Date): boolean {

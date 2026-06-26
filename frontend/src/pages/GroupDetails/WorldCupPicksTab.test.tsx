@@ -701,6 +701,36 @@ describe('WorldCupPicksTab', () => {
     expect(screen.getByText('0 picks selected')).toBeInTheDocument();
   });
 
+  it('on the "Needs pick" filter, a drafted pick stays until Submit, then leaves', async () => {
+    mockSubmitPicks.mockResolvedValue({});
+    renderTab();
+    await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+      selector: 'span',
+    });
+    // Switch to the "Needs pick" filter — both unpicked games are owed.
+    fireEvent.click(screen.getByRole('button', { name: /Needs pick/ }));
+    expect(cardFor('Mexico')).toBeInTheDocument();
+
+    // Pick a team. Before the fix the card vanished from the filter the instant it
+    // was picked; now it stays because the pick isn't saved yet.
+    fireEvent.click(pickButton('Mexico', 'MEX'));
+    expect(screen.getByText('1 pick selected')).toBeInTheDocument();
+    expect(cardFor('Mexico')).toBeInTheDocument();
+
+    // Submitting saves the pick, which finally drops the game from "Needs pick".
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+    await waitFor(() =>
+      expect(mockSubmitPicks).toHaveBeenCalledWith('la-crew', [{ gameId: 10, pickedResult: 'home' }]),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+          selector: 'span',
+        }),
+      ).toBeNull(),
+    );
+  });
+
   // The "Picking for" person selector: members can VIEW each other's picks,
   // nobody can change anyone else's, and admins can override anyone. Each test
   // asserts both the happy path and the guard that prevents an accidental pick

@@ -22,6 +22,16 @@ describe('toBrowseGames', () => {
   it('omits a pick when the draft has none', () => {
     expect(toBrowseGames([match({ id: 9 })], {})[0].picked).toBeUndefined();
   });
+  it('sets savedPicked from the savedDraft baseline (only when supplied)', () => {
+    // No savedDraft → undefined, so needsPick falls back to `picked` (banner/dot path).
+    expect(toBrowseGames([match({ id: 9 })], {})[0].savedPicked).toBeUndefined();
+    // savedDraft supplied → true only for games with a saved pick.
+    const [saved] = toBrowseGames([match({ id: 9 })], { 9: 'home' }, undefined, { 9: 'home' });
+    expect(saved.savedPicked).toBe(true);
+    // Drafted but not in the saved baseline → false (still "needs pick" until submit).
+    const [drafted] = toBrowseGames([match({ id: 9 })], { 9: 'home' }, undefined, {});
+    expect(drafted.savedPicked).toBe(false);
+  });
   it('maps the stageLabel for a knockout stage', () => {
     expect(toBrowseGames([match({ stage: 'r16' })], {})[0].stageLabel).toBe('Round of 16');
   });

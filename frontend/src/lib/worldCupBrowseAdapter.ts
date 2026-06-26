@@ -14,7 +14,7 @@ const NORMALIZED: Record<string, GameStatus> = {
   SCHEDULED: 'SCHEDULED', IN_PROGRESS: 'IN_PROGRESS', FINAL: 'FINAL',
 };
 
-export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDraft?: ScoreDraftMap): BrowseGame[] {
+export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDraft?: ScoreDraftMap, savedDraft?: DraftMap): BrowseGame[] {
   return matches.map((m) => ({
     id: m.id,
     espnId: m.espnId ?? String(m.id),
@@ -53,6 +53,10 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDr
     statusDetail: m.statusDetail || undefined,
     period: m.period,
     picked: draft[m.id],
+    // Saved-pick baseline for the "needs pick" filter: true when this viewer has
+    // a submitted pick for the match. Only set when the caller passes savedDraft
+    // (the picks tab); otherwise left undefined so needsPick falls back to picked.
+    savedPicked: savedDraft ? savedDraft[m.id] != null : undefined,
     // Derive from the stage rather than trusting m.isKnockout: the stage route
     // doesn't actually emit that flag, so it arrives undefined and left the Draw
     // pick enabled on knockout matches. Every non-group stage is single-elimination
