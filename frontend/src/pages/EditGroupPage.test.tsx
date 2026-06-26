@@ -95,6 +95,28 @@ describe('EditGroupPage', () => {
     });
   });
 
+  it('reflects a World Cup knockout group: WC pool type + knockout, both locked', async () => {
+    // Regression: the edit form used to omit poolType/knockoutOnly from
+    // initialValues, so a World Cup group showed "NFL Weekly" by default.
+    mockGetGroup.mockResolvedValue({
+      name: 'LTK World Cup Knockout Picks',
+      identifier: 'test-group',
+      description: '',
+      maxMembers: 200,
+      poolType: 'world_cup_2026',
+      knockoutOnly: true,
+    });
+    renderPage();
+
+    const select = await screen.findByLabelText('Pool Type');
+    expect(select).toHaveValue('world_cup_2026');
+    expect(select).toBeDisabled();
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+  });
+
   it('renders a not-found message and no form when getGroup rejects', async () => {
     mockGetGroup.mockRejectedValue(new Error('Group not found'));
     renderPage();
