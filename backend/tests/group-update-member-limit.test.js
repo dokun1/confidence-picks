@@ -1,4 +1,4 @@
-import { test, describe, afterEach, mock } from 'node:test';
+import { test, describe, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert';
 import { Group } from '../src/models/Group.js';
 import pool from '../src/config/database.js';
@@ -9,7 +9,10 @@ import pool from '../src/config/database.js';
 // equal-to-count boundary, the [2,500] bounds, and the admin gate.
 
 describe('Group.update — member limit guard', () => {
-  afterEach(() => mock.restoreAll());
+  // The max_members constraint self-heal is covered by groups-ensure-constraint.test.js;
+  // latch it here so update() skips it and the stubbed pool only sees the guard's queries.
+  beforeEach(() => { Group._maxMembersConstraintEnsured = true; });
+  afterEach(() => { mock.restoreAll(); Group._maxMembersConstraintEnsured = false; });
 
   // role: the caller's membership role (null = not a member).
   // memberCount: rows returned by the COUNT(*) query.

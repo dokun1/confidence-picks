@@ -8,6 +8,10 @@ export class Group {
   // warm lambda and then "goes back to normal" (zero extra queries).
   static _knockoutOnlyColumnEnsured = false;
 
+  // Self-heal latch for the max_members CHECK constraint (see
+  // ensureMaxMembersConstraint). Same warm-instance fast path as above.
+  static _maxMembersConstraintEnsured = false;
+
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -66,13 +70,50 @@ export class Group {
     }
   }
 
+  // Ensure the groups.max_members CHECK allows up to 500. Production resilience:
+  // prod runs with INIT_DB unset, so schema.sql is NOT synced on deploy, and the
+  // legacy inline constraint (groups_max_members_check) still caps at 40. Because
+  // create() now defaults max_members to 50, a missing migration would 500 EVERY
+  // new group. Mirror the ensureKnockoutOnlyColumn self-heal: swap the legacy
+  // <=40 constraint for the named groups_max_members_range (<=500) on the first
+  // create/update after a deploy, then latch. Concurrency-safe: DROP ... IF EXISTS
+  // is idempotent, and a duplicate ADD from a racing cold start throws into the
+  // catch (which does NOT latch, so the next call settles to a no-op).
+  static async ensureMaxMembersConstraint() {
+    if (this._maxMembersConstraintEnsured) return; // warm-instance fast path
+    try {
+      const { rows } = await pool.query(
+        `SELECT conname FROM pg_constraint WHERE conname IN ('groups_max_members_check', 'groups_max_members_range')`
+      );
+      const names = rows.map((r) => r.conname);
+      const hasNew = names.includes('groups_max_members_range');
+      const hasLegacy = names.includes('groups_max_members_check');
+      if (hasLegacy || !hasNew) {
+        console.log('[groups] Migrating max_members constraint to allow up to 500');
+        await pool.query(`ALTER TABLE groups DROP CONSTRAINT IF EXISTS groups_max_members_check`);
+        if (!hasNew) {
+          await pool.query(
+            `ALTER TABLE groups ADD CONSTRAINT groups_max_members_range CHECK (max_members <= 500 AND max_members >= 2)`
+          );
+        }
+        console.log('[groups] max_members constraint now allows up to 500');
+      }
+      this._maxMembersConstraintEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — let the next create/update retry.
+      console.warn('[groups] Failed to ensure max_members constraint (may already be applied):', e.message);
+    }
+  }
+
   // Create new group
   static async create(groupData, creatorId) {
     const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType, knockoutOnly } = groupData;
 
-    // Self-heal the knockout_only column before the INSERT references it. No-op
-    // once the column exists (latched), so this is free on the steady-state path.
+    // Self-heal schema before the INSERT: the knockout_only column must exist, and
+    // the max_members constraint must allow the new default (50 > the legacy 40
+    // cap). Both no-op once latched, so this is free on the steady-state path.
     await Group.ensureKnockoutOnlyColumn();
+    await Group.ensureMaxMembersConstraint();
     
     // Ensure identifier is unique and URL-friendly
     // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
@@ -434,6 +475,10 @@ export class Group {
     if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
       throw new Error('Only group admins can update group settings');
     }
+
+    // Self-heal the max_members constraint so an admin raising the limit past the
+    // legacy 40 cap isn't rejected by a stale CHECK. No-op once latched.
+    await Group.ensureMaxMembersConstraint();
 
     // Member-limit changes are bounded to [2, 500] and may not be lowered below the
     // group's CURRENT member count — an admin must have members leave first. A group
