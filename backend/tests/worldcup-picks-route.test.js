@@ -452,6 +452,83 @@ describe('World Cup picks router', () => {
       });
       assert.strictEqual(res.status, 404);
     });
+
+    test('leaderboard payload rows include bonus_points (non-zero when knockout score matches)', async () => {
+      // Knockout (r16) game: home wins 2-1. User picks 'home' AND predicts 2-1 exactly.
+      // Expected: points = 3 (win) + 2 (exact bonus) = 5; bonus_points = 2.
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(GameService, 'getWorldCupStage', async (stage) => {
+        if (stage === 'r16') {
+          return [{
+            id: 501,
+            stage: 'r16',
+            status: 'FINAL',
+            completed: true,
+            homeTeam: { id: 'BRA' },
+            awayTeam: { id: 'ARG' },
+            homeScore: 2,
+            awayScore: 1,
+            winnerTeamId: 'BRA',
+          }];
+        }
+        return [];
+      });
+      mock.method(pool, 'query', async (sql) => {
+        if (/group_memberships/.test(sql) && /JOIN users/.test(sql)) {
+          return { rows: [{ id: 1, name: 'Alice', picture_url: null }] };
+        }
+        if (/FROM user_picks/.test(sql)) {
+          return { rows: [
+            { user_id: 1, game_id: 501, picked_result: 'home', predicted_home_score: 2, predicted_away_score: 1 },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/leaderboard`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const { leaderboard } = await res.json();
+
+      assert.strictEqual(leaderboard.length, 1);
+      const row = leaderboard[0];
+      assert.strictEqual(row.userId, 1);
+      assert.strictEqual(row.points, 5, 'points = 3 (win) + 2 (exact bonus)');
+      assert.ok('bonus_points' in row, 'bonus_points must be present in the payload');
+      assert.strictEqual(row.bonus_points, 2, 'bonus_points = 2 for exact score prediction');
+    });
+
+    test('leaderboard payload rows include bonus_points = 0 when no score bonus earned', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(GameService, 'getWorldCupStage', async (stage) => {
+        if (stage === 'group') {
+          return [groupGame(101, 2, 0)];
+        }
+        return [];
+      });
+      mock.method(pool, 'query', async (sql) => {
+        if (/group_memberships/.test(sql) && /JOIN users/.test(sql)) {
+          return { rows: [{ id: 1, name: 'Alice', picture_url: null }] };
+        }
+        if (/FROM user_picks/.test(sql)) {
+          return { rows: [
+            { user_id: 1, game_id: 101, picked_result: 'home', predicted_home_score: null, predicted_away_score: null },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/leaderboard`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const { leaderboard } = await res.json();
+
+      assert.strictEqual(leaderboard.length, 1);
+      assert.ok('bonus_points' in leaderboard[0], 'bonus_points must always be present in payload');
+      assert.strictEqual(leaderboard[0].bonus_points, 0, 'bonus_points = 0 when no bonus earned');
+    });
   });
 
   // The cross-member view/edit routes. The contract under test: ANY member may

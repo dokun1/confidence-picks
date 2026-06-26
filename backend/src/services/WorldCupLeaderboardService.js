@@ -1,9 +1,9 @@
-import { buildLeaderboard } from './SoccerScoringService.js';
+import { buildLeaderboard, SCORING_VERSION } from './SoccerScoringService.js';
 import { GameService } from './GameService.js';
 import { readSnapshot as readSnap, writeSnapshot as writeSnap } from '../models/WorldCupLeaderboardSnapshot.js';
 
-export function buildVersionString({ gameWatermark, memberCount, memberMaxId, picksWatermark }) {
-  return [gameWatermark ?? 'none', memberCount ?? 0, memberMaxId ?? 0, picksWatermark ?? 'none'].join('|');
+export function buildVersionString({ gameWatermark, memberCount, memberMaxId, picksWatermark, scoringVersion }) {
+  return [gameWatermark ?? 'none', memberCount ?? 0, memberMaxId ?? 0, picksWatermark ?? 'none', scoringVersion ?? SCORING_VERSION].join('|');
 }
 
 export async function getLeaderboardVersion(pool, group) {
@@ -41,6 +41,7 @@ export async function getLeaderboardVersion(pool, group) {
     memberCount: Number(mr[0]?.cnt ?? 0),
     memberMaxId: Number(mr[0]?.maxid ?? 0),
     picksWatermark: pw[0]?.watermark ? new Date(pw[0].watermark).toISOString() : null,
+    scoringVersion: SCORING_VERSION,
   });
 }
 
@@ -65,7 +66,7 @@ export async function buildGroupLeaderboard(pool, group, games) {
   let pickRows = [];
   if (wcGameIds.length > 0) {
     const result = await pool.query(
-      `SELECT user_id, game_id, picked_result
+      `SELECT user_id, game_id, picked_result, predicted_home_score, predicted_away_score
          FROM user_picks
         WHERE group_id = $1 AND picked_result IS NOT NULL AND game_id = ANY($2::int[])`,
       [group.id, wcGameIds]
@@ -78,7 +79,7 @@ export async function buildGroupLeaderboard(pool, group, games) {
   for (const pr of pickRows) {
     const game = gameById.get(pr.game_id);
     if (!game) continue;
-    scoringRows.push({ userId: pr.user_id, pick: { picked_result: pr.picked_result }, game });
+    scoringRows.push({ userId: pr.user_id, pick: { picked_result: pr.picked_result, predicted_home_score: pr.predicted_home_score, predicted_away_score: pr.predicted_away_score }, game });
     usersWithPicks.add(pr.user_id);
   }
   for (const m of members) {
@@ -101,6 +102,7 @@ export async function buildGroupLeaderboard(pool, group, games) {
       losses: row.losses,
       draws_correct: row.draws_correct,
       draws_incorrect: row.draws_incorrect,
+      bonus_points: row.bonus_points,
     };
   });
 }
