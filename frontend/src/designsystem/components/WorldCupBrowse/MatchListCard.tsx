@@ -135,16 +135,21 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
             const awayVal = game.predictedAwayScore;
             const homeFilled = homeVal != null && !isNaN(homeVal);
             const awayFilled = awayVal != null && !isNaN(awayVal);
-            const oneSided = game.isKnockout && !!onScoreChange && homeFilled !== awayFilled;
+            // The score is an OPTIONAL bonus that can only be added once the game is
+            // picked — you can pick (and earn the 3 base points) without a score.
+            const picked = game.picked === 'home' || game.picked === 'away';
+            const oneSided = game.isKnockout && !!onScoreChange && picked && homeFilled !== awayFilled;
 
             // Digits-only text field (no steppers): only non-negative integers are
-            // accepted, and an empty field means "no prediction" (default null). A
-            // bonus is registered only when BOTH are present (enforced on submit).
+            // accepted, and an empty field means "no prediction" (default null). The
+            // field is disabled until a team is picked; a bonus is registered only
+            // when BOTH are present (enforced on submit).
             const scoreInput = (side: 'home' | 'away', val: number | null | undefined, teamName: string) => (
               <input
                 type="text"
                 inputMode="numeric"
                 maxLength={2}
+                disabled={!picked}
                 aria-label={`Predicted score for ${teamName}`}
                 value={val == null ? '' : String(val)}
                 placeholder="–"
@@ -152,7 +157,7 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
                   const digits = e.target.value.replace(/[^0-9]/g, '');
                   onScoreChange!(game.id, side, digits === '' ? null : Number(digits));
                 }}
-                className="h-9 w-9 rounded border border-border bg-surface text-center text-base font-semibold tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="h-9 w-9 rounded border border-border bg-surface text-center text-base font-semibold tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40"
               />
             );
 
@@ -167,9 +172,13 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
                   {!game.isKnockout ? (
                     <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
                   ) : onScoreChange ? (
-                    <div className="flex shrink-0 items-center gap-xxs" aria-label="Predict the score">
+                    <div
+                      className="flex shrink-0 items-center gap-xxs"
+                      aria-label="Predict the score (optional)"
+                      title={picked ? 'Optional: predict the score for bonus points' : 'Pick a team first to predict the score'}
+                    >
                       {scoreInput('home', homeVal, game.home.name)}
-                      <span className="text-content-subtle">–</span>
+                      <span className={picked ? 'text-content-subtle' : 'text-content-subtle/40'}>–</span>
                       {scoreInput('away', awayVal, game.away.name)}
                     </div>
                   ) : null}

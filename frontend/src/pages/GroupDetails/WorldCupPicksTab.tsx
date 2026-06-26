@@ -287,13 +287,24 @@ export default function WorldCupPicksTab({
     // Airtight guard: a read-only viewer (non-admin looking at a teammate) can
     // never mutate the draft, even if a disabled control were somehow clicked.
     if (readOnly) return;
+    // Re-picking the selected outcome clears the pick.
+    const isUnpick = draft[matchId] === result;
     setDraft((prev) => {
       const next = { ...prev };
-      // Re-picking the selected outcome clears it; otherwise set the new outcome.
       if (next[matchId] === result) delete next[matchId];
       else next[matchId] = result;
       return next;
     });
+    // The score is an add-on to a pick: clearing the pick also drops any score
+    // prediction so an orphaned score can never linger (or be submitted).
+    if (isUnpick) {
+      setScoreDraft((prev) => {
+        if (!(matchId in prev)) return prev;
+        const next = { ...prev };
+        delete next[matchId];
+        return next;
+      });
+    }
   }
 
   function scoreChange(matchId: number, side: 'home' | 'away', value: number | null) {
