@@ -93,7 +93,10 @@ export default function GroupsPage() {
           wcGroups.map(async (g) => {
             try {
               const picksResp = await getMyWorldCupPicks(g.identifier);
-              return [g.identifier, countNeedsPick(matches as WorldCupMatch[], picksResp?.picks, now) > 0] as const;
+              return [
+                g.identifier,
+                countNeedsPick(matches as WorldCupMatch[], picksResp?.picks, now, g.knockoutOnly ?? false) > 0,
+              ] as const;
             } catch {
               return [g.identifier, false] as const;
             }

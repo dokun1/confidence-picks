@@ -194,7 +194,9 @@ export default function GroupDetailsPage() {
         if (cancelled) return;
         const matches: WorldCupMatch[] = Array.isArray(stagesResp?.games) ? stagesResp.games : [];
         writeCache(wcCacheKeys.stages, matches);
-        setNeedsPickCount(countNeedsPick(matches, picksResp?.picks, new Date()));
+        setNeedsPickCount(
+          countNeedsPick(matches, picksResp?.picks, new Date(), group?.knockoutOnly ?? false),
+        );
       } catch {
         /* non-fatal: leave the banner hidden */
       }

@@ -158,13 +158,59 @@ export class GameService {
   // group stage is the only World Cup phase where a 'draw' is a terminal result.
   static KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
 
+  // Bracket-placeholder detection, mirroring the frontend's teamDecided rule
+  // (wcGamesView.ts). A knockout slot is unresolved until the bracket decides it;
+  // ESPN seeds it with isActive:false, a digit-bearing abbreviation (3RD, 1G, 2K),
+  // and a qualification-path name ("Third Place Group …", "Group G Winner").
+  static PLACEHOLDER_NAME = /\b(winner|runner-?up|loser|place|group|tbd)\b|\//i;
+
+  static isPlaceholderTeam(t) {
+    if (!t) return true;
+    if (t.isActive === false) return true;
+    if (typeof t.abbreviation === 'string' && /\d/.test(t.abbreviation)) return true;
+    if (typeof t.name === 'string' && GameService.PLACEHOLDER_NAME.test(t.name)) return true;
+    return false;
+  }
+
+  // Does this knockout-stage slate still hold an unresolved matchup? Only knockout
+  // stages can (the group stage always has two real teams), so a non-knockout
+  // stage is never flagged.
+  static hasUnresolvedKnockoutParticipants(cachedSet, stage) {
+    if (!GameService.KNOCKOUT_STAGES.has(stage)) return false;
+    return cachedSet.some(
+      (g) => GameService.isPlaceholderTeam(g.homeTeam) || GameService.isPlaceholderTeam(g.awayTeam),
+    );
+  }
+
+  // How often a placeholder-bearing knockout stage may re-check ESPN. Bracket
+  // slots resolve as OTHER stages' games finish, which this stage's own rows can't
+  // signal (their date/status/score don't move when only the matchup resolves), so
+  // we poll — but throttled per stage so a tournament-long wall of placeholders
+  // can't hammer ESPN on every leaderboard/picks load.
+  static PLACEHOLDER_REFRESH_THROTTLE_MS = 5 * 60 * 1000;
+
+  // Per-stage timestamp of the last ESPN fetch, used only to throttle the
+  // placeholder-resolution refresh above. In-process (per serverless instance);
+  // a cold start just costs one extra fetch, which is fine.
+  static _lastStageFetchAt = new Map();
+
   // Decide whether a persisted World Cup stage slate can be served without an
   // ESPN refresh. Mirrors getGamesForWeek's freshness rules: in-progress games
   // tolerate a cache up to 60s old, SCHEDULED games at/past their start time
   // (with a 2-minute look-ahead) force a refresh unless we refreshed within the
   // last minute, and otherwise the 24h isStale() rule applies.
-  static isStageCacheFresh(cachedSet, now = Date.now()) {
+  static isStageCacheFresh(cachedSet, stage = null, now = Date.now()) {
     if (cachedSet.length === 0) return false;
+
+    // Proactive matchup-resolution refresh: a knockout stage still holding
+    // placeholder participants re-checks ESPN so newly-decided bracket matchups
+    // (e.g. "Third Place Group B" → "Bosnia") surface promptly instead of only
+    // after the 24h staleness TTL. Throttled per stage so an all-placeholder
+    // bracket early in the tournament can't refetch every stage on every request.
+    if (GameService.hasUnresolvedKnockoutParticipants(cachedSet, stage)) {
+      const lastFetch = GameService._lastStageFetchAt.get(stage) ?? 0;
+      if (now - lastFetch >= GameService.PLACEHOLDER_REFRESH_THROTTLE_MS) return false;
+    }
 
     // One-time events backfill: a started match (IN_PROGRESS or FINAL) whose
     // events column is still NULL was cached before goal/card parsing existed.
@@ -213,7 +259,7 @@ export class GameService {
     try {
       if (!forceRefresh) {
         const cachedSet = await Game.findByLeagueStage('world_cup', stage);
-        if (GameService.isStageCacheFresh(cachedSet)) {
+        if (GameService.isStageCacheFresh(cachedSet, stage)) {
           for (const g of cachedSet) {
             // Persisted winner wins; recompute from scores for rows written
             // before winner_team_id existed (regulation results only — a PK
@@ -225,6 +271,10 @@ export class GameService {
       }
 
       const service = getESPNService();
+      // Record the fetch up front so the placeholder-resolution throttle counts
+      // from when we asked ESPN, not when it answered — and a failed fetch still
+      // backs off rather than retrying on every request.
+      GameService._lastStageFetchAt.set(stage, Date.now());
       const espnEvents = await service.fetchSoccerWeek('fifa.world', stage);
       const cachedById = await Game.findByESPNIds(espnEvents.map(e => e.id));
 

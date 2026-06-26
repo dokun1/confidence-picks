@@ -24,12 +24,21 @@ function toDraft(picks: MatchPick[] | undefined): Record<number, MatchPick['pick
  * Count the matches this viewer still needs to pick, given the tournament's
  * matches and the viewer's saved picks. `now` is injected so the open/locked
  * window is testable.
+ *
+ * `knockoutOnly` mirrors the group setting: when true, group-stage matches are
+ * dropped before counting so a knockout-only group's banner/dot only counts the
+ * games that group can actually pick. This keeps the leaderboard banner and the
+ * groups-list dot in lockstep with the Picks tab, which already hides the group
+ * stage for these pools. Defaults false, so ongoing (full-tournament) pools are
+ * counted exactly as before.
  */
 export function countNeedsPick(
   matches: WorldCupMatch[],
   picks: MatchPick[] | undefined,
   now: Date,
+  knockoutOnly: boolean = false,
 ): number {
   const draft = toDraft(picks);
-  return toBrowseGames(matches, draft).filter((g) => needsPick(g, now)).length;
+  const visible = knockoutOnly ? matches.filter((m) => m.stage !== 'group') : matches;
+  return toBrowseGames(visible, draft).filter((g) => needsPick(g, now)).length;
 }

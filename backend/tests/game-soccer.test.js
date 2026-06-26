@@ -114,6 +114,51 @@ describe('Game.fromESPNData team.isActive (undecided knockout slots)', () => {
   });
 });
 
+describe('Game.isDifferentFrom team-identity (knockout matchup resolution)', () => {
+  // Shared non-team fields so the ONLY thing varying across rows below is the
+  // matchup itself — exactly the placeholder→resolved transition the cache must
+  // catch (date/status/score don't move when a bracket slot resolves).
+  const base = {
+    espnId: '900',
+    gameDate: new Date('2026-07-01T19:00:00Z'),
+    status: 'SCHEDULED',
+    homeScore: 0,
+    awayScore: 0,
+    period: 0,
+    displayClock: '',
+    statusDetail: '',
+    events: [],
+    league: 'world_cup',
+    stage: 'r32',
+  };
+  const placeholder = () => new Game({
+    ...base,
+    homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', isActive: true },
+    awayTeam: { id: 'tbd-1', name: 'Third Place Group B/E/F/I/J', abbreviation: '3RD', isActive: false },
+  });
+  const resolved = () => new Game({
+    ...base,
+    homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', isActive: true },
+    awayTeam: { id: '4', name: 'Bosnia', abbreviation: 'BIH', isActive: true },
+  });
+
+  test('detects a placeholder resolving into a real team (date/status/score unchanged)', () => {
+    assert.strictEqual(resolved().isDifferentFrom(placeholder()), true);
+  });
+
+  test('is stable for two identical placeholder rows — no cache churn', () => {
+    assert.strictEqual(placeholder().isDifferentFrom(placeholder()), false);
+  });
+
+  test('ignores volatile team fields (record/form/logo) so stable matchups never churn', () => {
+    const a = resolved();
+    const b = resolved();
+    // The kind of drift ESPN emits between refreshes for an already-decided team.
+    b.homeTeam = { ...b.homeTeam, record: '1-0-0', form: 'W', logo: 'https://x/logo.png' };
+    assert.strictEqual(a.isDifferentFrom(b), false);
+  });
+});
+
 describe('Game.toJSON surfaces league and stage', () => {
   test('includes league and stage for a soccer game', () => {
     const [drawMatch] = generateMockWorldCupStage({ stage: 'group' });
