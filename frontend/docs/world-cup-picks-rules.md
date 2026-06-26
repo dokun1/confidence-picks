@@ -127,6 +127,66 @@ a team pick scores 3 or 0, and a `draw` pick is dead (always 0).
 
 ---
 
+## Score-Prediction Bonus (Knockout)
+
+For every **knockout-stage** match (stages `r32`, `r16`, `qf`, `sf`, `third`, `final`) you
+may optionally predict the **final score** to earn extra points on top of your advance pick.
+
+### What the bonus is (and is not)
+
+- **Optional.** You may submit a score prediction, or leave it blank — your advance pick is
+  unaffected either way.
+- **Independent of the advance pick.** The bonus is calculated purely from the score
+  prediction vs. the actual score; it does not require your advance pick to be correct.
+- **Independent of who advanced.** The advancing team is determined separately for base
+  scoring (3 or 0 points). The score-prediction bonus only compares scorelines.
+
+### The scoring rule
+
+The bonus compares your predicted scoreline `(predicted home score, predicted away score)`
+to the **actual on-field score** — the 90-minute / extra-time result, **excluding
+penalty-shootout kicks**. A match decided by penalties therefore counts as a **draw score**
+(e.g. 1–1) for bonus purposes; the advancing side is tracked separately.
+
+> **Exact score = +2; off by one goal, or the right scoreline with the teams flipped = +1.
+> PK shootouts count as a draw score.**
+
+In full:
+
+- **+2** — exact match: your home prediction equals the actual home score **and** your away
+  prediction equals the actual away score.
+- **+1** — either of:
+  - **Off by one goal:** L1 distance 1, meaning exactly one team's score is off by one and
+    the other is exact (e.g. predict 3–1, actual 3–2 — away side off by one); **or**
+  - **Right scoreline, teams flipped (mirror):** your predicted home equals the actual away
+    **and** your predicted away equals the actual home (and they are not identical).
+- **+0** — anything else.
+
+### Reference table — actual score 3–2
+
+| Predicted | Bonus | Why |
+|-----------|:-----:|-----|
+| 3–2       | +2    | Exact match |
+| 3–3, 2–2, 4–2, 3–1 | +1 | One team off by one goal |
+| 2–3       | +1    | Right scoreline, teams flipped (mirror) |
+| 4–3, 2–1  | 0     | Both teams off by one (L1 = 2), not a mirror |
+| 1–0       | 0     | Not close |
+
+### Score used for the bonus
+
+Extra-time goals **count** toward the score. Only penalty-shootout kicks are excluded. A
+match that finishes 1–1 after extra time and is then decided on penalties uses **1–1** as the
+actual score for bonus purposes.
+
+### Leaderboard display
+
+The leaderboard shows a **Bonus** column reflecting accumulated score-prediction bonus points
+for all World Cup pool types. In knockout-only pools the **Draws Correct** and **Draws
+Incorrect** columns are hidden (knockouts never produce scoring draws, so those columns are
+always 0 there and are omitted to keep the table readable).
+
+---
+
 ## Tiebreakers
 
 When two or more users finish with the **same total score**, rank them by applying the

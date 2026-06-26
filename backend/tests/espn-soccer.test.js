@@ -145,7 +145,7 @@ describe('MockESPNService.fetchSoccerWeek', () => {
   test('returns the world-cup knockout fixtures for a knockout stage key', async () => {
     MockESPNService.setEnabled(true);
     const matches = await MockESPNService.fetchSoccerWeek('fifa.world', 'r16');
-    assert.strictEqual(matches.length, 3, 'Knockout slate should have 3 fixtures');
+    assert.strictEqual(matches.length, 5, 'Knockout slate should have 5 fixtures (3 final + 2 scheduled)');
     const knockoutStages = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
     matches.forEach(m => {
       assert.ok(knockoutStages.has(m.competitions[0].stage), 'Fixtures should carry a knockout stage code');

@@ -10,6 +10,8 @@ export interface MatchListCardProps {
   /** Opens the match detail panel for this game. Omit to hide the "More ›" button. */
   onOpenDetail?: (gameId: number) => void;
   disabled?: boolean;
+  /** Callback fired when the user changes a score prediction. Knockout matches only. */
+  onScoreChange?: (gameId: number, side: 'home' | 'away', value: number | null) => void;
 }
 
 function formatTime(iso: string): string {
@@ -69,7 +71,7 @@ function ResultStrip({ game }: { game: BrowseGame }) {
  * full team names; the card body is the three-way bet (pickable) or a result
  * strip (locked).
  */
-export default function MatchListCard({ game, now, onPick, onOpenDetail, disabled }: MatchListCardProps) {
+export default function MatchListCard({ game, now, onPick, onOpenDetail, disabled, onScoreChange }: MatchListCardProps) {
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
@@ -113,19 +115,85 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
       </div>
 
       {locked ? (
-        <ResultStrip game={game} />
+        <>
+          <ResultStrip game={game} />
+          {/* Read-only prediction: shown when kickoff has passed and the user had
+              saved a score prediction for this knockout match. Mirrors MatchPickRow. */}
+          {game.isKnockout && (game.predictedHomeScore != null || game.predictedAwayScore != null) && (
+            <div className="mt-xs flex items-center justify-center gap-xs text-xs text-content-muted" data-testid={`prediction-${game.id}`}>
+              <span>Your prediction:</span>
+              <span className="font-semibold tabular-nums">
+                {game.home.abbr} {game.predictedHomeScore ?? '–'} – {game.predictedAwayScore ?? '–'} {game.away.abbr}
+              </span>
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-xl border border-border bg-neutral-0 p-sm shadow-sm dark:bg-secondary-800">
-          <div className="flex gap-xs">
-            <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
-            {/* Group games are three-way (Draw is a valid outcome). Knockout games
-                are single-elimination — PKs decide a level match — so only the two
-                teams are offered; Draw isn't rendered at all. */}
-            {!game.isKnockout && (
-              <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
-            )}
-            <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
-          </div>
+          {(() => {
+            const homeVal = game.predictedHomeScore;
+            const awayVal = game.predictedAwayScore;
+            const homeFilled = homeVal != null && !isNaN(homeVal);
+            const awayFilled = awayVal != null && !isNaN(awayVal);
+            // The score is an OPTIONAL bonus that can only be added once the game is
+            // picked — you can pick (and earn the 3 base points) without a score.
+            const picked = game.picked === 'home' || game.picked === 'away';
+            const oneSided = game.isKnockout && !!onScoreChange && picked && homeFilled !== awayFilled;
+
+            // Digits-only text field (no steppers): only non-negative integers are
+            // accepted, and an empty field means "no prediction" (default null). The
+            // field is disabled until a team is picked AND whenever the card is
+            // disabled (e.g. a submit in flight), matching the pick buttons; a bonus
+            // is registered only when BOTH are present (enforced on submit).
+            const scoreInput = (side: 'home' | 'away', val: number | null | undefined, teamName: string) => (
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                disabled={!picked || disabled}
+                aria-label={`Predicted score for ${teamName}`}
+                value={val == null ? '' : String(val)}
+                placeholder="–"
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^0-9]/g, '');
+                  onScoreChange!(game.id, side, digits === '' ? null : Number(digits));
+                }}
+                className="h-9 w-9 rounded border border-border bg-surface text-center text-base font-semibold tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40"
+              />
+            );
+
+            return (
+              <>
+                {/* One horizontal row: home pick · score – score · away pick.
+                    Group games are three-way (Draw replaces the score inputs);
+                    knockout games are single-elimination (no Draw), and the two
+                    optional score fields sit between the teams at the same height. */}
+                <div className="flex items-center gap-xs">
+                  <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
+                  {!game.isKnockout ? (
+                    <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
+                  ) : onScoreChange ? (
+                    <div
+                      className="flex shrink-0 items-center gap-xxs"
+                      aria-label="Predict the score (optional)"
+                      title={picked ? 'Optional: predict the score for bonus points' : 'Pick a team first to predict the score'}
+                    >
+                      {scoreInput('home', homeVal, game.home.name)}
+                      <span className={picked ? 'text-content-subtle' : 'text-content-subtle/40'}>–</span>
+                      {scoreInput('away', awayVal, game.away.name)}
+                    </div>
+                  ) : null}
+                  <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
+                </div>
+                {/* Both-or-neither hint: shown when exactly one score is filled. */}
+                {oneSided && (
+                  <p className="mt-xs text-center text-xs text-warning-700 dark:text-warning-400" data-testid={`score-hint-${game.id}`}>
+                    Enter both scores to earn the bonus
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

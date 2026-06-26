@@ -62,6 +62,13 @@ describe('isLocked / needsPick', () => {
   it('a picked-but-open game no longer needs a pick', () => {
     expect(needsPick(game({ picked: 'home' }), NOW)).toBe(false);
   });
+  it('keys off savedPicked when supplied — a drafted-but-unsaved pick still needs a pick', () => {
+    // Picked in the draft (picked: 'home') but not yet submitted (savedPicked: false):
+    // the game stays in the "needs pick" filter until Submit.
+    expect(needsPick(game({ picked: 'home', savedPicked: false }), NOW)).toBe(true);
+    // Once saved, it drops out — even if the draft were later cleared.
+    expect(needsPick(game({ picked: undefined, savedPicked: true }), NOW)).toBe(false);
+  });
   it('a knockout game with an undecided slot never needs a pick', () => {
     // Real R32 placeholders (abbr/name as ESPN actually emits them) → unpickable.
     expect(needsPick(game({ away: team('2A', 'Group A 2nd Place') }), NOW)).toBe(false);

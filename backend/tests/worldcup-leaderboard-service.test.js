@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached, leaderboardsMatch } from '../src/services/WorldCupLeaderboardService.js';
+import { SCORING_VERSION } from '../src/services/SoccerScoringService.js';
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -44,6 +45,49 @@ describe('buildGroupLeaderboard', () => {
     assert.equal(board[0].userId, 9);
     assert.equal(board[0].points, 0);
   });
+
+  test('output rows include bonus_points and it is non-zero on an exact knockout score prediction', async () => {
+    // Knockout game: home wins 2-1, user correctly picks 'home' AND predicts exactly 2-1.
+    // Expected: 3 points (win) + 2 bonus (exact score) = 5 total; bonus_points = 2.
+    const group = { id: 7 };
+    const games = [
+      {
+        id: 200, status: 'FINAL', homeScore: 2, awayScore: 1, stage: 'r16',
+        winnerTeamId: 'H', homeTeam: { id: 'H' }, awayTeam: { id: 'A' },
+      },
+    ];
+    const pool = fakePool([
+      [{ id: 1, name: 'Ann', picture_url: null }],
+      [{ user_id: 1, game_id: 200, picked_result: 'home', predicted_home_score: 2, predicted_away_score: 1 }],
+    ]);
+
+    const board = await buildGroupLeaderboard(pool, group, games);
+
+    assert.equal(board.length, 1);
+    assert.equal(board[0].userId, 1);
+    assert.equal(board[0].points, 5, 'points = 3 (win) + 2 (exact bonus)');
+    assert.equal(board[0].bonus_points, 2, 'bonus_points is present and correct');
+  });
+
+  test('output rows include bonus_points = 0 when no score prediction is given', async () => {
+    const group = { id: 7 };
+    const games = [
+      {
+        id: 201, status: 'FINAL', homeScore: 1, awayScore: 0, stage: 'qf',
+        winnerTeamId: 'H', homeTeam: { id: 'H' }, awayTeam: { id: 'A' },
+      },
+    ];
+    const pool = fakePool([
+      [{ id: 1, name: 'Ann', picture_url: null }],
+      [{ user_id: 1, game_id: 201, picked_result: 'home', predicted_home_score: null, predicted_away_score: null }],
+    ]);
+
+    const board = await buildGroupLeaderboard(pool, group, games);
+
+    assert.equal(board.length, 1);
+    assert.equal(board[0].points, 3, 'only 3 points for correct pick, no bonus');
+    assert.equal(board[0].bonus_points, 0, 'bonus_points is 0 when no prediction');
+  });
 });
 
 describe('version watermark', () => {
@@ -55,6 +99,18 @@ describe('version watermark', () => {
     assert.notEqual(v0, buildVersionString({ ...base, memberMaxId: 43 }));   // member churn
     assert.notEqual(v0, buildVersionString({ ...base, gameWatermark: '2026-06-21T00:00:00.000Z' })); // game finalized
     assert.notEqual(v0, buildVersionString({ ...base, picksWatermark: '2026-06-20T19:00:00.000Z' })); // pick edited
+  });
+
+  test('buildVersionString changes when scoringVersion changes (cache invalidation on scoring bump)', () => {
+    const base = { gameWatermark: '2026-06-20T18:00:00.000Z', memberCount: 3, memberMaxId: 42, picksWatermark: '2026-06-20T17:00:00.000Z', scoringVersion: '1' };
+    const v1 = buildVersionString(base);
+    const v2 = buildVersionString({ ...base, scoringVersion: '2' });
+    assert.notEqual(v1, v2, 'bumping scoringVersion must produce a different version string');
+    // Also confirm the current SCORING_VERSION is embedded when not provided explicitly.
+    // It is the last '|'-delimited component, so check it exactly (a substring check
+    // would spuriously pass on digits inside watermarks/ids).
+    const vDefault = buildVersionString({ gameWatermark: null, memberCount: 0, memberMaxId: 0, picksWatermark: null });
+    assert.equal(vDefault.split('|').pop(), SCORING_VERSION, 'default scoringVersion (SCORING_VERSION) should be the trailing component');
   });
 
   test('getLeaderboardVersion assembles from three queries', async () => {
@@ -70,6 +126,22 @@ describe('version watermark', () => {
     const v = await getLeaderboardVersion(pool, { id: 7 });
     assert.equal(typeof v, 'string');
     assert.ok(v.includes('42'));
+  });
+
+  test('getLeaderboardVersion includes SCORING_VERSION so a scoring bump invalidates the cache', async () => {
+    let i = 0;
+    const pool = { query: async () => {
+      const results = [
+        [{ watermark: '2026-06-20T18:00:00.000Z' }],
+        [{ cnt: '3', maxid: '42' }],
+        [{ watermark: '2026-06-20T17:00:00.000Z' }],
+      ];
+      return { rows: results[i++] };
+    }};
+    const v = await getLeaderboardVersion(pool, { id: 7 });
+    // The version string must embed the current SCORING_VERSION as its trailing
+    // component so a scoring bump invalidates the cache.
+    assert.equal(v.split('|').pop(), SCORING_VERSION, 'SCORING_VERSION must be the trailing component of the version string');
   });
 
   test('picks watermark is scoped to FINAL games (no churn on pre-kickoff edits)', async () => {

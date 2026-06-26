@@ -166,6 +166,115 @@ describe('MatchPickRow', () => {
     expect(props.onPick).not.toHaveBeenCalled();
   });
 
+  describe('score prediction inputs', () => {
+    it('renders two score inputs on an editable knockout match', () => {
+      const onScoreChange = vi.fn();
+      render(
+        <MatchPickRow
+          match={knockoutMatch()}
+          pickedResult={null}
+          onPick={vi.fn()}
+          onScoreChange={onScoreChange}
+        />,
+      );
+      expect(
+        screen.getByRole('spinbutton', { name: 'Predicted score for Mexico' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('spinbutton', { name: 'Predicted score for United States' }),
+      ).toBeInTheDocument();
+    });
+
+    it('does NOT render score inputs on a group-stage match', () => {
+      render(
+        <MatchPickRow
+          match={groupMatch()}
+          pickedResult={null}
+          onPick={vi.fn()}
+          onScoreChange={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByRole('spinbutton', { name: 'Predicted score for Mexico' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('spinbutton', { name: 'Predicted score for United States' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('calls onScoreChange with home/away and value when the input changes', () => {
+      const onScoreChange = vi.fn();
+      render(
+        <MatchPickRow
+          match={knockoutMatch()}
+          pickedResult={null}
+          onPick={vi.fn()}
+          onScoreChange={onScoreChange}
+        />,
+      );
+      fireEvent.change(
+        screen.getByRole('spinbutton', { name: 'Predicted score for Mexico' }),
+        { target: { value: '2' } },
+      );
+      expect(onScoreChange).toHaveBeenCalledWith(200, 'home', 2);
+
+      fireEvent.change(
+        screen.getByRole('spinbutton', { name: 'Predicted score for United States' }),
+        { target: { value: '1' } },
+      );
+      expect(onScoreChange).toHaveBeenCalledWith(200, 'away', 1);
+    });
+
+    it('calls onScoreChange with null when the input is cleared', () => {
+      const onScoreChange = vi.fn();
+      render(
+        <MatchPickRow
+          match={knockoutMatch()}
+          pickedResult={null}
+          onPick={vi.fn()}
+          predictedHomeScore={2}
+          onScoreChange={onScoreChange}
+        />,
+      );
+      fireEvent.change(
+        screen.getByRole('spinbutton', { name: 'Predicted score for Mexico' }),
+        { target: { value: '' } },
+      );
+      expect(onScoreChange).toHaveBeenCalledWith(200, 'home', null);
+    });
+
+    it('shows a read-only score display on a locked knockout match when scores are set', () => {
+      // A locked knockout match (status FINAL) with predicted scores shows the
+      // prediction in a read-only label, not editable inputs.
+      render(
+        <MatchPickRow
+          match={knockoutMatch({ status: 'FINAL', homeScore: 3, awayScore: 1 })}
+          pickedResult="home"
+          onPick={vi.fn()}
+          predictedHomeScore={2}
+          predictedAwayScore={1}
+        />,
+      );
+      // No editable inputs
+      expect(
+        screen.queryByRole('spinbutton', { name: 'Predicted score for Mexico' }),
+      ).not.toBeInTheDocument();
+      // Read-only prediction text is shown
+      expect(screen.getByText(/Your prediction:/i)).toBeInTheDocument();
+    });
+
+    it('does NOT show the read-only display on a locked knockout match when no scores are set', () => {
+      render(
+        <MatchPickRow
+          match={knockoutMatch({ status: 'FINAL', homeScore: 2, awayScore: 0 })}
+          pickedResult="home"
+          onPick={vi.fn()}
+        />,
+      );
+      expect(screen.queryByText(/Your prediction:/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe('match timeline', () => {
     const EVENTS: MatchEvent[] = [
       { type: 'goal', minute: "9'", player: 'J. Quiñones', side: 'home', teamAbbr: 'MEX' },

@@ -3,6 +3,7 @@ import type { WorldCupMatch, WorldCupStage } from './types';
 import { teamGroup } from './wcGroups';
 
 type DraftMap = Record<number, MatchResult>;
+type ScoreDraftMap = Record<number, { home?: number | null; away?: number | null }>;
 
 const STAGE_LABEL: Record<WorldCupStage, string> = {
   group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16',
@@ -13,7 +14,7 @@ const NORMALIZED: Record<string, GameStatus> = {
   SCHEDULED: 'SCHEDULED', IN_PROGRESS: 'IN_PROGRESS', FINAL: 'FINAL',
 };
 
-export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): BrowseGame[] {
+export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDraft?: ScoreDraftMap, savedDraft?: DraftMap): BrowseGame[] {
   return matches.map((m) => ({
     id: m.id,
     espnId: m.espnId ?? String(m.id),
@@ -52,6 +53,10 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     statusDetail: m.statusDetail || undefined,
     period: m.period,
     picked: draft[m.id],
+    // Saved-pick baseline for the "needs pick" filter: true when this viewer has
+    // a submitted pick for the match. Only set when the caller passes savedDraft
+    // (the picks tab); otherwise left undefined so needsPick falls back to picked.
+    savedPicked: savedDraft ? savedDraft[m.id] != null : undefined,
     // Derive from the stage rather than trusting m.isKnockout: the stage route
     // doesn't actually emit that flag, so it arrives undefined and left the Draw
     // pick enabled on knockout matches. Every non-group stage is single-elimination
@@ -64,5 +69,10 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     wcGroup: m.stage === 'group'
       ? (teamGroup(m.homeTeam.abbreviation) ?? teamGroup(m.awayTeam.abbreviation))
       : undefined,
+    // Score predictions — knockout matches only; sourced from the parallel
+    // scoreDraft in WorldCupPicksTab. Group-stage matches always leave these
+    // absent (isKnockout guard keeps the code and the comment in agreement).
+    predictedHomeScore: m.stage !== 'group' ? scoreDraft?.[m.id]?.home : undefined,
+    predictedAwayScore: m.stage !== 'group' ? scoreDraft?.[m.id]?.away : undefined,
   }));
 }

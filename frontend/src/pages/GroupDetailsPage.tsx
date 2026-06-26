@@ -371,7 +371,7 @@ export default function GroupDetailsPage() {
         {/* Tab Content */}
         {activeTab === 'leaderboard' &&
           (isWorldCup ? (
-            <WorldCupLeaderboardTab identifier={identifier} />
+            <WorldCupLeaderboardTab identifier={identifier} knockoutOnly={group?.knockoutOnly ?? false} />
           ) : (
             <LeaderboardTab identifier={identifier} />
           ))}

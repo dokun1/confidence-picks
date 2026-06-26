@@ -22,6 +22,21 @@ export interface MatchPickRowProps {
   onPick: (result: MatchPickResult) => void;
   /** Page-level disable (no editable window, or a submit is in flight). */
   disabled?: boolean;
+  /**
+   * Predicted home-team score for knockout matches. Controlled by the parent.
+   * Not shown on group-stage matches or when the match is locked.
+   */
+  predictedHomeScore?: number | null;
+  /**
+   * Predicted away-team score for knockout matches. Controlled by the parent.
+   * Not shown on group-stage matches or when the match is locked.
+   */
+  predictedAwayScore?: number | null;
+  /**
+   * Callback fired when the user changes a score prediction. Only called for
+   * editable knockout matches.
+   */
+  onScoreChange?: (matchId: number, side: 'home' | 'away', value: number | null) => void;
 }
 
 /** Map the backend status enum to a human label, matching GamePickRow. */
@@ -69,6 +84,9 @@ export default function MatchPickRow({
   pickedResult,
   onPick,
   disabled = false,
+  predictedHomeScore,
+  predictedAwayScore,
+  onScoreChange,
 }: MatchPickRowProps) {
   const status = deriveStatus(match.status);
   // A pick locks at kickoff and STAYS locked. We key off the scheduled kickoff
@@ -145,6 +163,53 @@ export default function MatchPickRow({
         {pickButton('draw', 'Draw', 'Pick a draw', match.isKnockout)}
         {pickButton('away', awayLabel, `Pick ${match.awayTeam.name} to win`)}
       </div>
+
+      {/* Score prediction inputs — knockout matches only. Editable before kickoff;
+          read-only display once locked. Hidden entirely for group-stage matches. */}
+      {match.isKnockout && editable && (
+        <div className="flex items-center gap-sm pt-xs" aria-label="Predict the score">
+          <span className="text-xs text-content-muted">Score prediction:</span>
+          <div className="flex items-center gap-xs">
+            <label className="flex items-center gap-xxs text-xs">
+              <span className="font-medium">{homeLabel}</span>
+              <input
+                type="number"
+                step="any"
+                aria-label={`Predicted score for ${match.homeTeam.name}`}
+                value={predictedHomeScore ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  onScoreChange?.(match.id, 'home', raw === '' ? null : Number(raw));
+                }}
+                className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+            <span className="text-xs text-content-muted">–</span>
+            <label className="flex items-center gap-xxs text-xs">
+              <span className="font-medium">{awayLabel}</span>
+              <input
+                type="number"
+                step="any"
+                aria-label={`Predicted score for ${match.awayTeam.name}`}
+                value={predictedAwayScore ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  onScoreChange?.(match.id, 'away', raw === '' ? null : Number(raw));
+                }}
+                className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+          </div>
+        </div>
+      )}
+      {match.isKnockout && locked && (predictedHomeScore != null || predictedAwayScore != null) && (
+        <div className="flex items-center gap-sm pt-xs text-xs text-content-muted">
+          <span>Your prediction:</span>
+          <span className="font-semibold tabular-nums">
+            {homeLabel} {predictedHomeScore ?? '–'} – {predictedAwayScore ?? '–'} {awayLabel}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
