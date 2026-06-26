@@ -111,6 +111,28 @@ describe('CreateGroupForm', () => {
     });
   });
 
+  describe('edit mode locks immutable pool fields', () => {
+    it('reflects the World Cup pool type and disables the select', () => {
+      renderForm({ initialValues: { identifier: 'g', poolType: 'world_cup_2026' } });
+      const select = screen.getByLabelText('Pool Type');
+      expect(select).toHaveValue('world_cup_2026');
+      expect(select).toBeDisabled();
+      expect(screen.getByText(/Pool type can.t be changed after creation/)).toBeInTheDocument();
+    });
+
+    it('reflects and locks the knockout-only setting', () => {
+      renderForm({ initialValues: { identifier: 'g', poolType: 'world_cup_2026', knockoutOnly: true } });
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toBeChecked();
+      expect(checkbox).toBeDisabled();
+    });
+
+    it('keeps the pool type editable when creating a new group', () => {
+      renderForm();
+      expect(screen.getByLabelText('Pool Type')).not.toBeDisabled();
+    });
+  });
+
   describe('auto-slug from name', () => {
     it('auto-fills Group ID from name', () => {
       renderForm();

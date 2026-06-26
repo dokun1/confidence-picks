@@ -95,6 +95,12 @@ export default function EditGroupPage() {
               identifier: group.identifier,
               description: group.description ?? '',
               maxMembers: group.maxMembers,
+              // Pool type + knockout-only are immutable after creation (the update
+              // route ignores them); pass them through so the form reflects the
+              // group's real type and locks those controls instead of defaulting
+              // to NFL Weekly.
+              poolType: group.poolType,
+              knockoutOnly: group.knockoutOnly,
             }}
             onSubmit={handleSubmit}
             onCancel={() => navigate(-1)}

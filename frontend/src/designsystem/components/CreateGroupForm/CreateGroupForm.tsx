@@ -67,7 +67,11 @@ function slugifyName(name: string): string {
  * CreateGroupForm is a fully controlled form for creating (or editing) a group.
  *
  * - Auto-generates the Group ID slug from the name unless the user manually edits it.
- * - If `initialValues.identifier` is provided the Group ID field is locked.
+ * - Edit mode is signalled by `initialValues.identifier` being present — the same
+ *   single signal already used to lock the Group ID. In edit mode the Group ID
+ *   AND the immutable pool fields (pool type, knockout-only) are locked, because
+ *   the update route does not accept changes to any of them. (The only two callers
+ *   are CreateGroupPage — no initialValues — and EditGroupPage — identifier set.)
  * - Manages async submission with an internal loading state.
  * - Displays success/error feedback via InlineToast anchored above the submit button.
  */
@@ -89,6 +93,10 @@ export default function CreateGroupForm({
   // The knockout-only setting is meaningful only for World Cup pools, so it lives
   // behind the pool-type choice and rides along on it.
   const isWorldCup = poolType === 'world_cup_2026';
+  // Edit mode uses the same single signal as the Group ID lock below: a supplied
+  // identifier. In edit mode pool type + knockout-only are immutable (the update
+  // route ignores them), so the form locks those controls too.
+  const isEditMode = !!initialValues?.identifier;
   const [identifierManuallyEdited, setIdentifierManuallyEdited] = useState(
     !!initialValues?.identifier
   );
@@ -273,12 +281,17 @@ export default function CreateGroupForm({
               // an NFL pool (the server rejects that combination anyway).
               if (next !== 'world_cup_2026') setKnockoutOnly(false);
             }}
-            disabled={loading}
+            disabled={loading || isEditMode}
             className="block w-full rounded-md border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-500 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-100"
           >
             <option value="nfl_weekly">NFL Weekly</option>
             <option value="world_cup_2026">World Cup 2026</option>
           </select>
+          {isEditMode && (
+            <p className="mt-1 text-sm text-secondary-500 dark:text-secondary-400">
+              Pool type can&apos;t be changed after creation.
+            </p>
+          )}
         </div>
 
         {/* World Cup 2026 sub-setting. Only shown for a World Cup pool — it has no
@@ -292,7 +305,7 @@ export default function CreateGroupForm({
                 type="checkbox"
                 checked={knockoutOnly}
                 onChange={(e) => setKnockoutOnly(e.target.checked)}
-                disabled={loading}
+                disabled={loading || isEditMode}
                 className="mt-0.5 h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
               />
               <span className="text-sm">
