@@ -71,4 +71,35 @@ describe('countNeedsPick', () => {
   it('returns 0 for an empty slate', () => {
     expect(countNeedsPick([], [], NOW)).toBe(0);
   });
+
+  describe('knockoutOnly', () => {
+    // A real, decided knockout match (both teams known) so it counts toward the
+    // knockout-only total — paired with pickable group-stage matches that must be
+    // excluded when the group only allows knockout picks.
+    const knockout = match({
+      id: 10,
+      stage: 'r32',
+      isKnockout: true,
+      homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', logo: '' },
+      awayTeam: { id: '4', name: 'Bosnia', abbreviation: 'BIH', logo: '' },
+    });
+
+    it('counts group + knockout games by default (ongoing group)', () => {
+      const matches = [match({ id: 1 }), match({ id: 2 }), knockout];
+      expect(countNeedsPick(matches, [], NOW)).toBe(3);
+    });
+
+    it('excludes group-stage games when knockoutOnly is true', () => {
+      const matches = [match({ id: 1 }), match({ id: 2 }), knockout];
+      // Only the knockout game remains pickable for a knockout-only group.
+      expect(countNeedsPick(matches, [], NOW, true)).toBe(1);
+    });
+
+    it('is unaffected by knockoutOnly when there are no group-stage games', () => {
+      const matches = [knockout, match({ id: 11, stage: 'r16', isKnockout: true,
+        homeTeam: { id: '5', name: 'Brazil', abbreviation: 'BRA', logo: '' },
+        awayTeam: { id: '6', name: 'France', abbreviation: 'FRA', logo: '' } })];
+      expect(countNeedsPick(matches, [], NOW, true)).toBe(2);
+    });
+  });
 });

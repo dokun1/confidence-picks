@@ -361,6 +361,87 @@ describe('GameService.getWorldCupStage events-column resilience', () => {
   });
 });
 
+// Proactive matchup-resolution refresh: a knockout stage still holding bracket
+// placeholders must re-check ESPN (throttled) so newly-decided matchups surface
+// promptly, instead of being served stale until the 24h TTL. The placeholder
+// detection mirrors the frontend's teamDecided rule.
+describe('GameService proactive knockout-resolution refresh', () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+    GameService._lastStageFetchAt.clear();
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+    GameService._lastStageFetchAt.clear();
+  });
+
+  // A SCHEDULED knockout game two days out, with an unresolved away slot. Every
+  // other freshness rule reads it as fresh (recently updated, not live, not near
+  // kickoff), so the placeholder rule is the ONLY thing that can force a refresh.
+  const koGame = (overrides = {}) => new Game({
+    id: 1,
+    espnId: '900',
+    homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', isActive: true },
+    awayTeam: { id: 'tbd', name: 'Third Place Group B/E/F/I/J', abbreviation: '3RD', isActive: false },
+    gameDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    status: 'SCHEDULED',
+    homeScore: 0,
+    awayScore: 0,
+    league: 'world_cup',
+    stage: 'r32',
+    events: [],
+    lastUpdated: new Date(),
+    ...overrides,
+  });
+  const resolvedAway = { id: '4', name: 'Bosnia', abbreviation: 'BIH', isActive: true };
+
+  test('isPlaceholderTeam flags isActive:false, digit abbreviations, and qualification-path names', () => {
+    assert.strictEqual(GameService.isPlaceholderTeam({ abbreviation: 'USA', name: 'United States', isActive: true }), false);
+    assert.strictEqual(GameService.isPlaceholderTeam({ abbreviation: 'BIH', name: 'Bosnia', isActive: false }), true);
+    assert.strictEqual(GameService.isPlaceholderTeam({ abbreviation: '3RD', name: 'x', isActive: true }), true);
+    assert.strictEqual(GameService.isPlaceholderTeam({ abbreviation: 'XX', name: 'Group G Winner', isActive: true }), true);
+  });
+
+  test('hasUnresolvedKnockoutParticipants flags a placeholder knockout slate, never the group stage', () => {
+    assert.strictEqual(GameService.hasUnresolvedKnockoutParticipants([koGame()], 'r32'), true);
+    // The group stage always has two real teams, so it is never flagged.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutParticipants([koGame()], 'group'), false);
+    // A fully-resolved knockout slate is clean.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutParticipants([koGame({ awayTeam: resolvedAway })], 'r32'), false);
+  });
+
+  test('a placeholder knockout stage forces a refresh, throttled to once per window', () => {
+    const now = Date.now();
+    // No prior fetch → throttle elapsed → not fresh (refresh to resolve teams).
+    assert.strictEqual(GameService.isStageCacheFresh([koGame()], 'r32', now), false);
+    // Fetched 1 minute ago → within the 5-min throttle → stays cached.
+    GameService._lastStageFetchAt.set('r32', now - 60 * 1000);
+    assert.strictEqual(GameService.isStageCacheFresh([koGame()], 'r32', now), true);
+    // Fetched 6 minutes ago → throttle elapsed → refresh again.
+    GameService._lastStageFetchAt.set('r32', now - 6 * 60 * 1000);
+    assert.strictEqual(GameService.isStageCacheFresh([koGame()], 'r32', now), false);
+  });
+
+  test('a fully-resolved knockout stage is left cached by this rule', () => {
+    assert.strictEqual(GameService.isStageCacheFresh([koGame({ awayTeam: resolvedAway })], 'r32', Date.now()), true);
+  });
+
+  test('getWorldCupStage re-checks ESPN for a placeholder knockout slate and records the fetch', async () => {
+    mock.method(Game, 'findByLeagueStage', async () => [koGame()]);
+    mock.method(Game, 'findByESPNIds', async () => new Map());
+    const espn = mock.method(MockESPNService, 'fetchSoccerWeek', async () => []);
+
+    await GameService.getWorldCupStage('r32');
+
+    assert.strictEqual(espn.mock.callCount(), 1, 'placeholder knockout slate must re-check ESPN');
+    assert.ok(GameService._lastStageFetchAt.get('r32') != null, 'records the fetch so the next request is throttled');
+  });
+});
+
 describe('GameService.resolveWinnerTeamId (pure)', () => {
   test('knockout falls back to the higher regulation score when no winner flag is set', () => {
     const game = {

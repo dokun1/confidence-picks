@@ -247,6 +247,16 @@ static parseMatchEvents(competition, homeComp, awayComp) {
     // parse — even to an empty [] — reads as a change and gets persisted, which
     // is what backfills the events column for pre-existing rows.
     const eventCount = (g) => (Array.isArray(g.events) ? g.events.length : -1);
+    // Team-identity fingerprint over STABLE fields only: id, abbreviation, and the
+    // ESPN isActive flag. This is what lets a soccer knockout matchup refresh when
+    // its bracket slot resolves — ESPN swaps a placeholder ("Third Place Group
+    // B/E/F/I/J", abbr "3RD", isActive:false) for the real team ("Bosnia", "BIH",
+    // isActive:true) WITHOUT changing date/status/score, so none of the fields
+    // below would catch it. Deliberately excludes volatile fields (record, form,
+    // logo, odds) so NFL/group-stage rows — whose identity never changes — don't
+    // churn the cache on every refresh.
+    const teamIdentity = (t) =>
+      t ? `${t.id ?? ''}|${t.abbreviation ?? ''}|${t.isActive === false ? '0' : '1'}` : '';
     return (
       this.gameDate.getTime() !== otherGame.gameDate.getTime() ||
   this.status !== otherGame.status ||
@@ -255,6 +265,8 @@ static parseMatchEvents(competition, homeComp, awayComp) {
   this.period !== otherGame.period ||
   this.displayClock !== otherGame.displayClock ||
   this.statusDetail !== otherGame.statusDetail ||
+  teamIdentity(this.homeTeam) !== teamIdentity(otherGame.homeTeam) ||
+  teamIdentity(this.awayTeam) !== teamIdentity(otherGame.awayTeam) ||
   eventCount(this) !== eventCount(otherGame)
     );
   }

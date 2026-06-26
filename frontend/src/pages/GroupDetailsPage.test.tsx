@@ -488,6 +488,34 @@ describe('GroupDetailsPage', () => {
       expect(screen.queryByText(/available to make/i)).not.toBeInTheDocument();
     });
 
+    it('counts only knockout games in the banner for a knockout-only group', async () => {
+      // A knockout-only group can't pick group-stage games, so the leaderboard
+      // banner must exclude them too — matching the Picks tab. Without the fix the
+      // banner would count both games ("2 picks…"); with it, only the knockout one.
+      mockGetGroup.mockResolvedValue({ ...worldCupGroup, knockoutOnly: true });
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      const knockoutMatch: WorldCupMatch = {
+        id: 20,
+        stage: 'r32',
+        homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', logo: '' },
+        awayTeam: { id: '4', name: 'Bosnia', abbreviation: 'BIH', logo: '' },
+        homeScore: 0,
+        awayScore: 0,
+        status: 'SCHEDULED',
+        isKnockout: true,
+        gameDate: (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
+      };
+      // One pickable group-stage game (excluded) + one decided knockout game.
+      mockGetAllWorldCupStages.mockResolvedValue({ games: [wcMatch, knockoutMatch], count: 2, cached: false });
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      expect(await screen.findByText(/1 pick available to make/i)).toBeInTheDocument();
+      expect(screen.queryByText(/2 picks available to make/i)).not.toBeInTheDocument();
+    });
+
     it('banner CTA deeplinks to the Picks tab with the "Needs pick" chip pre-selected', async () => {
       mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
       mockGetAllWorldCupStages.mockResolvedValue(stagesResponse);

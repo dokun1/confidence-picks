@@ -216,6 +216,46 @@ exist.
   `knockoutOnly`. WC-pick-route tests stub `Group.findByIdentifier` to return
   `{ ..., knockoutOnly: true }` and add `stage` to the `FROM games` row mock.
 
+## Fixes: WC needs-pick banner + stale knockout matchups (2026-06)
+
+Two independent bugs surfaced by a knockout-only group; fixed together.
+
+**1. Banner/dot over-counts in a knockout-only group.** The leaderboard banner
+(`GroupDetailsPage`) and the groups-list dot (`GroupsPage`) both call
+`countNeedsPick(matches, picks, now)` ([wcNeedsPick.ts](frontend/src/lib/wcNeedsPick.ts)),
+which counted the *unfiltered* slate — so a knockout-only group counted the
+remaining pickable **group-stage** games it can't actually pick (banner said 13,
+Picks tab said 1). Both screens already share the same `needsPick`/`teamsDecided`
+predicate; the only divergence was the missing stage filter. Fix: `countNeedsPick`
+takes an optional `knockoutOnly` arg that drops `stage === 'group'` before counting;
+both call sites pass the group's flag (`group?.knockoutOnly` / `g.knockoutOnly`).
+Ongoing pools pass `false` → unchanged.
+
+**2. Resolved knockout matchups served stale (placeholders).** Two compounding
+backend causes, both pre-existing:
+- `Game.isDifferentFrom()` ([Game.js](backend/src/models/Game.js)) compared
+  date/status/score/period/clock/statusDetail/eventCount but **not team identity**,
+  so when ESPN swaps a bracket placeholder ("Third Place Group B/E/F/I/J", abbr
+  `3RD`, `isActive:false`) for the resolved team (Bosnia/`BIH`/`isActive:true`) with
+  no other field changing, the cache update gate never fired. Fix: also diff a
+  team-identity fingerprint over **stable** fields only — `id | abbreviation |
+  isActive` — for home and away. Volatile fields (record/form/logo/odds) are
+  deliberately excluded so NFL/group-stage rows never churn.
+- `GameService.isStageCacheFresh()` served future SCHEDULED games from the DB for up
+  to 24h without consulting ESPN, so even with the diff fix nothing re-fetched.
+  Fix: a **proactive, throttled** trigger — a knockout stage still holding
+  placeholder participants (`hasUnresolvedKnockoutParticipants` /
+  `isPlaceholderTeam`, mirroring the frontend `teamDecided` rule) re-checks ESPN at
+  most once per `PLACEHOLDER_REFRESH_THROTTLE_MS` (5 min), tracked per stage in the
+  in-process `_lastStageFetchAt` map (set in `getWorldCupStage` whenever ESPN is
+  fetched). `isStageCacheFresh` now takes `(cachedSet, stage, now)`; the old
+  2-arg/`stage=null` calls skip the placeholder branch (group stage never has
+  placeholders anyway). Bounds ESPN to traffic-independent ~1 call/stage/5min.
+
+Both fixes apply to ongoing AND knockout-only World Cup groups (the stale-matchup
+fix is at the cache layer, shared by all WC pools). `?refresh=true` / `?force=1` on
+the stage routes still force-bypass the cache.
+
 ## Commands
 
 ```bash

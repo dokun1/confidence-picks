@@ -194,7 +194,9 @@ export default function GroupDetailsPage() {
         if (cancelled) return;
         const matches: WorldCupMatch[] = Array.isArray(stagesResp?.games) ? stagesResp.games : [];
         writeCache(wcCacheKeys.stages, matches);
-        setNeedsPickCount(countNeedsPick(matches, picksResp?.picks, new Date()));
+        setNeedsPickCount(
+          countNeedsPick(matches, picksResp?.picks, new Date(), group?.knockoutOnly ?? false),
+        );
       } catch {
         /* non-fatal: leave the banner hidden */
       }
@@ -202,7 +204,7 @@ export default function GroupDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [identifier, group?.poolType, activeTab]);
+  }, [identifier, group?.poolType, group?.knockoutOnly, activeTab]);
 
   // No identifier in the query string: nothing to load, show the error UI early.
   if (!identifier) {
