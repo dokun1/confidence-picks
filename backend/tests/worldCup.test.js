@@ -111,7 +111,7 @@ describe('soccer game ingestion', () => {
       const stages = events.map(e => e.competitions[0].stage);
       const games = events.map((event, i) => Game.fromESPNData(event, { league: 'world_cup', stage: stages[i] }));
 
-      assert.strictEqual(games.length, 3, 'knockout slate should ingest 3 fixtures');
+      assert.strictEqual(games.length, 5, 'knockout slate should ingest 5 fixtures (3 final + 2 scheduled)');
       games.forEach((game, i) => {
         assert.strictEqual(game.league, 'world_cup');
         assert.strictEqual(game.stage, stages[i], 'stage should match the competition knockout code');
