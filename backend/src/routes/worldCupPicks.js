@@ -193,6 +193,11 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
     const { groupId } = req.params;
     const group = await ensureMembership(groupId, req.user.id);
 
+    // Self-heal the score-prediction columns on the READ path too: a fresh deploy
+    // serves reads before any pick write has run the write-path ensure, and this
+    // SELECT names the columns — without this it 500s in that window.
+    await UserPick.ensureScorePredictionColumns();
+
     const { rows } = await pool.query(
       `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score
        FROM user_picks up
@@ -307,6 +312,9 @@ router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (r
     if (!(await isGroupMember(group.id, targetUserId))) {
       return res.status(404).json({ error: 'User is not a member of this group' });
     }
+
+    // Self-heal the score-prediction columns on the read path (see /me above).
+    await UserPick.ensureScorePredictionColumns();
 
     const { rows } = await pool.query(
       `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score

@@ -2,6 +2,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { buildGroupLeaderboard, buildVersionString, getLeaderboardVersion, getGroupLeaderboardCached, leaderboardsMatch } from '../src/services/WorldCupLeaderboardService.js';
 import { SCORING_VERSION } from '../src/services/SoccerScoringService.js';
+import { UserPick } from '../src/models/UserPick.js';
+
+// buildGroupLeaderboard self-heals the score-prediction columns via UserPick (which
+// uses the model's real pool, not the fake passed in) before its SELECT. Replace it
+// with a counting no-op so these unit tests never touch a real DB; its real behavior
+// is covered in userpick-score-prediction.test.js.
+let ensureCalls = 0;
+UserPick.ensureScorePredictionColumns = async () => { ensureCalls += 1; };
 
 // Minimal fake pool: returns canned rows per call, in order.
 function fakePool(resultsInOrder) {
@@ -10,6 +18,12 @@ function fakePool(resultsInOrder) {
 }
 
 describe('buildGroupLeaderboard', () => {
+  test('self-heals the score-prediction columns before reading them', async () => {
+    ensureCalls = 0;
+    await buildGroupLeaderboard(fakePool([[], []]), { id: 1 }, []);
+    assert.equal(ensureCalls, 1, 'must run the read-path column self-heal before the picks SELECT');
+  });
+
   test('scores members against finalized games and ranks them', async () => {
     const group = { id: 7 };
     const games = [

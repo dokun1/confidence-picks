@@ -40,6 +40,10 @@ describe('World Cup picks router', () => {
   beforeEach(() => {
     mock.method(AuthService, 'verifyAccessToken', () => ({ userId: 1 }));
     mock.method(User, 'findById', async () => ({ id: 1, name: 'Tester', email: 't@x.io' }));
+    // The read paths self-heal the score-prediction columns; stub it to a no-op so
+    // these route tests don't issue the info_schema/ALTER queries against the mocked
+    // pool. Its real behavior is covered in userpick-score-prediction.test.js.
+    mock.method(UserPick, 'ensureScorePredictionColumns', async () => {});
   });
 
   afterEach(() => {
@@ -750,6 +754,21 @@ describe('World Cup picks router', () => {
       const group = data.picks.find((p) => p.gameId === 101);
       assert.strictEqual(group.predictedHomeScore, null);
       assert.strictEqual(group.predictedAwayScore, null);
+    });
+
+    test('self-heals the score-prediction columns before SELECTing them (deploy-ordering guard)', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const ensure = mock.method(UserPick, 'ensureScorePredictionColumns', async () => {});
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM user_picks/.test(sql)) return { rows: [] };
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/me`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.ok(ensure.mock.callCount() >= 1, 'GET /me must self-heal the score columns before reading them');
     });
   });
 

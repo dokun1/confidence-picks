@@ -107,13 +107,24 @@ async function addWorldCupColumns() {
     `);
     console.log('   ✅ games.winner_team_id ensured');
 
+    // 4d. user_picks.predicted_home_score / predicted_away_score — optional knockout
+    //     score predictions for the bonus. Nullable INTEGER; NFL, group-stage, and
+    //     no-prediction picks leave them NULL. Mirrors the write- and read-path
+    //     self-heal (UserPick.ensureScorePredictionColumns) so a deterministic
+    //     migration covers them too — the leaderboard + picks reads SELECT these,
+    //     so a deploy that serves a read before any pick write would 500 without them.
+    console.log('\n4d. Adding user_picks.predicted_home_score / predicted_away_score (integer nullable)...');
+    await pool.query(`ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_home_score INTEGER NULL`);
+    await pool.query(`ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_away_score INTEGER NULL`);
+    console.log('   ✅ user_picks.predicted_home_score / predicted_away_score ensured');
+
     // 5. Verify the columns landed with the expected shape.
     console.log('\n5. Verifying added columns...');
     const verify = await pool.query(`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE (table_name = 'games' AND column_name IN ('league', 'stage', 'winner_team_id'))
-         OR (table_name = 'user_picks' AND column_name = 'picked_result')
+         OR (table_name = 'user_picks' AND column_name IN ('picked_result', 'predicted_home_score', 'predicted_away_score'))
          OR (table_name = 'groups' AND column_name IN ('pool_type', 'knockout_only'))
       ORDER BY table_name, column_name
     `);
