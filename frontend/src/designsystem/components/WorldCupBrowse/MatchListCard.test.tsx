@@ -95,6 +95,22 @@ describe('MatchListCard', () => {
   });
 
   describe('score prediction (knockout matches)', () => {
+    it('score inputs default to empty and accept only positive integers (no steppers)', () => {
+      const onScoreChange = vi.fn();
+      render(<MatchListCard game={game({ isKnockout: true, stage: 'r16' })} now={NOW} onPick={noop} onScoreChange={onScoreChange} />);
+      const home = screen.getByRole('textbox', { name: 'Predicted score for Mexico' });
+      const away = screen.getByRole('textbox', { name: 'Predicted score for Canada' });
+      // Default is empty — no pre-filled 0 — and they're textboxes (no number steppers).
+      expect(home).toHaveValue('');
+      expect(away).toHaveValue('');
+      // Letters and decimal points are stripped; only the integer digits survive
+      // (round-tripping an emptied field back to null is covered in the tab tests).
+      fireEvent.change(home, { target: { value: 'a3.b' } });
+      expect(onScoreChange).toHaveBeenLastCalledWith(101, 'home', 3);
+      fireEvent.change(away, { target: { value: '0' } });
+      expect(onScoreChange).toHaveBeenLastCalledWith(101, 'away', 0);
+    });
+
     // A locked knockout match: kickoff in the past and status FINAL.
     function lockedKnockout(over: Partial<BrowseGame> = {}): BrowseGame {
       return game({

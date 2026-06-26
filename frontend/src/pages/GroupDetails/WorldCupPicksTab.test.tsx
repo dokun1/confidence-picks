@@ -487,10 +487,10 @@ describe('WorldCupPicksTab', () => {
       fireEvent.click(pickButton('Canada', 'CAN'));
 
       // Fill in score predictions for the knockout game.
-      const homeInput = await screen.findByRole('spinbutton', {
+      const homeInput = await screen.findByRole('textbox', {
         name: 'Predicted score for Canada',
       });
-      const awayInput = screen.getByRole('spinbutton', {
+      const awayInput = screen.getByRole('textbox', {
         name: 'Predicted score for Argentina',
       });
       fireEvent.change(homeInput, { target: { value: '2' } });
@@ -559,14 +559,14 @@ describe('WorldCupPicksTab', () => {
 
       // The score inputs show the hydrated values.
       await waitFor(() => {
-        const homeInput = screen.getByRole('spinbutton', {
+        const homeInput = screen.getByRole('textbox', {
           name: 'Predicted score for Canada',
         });
-        const awayInput = screen.getByRole('spinbutton', {
+        const awayInput = screen.getByRole('textbox', {
           name: 'Predicted score for Argentina',
         });
-        expect(homeInput).toHaveValue(3);
-        expect(awayInput).toHaveValue(0);
+        expect(homeInput).toHaveValue('3');
+        expect(awayInput).toHaveValue('0');
       });
     });
 
@@ -606,7 +606,7 @@ describe('WorldCupPicksTab', () => {
 
       // Pick the knockout game and fill in ONLY the home score.
       fireEvent.click(pickButton('Canada', 'CAN'));
-      const homeInput = await screen.findByRole('spinbutton', {
+      const homeInput = await screen.findByRole('textbox', {
         name: 'Predicted score for Canada',
       });
       fireEvent.change(homeInput, { target: { value: '2' } });
@@ -639,7 +639,7 @@ describe('WorldCupPicksTab', () => {
 
       // Pick the knockout game and fill in ONLY the away score.
       fireEvent.click(pickButton('Canada', 'CAN'));
-      const awayInput = await screen.findByRole('spinbutton', {
+      const awayInput = await screen.findByRole('textbox', {
         name: 'Predicted score for Argentina',
       });
       fireEvent.change(awayInput, { target: { value: '1' } });
@@ -670,15 +670,15 @@ describe('WorldCupPicksTab', () => {
 
       // Group-stage card (Mexico) must have no score inputs.
       expect(
-        within(cardFor('Mexico')).queryByRole('spinbutton', { name: /Predicted score/ }),
+        within(cardFor('Mexico')).queryByRole('textbox', { name: /Predicted score/ }),
       ).not.toBeInTheDocument();
 
       // Knockout card (Canada) must have score inputs.
       expect(
-        within(cardFor('Canada')).getByRole('spinbutton', { name: 'Predicted score for Canada' }),
+        within(cardFor('Canada')).getByRole('textbox', { name: 'Predicted score for Canada' }),
       ).toBeInTheDocument();
       expect(
-        within(cardFor('Canada')).getByRole('spinbutton', {
+        within(cardFor('Canada')).getByRole('textbox', {
           name: 'Predicted score for Argentina',
         }),
       ).toBeInTheDocument();
