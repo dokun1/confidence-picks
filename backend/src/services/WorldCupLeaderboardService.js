@@ -1,6 +1,7 @@
 import { buildLeaderboard, SCORING_VERSION } from './SoccerScoringService.js';
 import { GameService } from './GameService.js';
 import { readSnapshot as readSnap, writeSnapshot as writeSnap } from '../models/WorldCupLeaderboardSnapshot.js';
+import { UserPick } from '../models/UserPick.js';
 
 export function buildVersionString({ gameWatermark, memberCount, memberMaxId, picksWatermark, scoringVersion }) {
   return [gameWatermark ?? 'none', memberCount ?? 0, memberMaxId ?? 0, picksWatermark ?? 'none', scoringVersion ?? SCORING_VERSION].join('|');
@@ -62,6 +63,12 @@ export async function buildGroupLeaderboard(pool, group, games) {
       WHERE gm.group_id = $1`,
     [group.id]
   );
+
+  // Self-heal the score-prediction columns before SELECTing them: the leaderboard
+  // is a READ path that can run before any pick write on a fresh deploy (and the
+  // SCORING_VERSION bump forces a cache miss, so the first read recomputes here).
+  // Without this the SELECT 500s in that window. Latched after the first call.
+  await UserPick.ensureScorePredictionColumns();
 
   let pickRows = [];
   if (wcGameIds.length > 0) {
