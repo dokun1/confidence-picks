@@ -82,11 +82,13 @@ describe('EditGroupPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
     });
 
-    // The immutable identifier is the first arg; the payload carries only the
-    // mutable name/description (no identifier).
+    // The immutable identifier is the first arg; the payload carries the mutable
+    // name/description plus the member limit (defaulting to 50 here since the
+    // fixture group has no maxMembers), and never the identifier.
     expect(mockUpdateGroup).toHaveBeenCalledWith('test-group', {
       name: 'Renamed Group',
       description: 'Updated description',
+      maxMembers: 50,
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');

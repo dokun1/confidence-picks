@@ -60,6 +60,7 @@ export default function EditGroupPage() {
     await updateGroup(identifier, {
       name: values.name,
       description: values.description,
+      maxMembers: values.maxMembers,
     });
     navigate('/groups');
   }
@@ -93,6 +94,7 @@ export default function EditGroupPage() {
               name: group.name,
               identifier: group.identifier,
               description: group.description ?? '',
+              maxMembers: group.maxMembers,
             }}
             onSubmit={handleSubmit}
             onCancel={() => navigate(-1)}

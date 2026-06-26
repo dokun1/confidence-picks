@@ -51,6 +51,52 @@ describe('CreateGroupForm', () => {
     });
   });
 
+  describe('member limit', () => {
+    it('renders the Member limit field defaulting to 50', () => {
+      renderForm();
+      expect(screen.getByLabelText('Member limit')).toHaveValue(50);
+    });
+
+    it('prefills the Member limit from initialValues (edit mode)', () => {
+      renderForm({ initialValues: { maxMembers: 120 } });
+      expect(screen.getByLabelText('Member limit')).toHaveValue(120);
+    });
+
+    it('submits the chosen member limit', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      fireEvent.change(screen.getByLabelText('Member limit'), { target: { value: '250' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ maxMembers: 250 }));
+    });
+
+    it('blocks submission and shows an error when the limit exceeds 500', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      fireEvent.change(screen.getByLabelText('Member limit'), { target: { value: '600' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText(/between 2 and 500/)).toBeInTheDocument();
+    });
+
+    it('blocks submission when the limit is below 2', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      fireEvent.change(screen.getByLabelText('Member limit'), { target: { value: '1' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('auto-slug from name', () => {
     it('auto-fills Group ID from name', () => {
       renderForm();
@@ -224,6 +270,7 @@ describe('CreateGroupForm', () => {
         description: 'A cool group',
         poolType: 'nfl_weekly',
         knockoutOnly: false,
+        maxMembers: 50,
       });
     });
 
