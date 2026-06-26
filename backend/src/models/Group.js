@@ -434,7 +434,28 @@ export class Group {
     if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
       throw new Error('Only group admins can update group settings');
     }
-    
+
+    // Member-limit changes are bounded to [2, 500] and may not be lowered below the
+    // group's CURRENT member count — an admin must have members leave first. A group
+    // can be expanded freely up to the cap.
+    if (Object.prototype.hasOwnProperty.call(updates, 'maxMembers')) {
+      const newMax = updates.maxMembers;
+      if (!Number.isInteger(newMax) || newMax < 2 || newMax > 500) {
+        throw new Error('Member limit must be a whole number between 2 and 500');
+      }
+      const { rows } = await pool.query(
+        'SELECT COUNT(*)::int AS count FROM group_memberships WHERE group_id = $1',
+        [groupId]
+      );
+      const currentCount = rows[0].count;
+      if (newMax < currentCount) {
+        throw new Error(
+          `Member limit (${newMax}) is below the current member count (${currentCount}). ` +
+          `Members must leave the group before you can lower the limit this far.`
+        );
+      }
+    }
+
     const allowedFields = ['name', 'description', 'is_public', 'max_members', 'avatar_url'];
     const updateFields = [];
     const values = [];
