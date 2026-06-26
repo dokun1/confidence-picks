@@ -361,8 +361,11 @@ export default function WorldCupPicksTab({
   );
   const picks: MatchPick[] = useMemo(() => {
     // Find which visible matches are knockout so we can include score predictions.
+    // Derive from the stage, NOT m.isKnockout: the /stages route never emits that
+    // flag (it arrives undefined), so trusting it dropped every score prediction
+    // from the submit payload. Mirrors the worldCupBrowseAdapter derivation.
     const knockoutIds = new Set(
-      visibleMatches.filter((m) => m.isKnockout).map((m) => m.id),
+      visibleMatches.filter((m) => m.stage !== 'group').map((m) => m.id),
     );
     return Object.entries(draft)
       .filter(([gameId]) => visibleIds.has(Number(gameId)))
@@ -609,9 +612,11 @@ export default function WorldCupPicksTab({
             count as a draw score.
           </li>
         </ul>
-        {/* Score-bonus first-visit tooltip — only when knockout matches are in view. */}
+        {/* Score-bonus first-visit tooltip — only when knockout matches are in view.
+            Derive knockout from the stage (the /stages route never emits isKnockout)
+            so the tooltip actually renders. Mirrors the worldCupBrowseAdapter rule. */}
         <div className="mt-xs flex items-center gap-xs">
-          <ScoreBonusTooltip hasKnockoutMatches={visibleMatches.some((m) => m.isKnockout)} />
+          <ScoreBonusTooltip hasKnockoutMatches={visibleMatches.some((m) => m.stage !== 'group')} />
         </div>
       </div>
 

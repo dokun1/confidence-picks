@@ -63,7 +63,10 @@ function match(overrides: Partial<WorldCupMatch>): WorldCupMatch {
 }
 
 const groupMatch = match({ id: 10, stage: 'group', homeTeam: mex, awayTeam: usa });
-const r16Match = match({ id: 20, stage: 'r16', isKnockout: true, homeTeam: can, awayTeam: arg });
+// NB: no `isKnockout` flag — the real /stages route never emits it (it arrives
+// undefined), so the tab must derive "is knockout" from the stage. Setting it here
+// would mask bugs in that derivation (tooltip gate + score-prediction submit).
+const r16Match = match({ id: 20, stage: 'r16', homeTeam: can, awayTeam: arg });
 
 // The single /stages endpoint returns every match flattened in one payload, so
 // the tab renders a known two-match tournament (one group, one knockout).
@@ -172,6 +175,26 @@ describe('WorldCupPicksTab', () => {
       expect(
         screen.getByText(/Knockout score bonus \(optional\):.*exact score = \+2/),
       ).toBeInTheDocument();
+    });
+
+    it('shows the score-bonus info (ℹ️) tooltip trigger when a knockout match is in view', async () => {
+      // r16Match carries no isKnockout flag (like the real /stages payload); the
+      // tooltip must still render by deriving knockout from the stage.
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+      expect(await screen.findByRole('button', { name: 'Score bonus info' })).toBeInTheDocument();
+    });
+
+    it('hides the score-bonus tooltip when no knockout match is in view', async () => {
+      // Group-stage-only slate → no knockout → no tooltip trigger.
+      mockGetAllWorldCupStages.mockResolvedValue(stagesResponse([groupMatch]));
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+      expect(screen.queryByRole('button', { name: 'Score bonus info' })).not.toBeInTheDocument();
     });
   });
 
