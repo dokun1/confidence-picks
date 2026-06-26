@@ -3,6 +3,7 @@ import type { WorldCupMatch, WorldCupStage } from './types';
 import { teamGroup } from './wcGroups';
 
 type DraftMap = Record<number, MatchResult>;
+type ScoreDraftMap = Record<number, { home?: number | null; away?: number | null }>;
 
 const STAGE_LABEL: Record<WorldCupStage, string> = {
   group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16',
@@ -13,7 +14,7 @@ const NORMALIZED: Record<string, GameStatus> = {
   SCHEDULED: 'SCHEDULED', IN_PROGRESS: 'IN_PROGRESS', FINAL: 'FINAL',
 };
 
-export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): BrowseGame[] {
+export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDraft?: ScoreDraftMap): BrowseGame[] {
   return matches.map((m) => ({
     id: m.id,
     espnId: m.espnId ?? String(m.id),
@@ -64,5 +65,9 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap): Browse
     wcGroup: m.stage === 'group'
       ? (teamGroup(m.homeTeam.abbreviation) ?? teamGroup(m.awayTeam.abbreviation))
       : undefined,
+    // Score predictions — knockout matches only; sourced from the parallel
+    // scoreDraft in WorldCupPicksTab. Group-stage matches leave these absent.
+    predictedHomeScore: scoreDraft?.[m.id]?.home,
+    predictedAwayScore: scoreDraft?.[m.id]?.away,
   }));
 }

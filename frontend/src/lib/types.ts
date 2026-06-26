@@ -200,6 +200,10 @@ export interface WorldCupMatch {
 export interface MatchPick {
   gameId: number;
   pickedResult: MatchPickResult;
+  /** Optional score prediction for the home team. Knockout matches only. */
+  predictedHomeScore?: number | null;
+  /** Optional score prediction for the away team. Knockout matches only. */
+  predictedAwayScore?: number | null;
 }
 
 // One row of the tournament leaderboard. The shape mirrors the backend

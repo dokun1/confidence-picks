@@ -449,6 +449,126 @@ describe('WorldCupPicksTab', () => {
     ]);
   });
 
+  describe('score prediction inputs (knockout matches)', () => {
+    it('submitting a knockout pick with a score includes predictedHomeScore/predictedAwayScore in the payload', async () => {
+      mockSubmitPicks.mockResolvedValue({});
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+
+      // Pick the knockout game (Canada vs Argentina, id 20).
+      fireEvent.click(pickButton('Canada', 'CAN'));
+
+      // Fill in score predictions for the knockout game.
+      const homeInput = await screen.findByRole('spinbutton', {
+        name: 'Predicted score for Canada',
+      });
+      const awayInput = screen.getByRole('spinbutton', {
+        name: 'Predicted score for Argentina',
+      });
+      fireEvent.change(homeInput, { target: { value: '2' } });
+      fireEvent.change(awayInput, { target: { value: '1' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith(
+          'la-crew',
+          expect.arrayContaining([
+            expect.objectContaining({
+              gameId: 20,
+              pickedResult: 'home',
+              predictedHomeScore: 2,
+              predictedAwayScore: 1,
+            }),
+          ]),
+        ),
+      );
+    });
+
+    it('submitting without touching score inputs omits score fields from the payload', async () => {
+      mockSubmitPicks.mockResolvedValue({});
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+
+      // Pick only the group-stage game (no score inputs).
+      fireEvent.click(pickButton('Mexico', 'MEX'));
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith('la-crew', [
+          { gameId: 10, pickedResult: 'home' },
+        ]),
+      );
+      // No score fields on group-stage pick.
+      const [, calledPicks] = mockSubmitPicks.mock.calls[0];
+      expect(calledPicks[0]).not.toHaveProperty('predictedHomeScore');
+      expect(calledPicks[0]).not.toHaveProperty('predictedAwayScore');
+    });
+
+    it('hydrates score inputs from previously-saved picks', async () => {
+      mockGetMyWorldCupPicks.mockResolvedValue({
+        picks: [
+          {
+            gameId: 20,
+            pickedResult: 'home',
+            predictedHomeScore: 3,
+            predictedAwayScore: 0,
+          },
+        ],
+      });
+      mockSubmitPicks.mockResolvedValue({});
+
+      renderTab();
+      await screen.findByRole('button', { name: 'Submit Picks' });
+      showAllGames();
+
+      // Wait for hydration to complete — submit is enabled.
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Submit Picks' })).toBeEnabled(),
+      );
+
+      // The score inputs show the hydrated values.
+      await waitFor(() => {
+        const homeInput = screen.getByRole('spinbutton', {
+          name: 'Predicted score for Canada',
+        });
+        const awayInput = screen.getByRole('spinbutton', {
+          name: 'Predicted score for Argentina',
+        });
+        expect(homeInput).toHaveValue(3);
+        expect(awayInput).toHaveValue(0);
+      });
+    });
+
+    it('score inputs appear only on knockout cards, not on group-stage cards', async () => {
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+      showAllGames();
+
+      // Group-stage card (Mexico) must have no score inputs.
+      expect(
+        within(cardFor('Mexico')).queryByRole('spinbutton', { name: /Predicted score/ }),
+      ).not.toBeInTheDocument();
+
+      // Knockout card (Canada) must have score inputs.
+      expect(
+        within(cardFor('Canada')).getByRole('spinbutton', { name: 'Predicted score for Canada' }),
+      ).toBeInTheDocument();
+      expect(
+        within(cardFor('Canada')).getByRole('spinbutton', {
+          name: 'Predicted score for Argentina',
+        }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('toggles a pick off when the selected result is clicked again', async () => {
     renderTab();
     await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {

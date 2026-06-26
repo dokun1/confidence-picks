@@ -62,6 +62,10 @@ export interface BrowseGame {
   events?: MatchEvent[];
   /** FIFA group letter ('A'–'L'). Present only on group-stage games. */
   wcGroup?: string;
+  /** Optional score prediction for the home team. Knockout matches only. */
+  predictedHomeScore?: number | null;
+  /** Optional score prediction for the away team. Knockout matches only. */
+  predictedAwayScore?: number | null;
 }
 
 /** A game is locked once it has kicked off — by status OR by the clock passing kickoff. */

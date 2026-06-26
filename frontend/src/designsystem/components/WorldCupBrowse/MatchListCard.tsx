@@ -10,6 +10,8 @@ export interface MatchListCardProps {
   /** Opens the match detail panel for this game. Omit to hide the "More ›" button. */
   onOpenDetail?: (gameId: number) => void;
   disabled?: boolean;
+  /** Callback fired when the user changes a score prediction. Knockout matches only. */
+  onScoreChange?: (gameId: number, side: 'home' | 'away', value: number | null) => void;
 }
 
 function formatTime(iso: string): string {
@@ -69,7 +71,7 @@ function ResultStrip({ game }: { game: BrowseGame }) {
  * full team names; the card body is the three-way bet (pickable) or a result
  * strip (locked).
  */
-export default function MatchListCard({ game, now, onPick, onOpenDetail, disabled }: MatchListCardProps) {
+export default function MatchListCard({ game, now, onPick, onOpenDetail, disabled, onScoreChange }: MatchListCardProps) {
   const locked = isLocked(game, now);
   const lead =
     game.status === 'IN_PROGRESS' ? 'LIVE' : game.status === 'FINAL' ? 'FINAL' : formatTime(game.kickoff);
@@ -126,6 +128,46 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
             )}
             <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
           </div>
+
+          {/* Score prediction inputs — editable knockout matches only.
+              `step="any"` prevents native browser validation from blocking submit;
+              bounds ([0, 20]) are enforced server-side. Hidden for group-stage. */}
+          {game.isKnockout && onScoreChange && (
+            <div className="mt-sm flex items-center gap-sm border-t border-border pt-sm" aria-label="Predict the score">
+              <span className="text-xs text-content-muted">Predicted score:</span>
+              <div className="flex items-center gap-xs">
+                <label className="flex items-center gap-xxs text-xs">
+                  <span className="font-medium">{game.home.abbr}</span>
+                  <input
+                    type="number"
+                    step="any"
+                    aria-label={`Predicted score for ${game.home.name}`}
+                    value={game.predictedHomeScore ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      onScoreChange(game.id, 'home', raw === '' ? null : Number(raw));
+                    }}
+                    className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </label>
+                <span className="text-xs text-content-muted">–</span>
+                <label className="flex items-center gap-xxs text-xs">
+                  <span className="font-medium">{game.away.abbr}</span>
+                  <input
+                    type="number"
+                    step="any"
+                    aria-label={`Predicted score for ${game.away.name}`}
+                    value={game.predictedAwayScore ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      onScoreChange(game.id, 'away', raw === '' ? null : Number(raw));
+                    }}
+                    className="w-12 rounded border border-border bg-surface px-xs py-xxxs text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

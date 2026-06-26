@@ -36,6 +36,7 @@ import { toBrowseGames } from '../../lib/worldCupBrowseAdapter';
 // via the `toBrowseGames` adapter; the list owns all view/filter/sort/search state.
 
 type DraftMap = Record<number, MatchPickResult>;
+type ScoreDraft = Record<number, { home?: number | null; away?: number | null }>;
 
 interface FetchState {
   loading: boolean;
@@ -139,6 +140,7 @@ export default function WorldCupPicksTab({
     matches: cachedStages ?? [],
   });
   const [draft, setDraft] = useState<DraftMap>({});
+  const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', variant: 'info' });
 
@@ -233,6 +235,7 @@ export default function WorldCupPicksTab({
     // state when a prop/derived value changes; it bails out the in-progress
     // render and re-runs before paint, so no stale draft is ever shown.
     setDraft({});
+    setScoreDraft({});
   }
 
   // Hydrate the draft from the SELECTED person's already-saved picks so a
@@ -254,10 +257,21 @@ export default function WorldCupPicksTab({
       .then((resp) => {
         if (cancelled) return;
         const next: DraftMap = {};
+        const nextScores: ScoreDraft = {};
         for (const p of resp.picks ?? []) {
-          if (p && p.gameId != null && p.pickedResult) next[p.gameId] = p.pickedResult;
+          if (p && p.gameId != null && p.pickedResult) {
+            next[p.gameId] = p.pickedResult;
+            // Hydrate score predictions for knockout picks if the API returned them.
+            if (p.predictedHomeScore != null || p.predictedAwayScore != null) {
+              nextScores[p.gameId] = {
+                home: p.predictedHomeScore ?? null,
+                away: p.predictedAwayScore ?? null,
+              };
+            }
+          }
         }
         setDraft(next);
+        setScoreDraft(nextScores);
       })
       .catch(() => {
         // Best-effort — don't surface a toast for the silent hydrate; the user
@@ -281,6 +295,14 @@ export default function WorldCupPicksTab({
     });
   }
 
+  function scoreChange(matchId: number, side: 'home' | 'away', value: number | null) {
+    if (readOnly) return;
+    setScoreDraft((prev) => ({
+      ...prev,
+      [matchId]: { ...prev[matchId], [side]: value },
+    }));
+  }
+
   // Derive the flat browse-list games from the fetched matches + the current
   // draft. The list itself owns view/filter/sort state; we just feed it data and
   // route picks back through pickResult.
@@ -302,8 +324,8 @@ export default function WorldCupPicksTab({
     [fetchState.matches, effectiveKnockoutOnly],
   );
   const browseGames = useMemo(
-    () => toBrowseGames(visibleMatches, draft),
-    [visibleMatches, draft],
+    () => toBrowseGames(visibleMatches, draft, scoreDraft),
+    [visibleMatches, draft, scoreDraft],
   );
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
   // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
@@ -317,16 +339,28 @@ export default function WorldCupPicksTab({
     () => new Set(visibleMatches.map((m) => m.id)),
     [visibleMatches],
   );
-  const picks: MatchPick[] = useMemo(
-    () =>
-      Object.entries(draft)
-        .filter(([gameId]) => visibleIds.has(Number(gameId)))
-        .map(([gameId, pickedResult]) => ({
-          gameId: Number(gameId),
-          pickedResult,
-        })),
-    [draft, visibleIds],
-  );
+  const picks: MatchPick[] = useMemo(() => {
+    // Find which visible matches are knockout so we can include score predictions.
+    const knockoutIds = new Set(
+      visibleMatches.filter((m) => m.isKnockout).map((m) => m.id),
+    );
+    return Object.entries(draft)
+      .filter(([gameId]) => visibleIds.has(Number(gameId)))
+      .map(([gameId, pickedResult]) => {
+        const id = Number(gameId);
+        const pick: MatchPick = { gameId: id, pickedResult };
+        // Only include score predictions for knockout matches; group-stage picks
+        // send no score fields.
+        if (knockoutIds.has(id)) {
+          const s = scoreDraft[id];
+          if (s) {
+            if (s.home != null) pick.predictedHomeScore = s.home;
+            if (s.away != null) pick.predictedAwayScore = s.away;
+          }
+        }
+        return pick;
+      });
+  }, [draft, visibleIds, visibleMatches, scoreDraft]);
 
   // Read-only viewers can never submit; everyone else needs a group + ≥1 pick.
   const canSubmit = !!groupId && picks.length > 0 && !submitting && !readOnly;
@@ -560,6 +594,7 @@ export default function WorldCupPicksTab({
             games={browseGames}
             now={now}
             onPick={pickResult}
+            onScoreChange={readOnly ? undefined : scoreChange}
             disabled={submitting || readOnly}
             initialView={initialView}
           />

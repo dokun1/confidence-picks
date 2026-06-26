@@ -21,6 +21,8 @@ export interface WorldCupGamesListProps {
   /** Which saved view the list opens on. Defaults to 'today'; a deeplink can
    *  open straight on 'needs-pick' so the "what do I still owe?" chip is preselected. */
   initialView?: SavedView;
+  /** Callback fired when the user changes a score prediction. Knockout matches only. */
+  onScoreChange?: (gameId: number, side: 'home' | 'away', value: number | null) => void;
 }
 
 const VIEWS: { key: SavedView; label: string }[] = [
@@ -65,7 +67,7 @@ function Chip({ label, count, active, onClick }: { label: string; count?: number
 const selectCls =
   'rounded-md border border-border bg-neutral-0 px-xs py-xxs text-sm text-content dark:bg-secondary-900';
 
-export default function WorldCupGamesList({ games, now, onPick, disabled, initialView = 'today' }: WorldCupGamesListProps) {
+export default function WorldCupGamesList({ games, now, onPick, disabled, initialView = 'today', onScoreChange }: WorldCupGamesListProps) {
   const [view, setView] = useState<SavedView>(initialView);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -293,7 +295,7 @@ export default function WorldCupGamesList({ games, now, onPick, disabled, initia
               </div>
               <div className="space-y-xs">
                 {sec.games.map((g) => (
-                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} onOpenDetail={openDetail} disabled={disabled} />
+                  <MatchListCard key={g.id} game={g} now={now} onPick={onPick} onOpenDetail={openDetail} disabled={disabled} onScoreChange={onScoreChange} />
                 ))}
               </div>
             </section>
