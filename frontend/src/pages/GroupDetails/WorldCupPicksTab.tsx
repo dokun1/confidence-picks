@@ -308,13 +308,24 @@ export default function WorldCupPicksTab({
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
   // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
 
+  // Submittable picks come from the VISIBLE matches only. In a knockout-only group
+  // this excludes any group-stage draft entry — guarding the window on the
+  // standalone page where `derivedKnockoutOnly` resolves a tick after mount and a
+  // group-stage game could be briefly pickable. Hidden games can't be submitted or
+  // counted, so the server's group-stage rejection is never even reached.
+  const visibleIds = useMemo(
+    () => new Set(visibleMatches.map((m) => m.id)),
+    [visibleMatches],
+  );
   const picks: MatchPick[] = useMemo(
     () =>
-      Object.entries(draft).map(([gameId, pickedResult]) => ({
-        gameId: Number(gameId),
-        pickedResult,
-      })),
-    [draft],
+      Object.entries(draft)
+        .filter(([gameId]) => visibleIds.has(Number(gameId)))
+        .map(([gameId, pickedResult]) => ({
+          gameId: Number(gameId),
+          pickedResult,
+        })),
+    [draft, visibleIds],
   );
 
   // Read-only viewers can never submit; everyone else needs a group + ≥1 pick.

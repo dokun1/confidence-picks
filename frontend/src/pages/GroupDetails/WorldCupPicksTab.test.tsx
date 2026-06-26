@@ -186,6 +186,30 @@ describe('WorldCupPicksTab', () => {
       expect(cardFor('Canada')).toBeInTheDocument();
     });
 
+    it('never counts or submits a hydrated group-stage pick in a knockout-only group', async () => {
+      // Saved picks include a stale group-stage selection (id 10) alongside a
+      // knockout one (id 20). The group-stage pick is invisible here, so it must
+      // not be counted in the submit bar nor sent to the server.
+      mockGetMyWorldCupPicks.mockResolvedValue({
+        picks: [
+          { gameId: 10, pickedResult: 'home' }, // group stage — must be ignored
+          { gameId: 20, pickedResult: 'home' }, // knockout — counts
+        ],
+      });
+      mockSubmitPicks.mockResolvedValue({});
+      render(<WorldCupPicksTab identifier="la-crew" knockoutOnly />);
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      // Only the knockout pick is counted — not the hidden group-stage one.
+      expect(await screen.findByText('1 pick selected')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+      await waitFor(() =>
+        expect(mockSubmitPicks).toHaveBeenCalledWith('la-crew', [{ gameId: 20, pickedResult: 'home' }]),
+      );
+    });
+
     it('keeps group-stage games visible when knockoutOnly is false', async () => {
       render(<WorldCupPicksTab identifier="la-crew" knockoutOnly={false} />);
       await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {

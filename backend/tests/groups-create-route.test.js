@@ -97,4 +97,20 @@ describe('Groups create route — knockoutOnly', () => {
     assert.strictEqual(res.status, 400);
     assert.strictEqual(create.mock.callCount(), 0);
   });
+
+  test('rejects a non-boolean knockoutOnly without coercing a truthy string', async () => {
+    // A stray string like "false" must not read as truthy and silently enable the
+    // setting — the route rejects any non-boolean outright.
+    const create = mock.method(Group, 'create', async (data) => ({ id: 9, ...data }));
+    const res = await post({
+      name: 'Stringy',
+      identifier: 'stringy',
+      poolType: 'world_cup_2026',
+      knockoutOnly: 'false',
+    });
+    assert.strictEqual(res.status, 400);
+    const data = await res.json();
+    assert.match(data.error, /knockoutOnly must be a boolean/);
+    assert.strictEqual(create.mock.callCount(), 0);
+  });
 });
