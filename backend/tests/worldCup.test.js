@@ -290,7 +290,7 @@ describe('tiebreaker comparator', () => {
     test('building blocks aggregate to the expected bucket counts', () => {
       assert.deepStrictEqual(
         aggregateUserScore([win('x'), drawRight('x'), drawWrong('x'), loss('x')]),
-        { points: 6, wins_correct: 1, losses: 1, draws_correct: 1, draws_incorrect: 1 }
+        { points: 6, wins_correct: 1, losses: 1, draws_correct: 1, draws_incorrect: 1, bonus_points: 0 }
       );
     });
 
