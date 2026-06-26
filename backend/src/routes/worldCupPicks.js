@@ -3,6 +3,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { Group } from '../models/Group.js';
 import { UserPick, WORLD_CUP_RESULTS } from '../models/UserPick.js';
 import { computeLive, getGroupLeaderboardCached, leaderboardsMatch } from '../services/WorldCupLeaderboardService.js';
+import { isKnockoutStage } from '../services/SoccerScoringService.js';
 import pool from '../config/database.js';
 
 const router = express.Router();
@@ -58,6 +59,24 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       }
       if (!WORLD_CUP_RESULTS.includes(p.pickedResult)) {
         return res.status(400).json({ error: 'Invalid pickedResult', gameId: p.gameId, pickedResult: p.pickedResult });
+      }
+    }
+
+    // Validate optional predicted scores. Both must be present together, and each
+    // must be a whole number in [0, 20]. Partial submission is an error.
+    for (const p of picks) {
+      const hasHome = p.predictedHomeScore != null;
+      const hasAway = p.predictedAwayScore != null;
+      if (hasHome !== hasAway) {
+        return res.status(400).json({ error: 'Both predicted scores required together', gameId: p.gameId });
+      }
+      if (hasHome) {
+        const home = p.predictedHomeScore;
+        const away = p.predictedAwayScore;
+        if (!Number.isInteger(home) || home < 0 || home > 20 ||
+            !Number.isInteger(away) || away < 0 || away > 20) {
+          return res.status(400).json({ error: 'Predicted score must be a whole number between 0 and 20', gameId: p.gameId });
+        }
       }
     }
 
@@ -120,7 +139,17 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       if (!bySlot.has(key)) {
         bySlot.set(key, { season: g.season, seasonType: g.season_type, week: g.week, picks: [] });
       }
-      bySlot.get(key).picks.push({ gameId: p.gameId, pickedResult: p.pickedResult });
+      // Only forward predicted scores for knockout-stage games; group-stage rows
+      // must never carry a score prediction.
+      const pickEntry = { gameId: p.gameId, pickedResult: p.pickedResult };
+      if (isKnockoutStage(g.stage)) {
+        pickEntry.predictedHomeScore = p.predictedHomeScore != null ? p.predictedHomeScore : null;
+        pickEntry.predictedAwayScore = p.predictedAwayScore != null ? p.predictedAwayScore : null;
+      } else {
+        pickEntry.predictedHomeScore = null;
+        pickEntry.predictedAwayScore = null;
+      }
+      bySlot.get(key).picks.push(pickEntry);
     }
 
     const saved = [];
@@ -165,7 +194,7 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
     const group = await ensureMembership(groupId, req.user.id);
 
     const { rows } = await pool.query(
-      `SELECT up.game_id, up.picked_result
+      `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score
        FROM user_picks up
        JOIN games g ON g.id = up.game_id
        WHERE up.user_id = $1
@@ -176,7 +205,12 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
     );
 
     res.json({
-      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+      picks: rows.map((r) => ({
+        gameId: r.game_id,
+        pickedResult: r.picked_result,
+        predictedHomeScore: r.predicted_home_score,
+        predictedAwayScore: r.predicted_away_score,
+      })),
     });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
@@ -275,7 +309,7 @@ router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (r
     }
 
     const { rows } = await pool.query(
-      `SELECT up.game_id, up.picked_result
+      `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score
        FROM user_picks up
        JOIN games g ON g.id = up.game_id
        WHERE up.user_id = $1
@@ -286,7 +320,12 @@ router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (r
     );
 
     res.json({
-      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+      picks: rows.map((r) => ({
+        gameId: r.game_id,
+        pickedResult: r.picked_result,
+        predictedHomeScore: r.predicted_home_score,
+        predictedAwayScore: r.predicted_away_score,
+      })),
       canEdit,
     });
   } catch (e) {
@@ -330,6 +369,24 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       }
       if (!WORLD_CUP_RESULTS.includes(p.pickedResult)) {
         return res.status(400).json({ error: 'Invalid pickedResult', gameId: p.gameId, pickedResult: p.pickedResult });
+      }
+    }
+
+    // Validate optional predicted scores. Both must be present together, and each
+    // must be a whole number in [0, 20]. Partial submission is an error.
+    for (const p of picks) {
+      const hasHome = p.predictedHomeScore != null;
+      const hasAway = p.predictedAwayScore != null;
+      if (hasHome !== hasAway) {
+        return res.status(400).json({ error: 'Both predicted scores required together', gameId: p.gameId });
+      }
+      if (hasHome) {
+        const home = p.predictedHomeScore;
+        const away = p.predictedAwayScore;
+        if (!Number.isInteger(home) || home < 0 || home > 20 ||
+            !Number.isInteger(away) || away < 0 || away > 20) {
+          return res.status(400).json({ error: 'Predicted score must be a whole number between 0 and 20', gameId: p.gameId });
+        }
       }
     }
 
@@ -395,7 +452,17 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       if (!bySlot.has(key)) {
         bySlot.set(key, { season: g.season, seasonType: g.season_type, week: g.week, picks: [] });
       }
-      bySlot.get(key).picks.push({ gameId: p.gameId, pickedResult: p.pickedResult });
+      // Only forward predicted scores for knockout-stage games; group-stage rows
+      // must never carry a score prediction.
+      const pickEntry = { gameId: p.gameId, pickedResult: p.pickedResult };
+      if (isKnockoutStage(g.stage)) {
+        pickEntry.predictedHomeScore = p.predictedHomeScore != null ? p.predictedHomeScore : null;
+        pickEntry.predictedAwayScore = p.predictedAwayScore != null ? p.predictedAwayScore : null;
+      } else {
+        pickEntry.predictedHomeScore = null;
+        pickEntry.predictedAwayScore = null;
+      }
+      bySlot.get(key).picks.push(pickEntry);
     }
 
     const saved = [];

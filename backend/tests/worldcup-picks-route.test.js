@@ -234,6 +234,129 @@ describe('World Cup picks router', () => {
       assert.strictEqual(res.status, 200);
       assert.strictEqual(upsert.mock.callCount(), 1, 'group-stage picks save normally when not knockout-only');
     });
+
+    // ── Predicted-score validation ──────────────────────────────────────────
+
+    test('rejects a one-sided predicted score (home only) with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 2 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Both predicted scores required together/);
+      assert.strictEqual(data.gameId, 201);
+      assert.strictEqual(upsert.mock.callCount(), 0, 'must not persist when score is one-sided');
+    });
+
+    test('rejects a one-sided predicted score (away only) with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedAwayScore: 1 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Both predicted scores required together/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('rejects an out-of-range predicted score (21) with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 21, predictedAwayScore: 0 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Predicted score must be a whole number between 0 and 20/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('rejects a negative predicted score (-1) with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: -1, predictedAwayScore: 0 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Predicted score must be a whole number between 0 and 20/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('rejects a non-integer predicted score (1.5) with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 1.5, predictedAwayScore: 0 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Predicted score must be a whole number between 0 and 20/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('forwards predicted scores to upsert for knockout-stage games', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 201, season: 2026, season_type: 3, week: 5, stage: 'r16', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 2, predictedAwayScore: 1 }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1);
+      const sentPick = upsert.mock.calls[0].arguments[0].picks[0];
+      assert.strictEqual(sentPick.predictedHomeScore, 2, 'home score forwarded to upsert');
+      assert.strictEqual(sentPick.predictedAwayScore, 1, 'away score forwarded to upsert');
+    });
+
+    test('nulls out predicted scores for group-stage games even if provided', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 101, season: 2026, season_type: 1, week: 1, stage: 'group', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'home', predictedHomeScore: 2, predictedAwayScore: 1 }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1);
+      const sentPick = upsert.mock.calls[0].arguments[0].picks[0];
+      assert.strictEqual(sentPick.predictedHomeScore, null, 'group-stage score is nulled');
+      assert.strictEqual(sentPick.predictedAwayScore, null, 'group-stage score is nulled');
+    });
   });
 
   describe('GET /group/:groupId/world-cup/leaderboard', () => {
@@ -522,6 +645,140 @@ describe('World Cup picks router', () => {
       assert.match(data.error, /Group-stage picks are not allowed/);
       assert.deepStrictEqual(data.gameIds, [101]);
       assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+  });
+
+  describe('GET /group/:groupId/world-cup/me — predicted scores', () => {
+    test('returns predictedHomeScore and predictedAwayScore for each pick', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM user_picks/.test(sql)) {
+          return { rows: [
+            { game_id: 201, picked_result: 'home', predicted_home_score: 2, predicted_away_score: 1 },
+            { game_id: 101, picked_result: 'draw', predicted_home_score: null, predicted_away_score: null },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/me`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.picks.length, 2);
+      const knockout = data.picks.find((p) => p.gameId === 201);
+      assert.strictEqual(knockout.predictedHomeScore, 2);
+      assert.strictEqual(knockout.predictedAwayScore, 1);
+      const group = data.picks.find((p) => p.gameId === 101);
+      assert.strictEqual(group.predictedHomeScore, null);
+      assert.strictEqual(group.predictedAwayScore, null);
+    });
+  });
+
+  describe('GET /group/:groupId/world-cup/user/:userId — predicted scores', () => {
+    test('includes predictedHomeScore and predictedAwayScore in member picks', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM user_picks/.test(sql)) {
+          return { rows: [
+            { game_id: 201, picked_result: 'away', predicted_home_score: 0, predicted_away_score: 3 },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        headers: { ...AUTH_HEADER },
+      });
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.picks.length, 1);
+      assert.strictEqual(data.picks[0].predictedHomeScore, 0);
+      assert.strictEqual(data.picks[0].predictedAwayScore, 3);
+    });
+  });
+
+  describe('POST /group/:groupId/world-cup/user/:userId — predicted score validation', () => {
+    test('rejects one-sided predicted score (home only) from admin with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 1 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Both predicted scores required together/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('rejects out-of-range predicted score from admin with 400', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async () => []);
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'home', predictedHomeScore: 25, predictedAwayScore: 0 }] }),
+      });
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /Predicted score must be a whole number between 0 and 20/);
+      assert.strictEqual(upsert.mock.callCount(), 0);
+    });
+
+    test('admin: forwards predicted scores to upsert for knockout games', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 201, season: 2026, season_type: 3, week: 6, stage: 'qf', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 201, pickedResult: 'away', predictedHomeScore: 0, predictedAwayScore: 2 }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1);
+      const sentPick = upsert.mock.calls[0].arguments[0].picks[0];
+      assert.strictEqual(sentPick.predictedHomeScore, 0);
+      assert.strictEqual(sentPick.predictedAwayScore, 2);
+    });
+
+    test('admin: nulls scores for group-stage games', async () => {
+      mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'admin' }));
+      mock.method(pool, 'query', async (sql) => {
+        if (/FROM group_memberships/.test(sql)) return { rows: [{ '?column?': 1 }] };
+        if (/FROM games/.test(sql)) {
+          return { rows: [
+            { id: 101, season: 2026, season_type: 1, week: 2, stage: 'group', game_date: new Date(Date.now() + 86400000).toISOString() },
+          ] };
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      });
+      const upsert = mock.method(UserPick, 'bulkUpsertWorldCupPicks', async ({ picks }) =>
+        picks.map((p) => ({ gameId: p.gameId, pickedResult: p.pickedResult }))
+      );
+      const res = await fetch(`${baseURL}/api/picks/group/wc-pool/world-cup/user/2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        body: JSON.stringify({ picks: [{ gameId: 101, pickedResult: 'draw', predictedHomeScore: 1, predictedAwayScore: 1 }] }),
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(upsert.mock.callCount(), 1);
+      const sentPick = upsert.mock.calls[0].arguments[0].picks[0];
+      assert.strictEqual(sentPick.predictedHomeScore, null, 'group-stage score must be nulled in admin path');
+      assert.strictEqual(sentPick.predictedAwayScore, null, 'group-stage score must be nulled in admin path');
     });
   });
 
