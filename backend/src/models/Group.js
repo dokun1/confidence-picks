@@ -98,6 +98,9 @@ export class Group {
         }
         console.log('[groups] max_members constraint now allows up to 500');
       }
+      // Align the column default with the app default (50). Idempotent metadata-only
+      // change; only matters for inserts that omit max_members (the API always sends it).
+      await pool.query(`ALTER TABLE groups ALTER COLUMN max_members SET DEFAULT 50`);
       this._maxMembersConstraintEnsured = true;
     } catch (e) {
       // Do NOT latch on failure — let the next create/update retry.

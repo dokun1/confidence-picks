@@ -48,7 +48,7 @@ describe('Group.ensureMaxMembersConstraint (self-heal)', () => {
     assert.strictEqual(Group._maxMembersConstraintEnsured, true);
   });
 
-  test('does NOT alter when the <=500 range constraint already exists', async () => {
+  test('does NOT change the constraint when the range already exists, but aligns the default', async () => {
     const sqls = [];
     mock.method(pool, 'query', async (sql) => {
       sqls.push(sql);
@@ -58,7 +58,11 @@ describe('Group.ensureMaxMembersConstraint (self-heal)', () => {
 
     await Group.ensureMaxMembersConstraint();
 
-    assert.ok(!sqls.some((s) => /ALTER TABLE/.test(s)), 'no ALTER issued when already migrated');
+    assert.ok(!sqls.some((s) => /(DROP|ADD) CONSTRAINT/.test(s)), 'no constraint change when already migrated');
+    assert.ok(
+      sqls.some((s) => /ALTER COLUMN max_members SET DEFAULT 50/.test(s)),
+      'still aligns the column default to 50',
+    );
     assert.strictEqual(Group._maxMembersConstraintEnsured, true);
   });
 
@@ -71,10 +75,11 @@ describe('Group.ensureMaxMembersConstraint (self-heal)', () => {
     });
 
     await Group.ensureMaxMembersConstraint();
+    const afterFirst = queryCount;
     await Group.ensureMaxMembersConstraint();
     await Group.ensureMaxMembersConstraint();
 
-    assert.strictEqual(queryCount, 1, 'only the first call hits the DB');
+    assert.strictEqual(queryCount, afterFirst, 'later calls add no queries (latched)');
   });
 
   test('does NOT latch on failure, so the next call retries', async () => {

@@ -85,6 +85,20 @@ describe('CreateGroupForm', () => {
       expect(screen.getByText(/between 2 and 500/)).toBeInTheDocument();
     });
 
+    it('blocks submission and shows an error for a non-integer limit', async () => {
+      // step="any" lets a value like 12.5 through native validation so the form's
+      // own integer check runs and surfaces the inline error.
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm({ onSubmit });
+      fireEvent.change(screen.getByLabelText(/Group Name/), { target: { value: 'My Group' } });
+      fireEvent.change(screen.getByLabelText('Member limit'), { target: { value: '12.5' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
+      });
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText(/between 2 and 500/)).toBeInTheDocument();
+    });
+
     it('blocks submission when the limit is below 2', async () => {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
       renderForm({ onSubmit });

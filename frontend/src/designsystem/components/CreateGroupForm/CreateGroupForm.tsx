@@ -236,6 +236,10 @@ export default function CreateGroupForm({
             id="max-members"
             type="number"
             inputMode="numeric"
+            // step="any" disables native stepMismatch validation (default step=1
+            // would block submit on a non-integer like 12.5 before validateForm's
+            // integer check could surface the inline message).
+            step="any"
             value={maxMembers}
             onChange={(e) => setMaxMembers(e.target.value)}
             disabled={loading}

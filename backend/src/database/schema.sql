@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS groups (
   identifier VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly unique identifier
   description TEXT,
   is_public BOOLEAN DEFAULT true,
-  max_members INTEGER DEFAULT 20 CONSTRAINT groups_max_members_range CHECK (max_members <= 500 AND max_members >= 2),
+  max_members INTEGER DEFAULT 50 CONSTRAINT groups_max_members_range CHECK (max_members <= 500 AND max_members >= 2),
   pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly' CHECK (pool_type IN ('nfl_weekly','world_cup_2026')), -- pick-pool variant
   knockout_only BOOLEAN NOT NULL DEFAULT false, -- world_cup_2026 sub-setting: members may only pick knockout-stage games (no group stage)
   avatar_url VARCHAR(500),
@@ -428,4 +428,8 @@ BEGIN
       CHECK (max_members <= 500 AND max_members >= 2);
     RAISE NOTICE 'Added groups_max_members_range (<=500) constraint';
   END IF;
+  -- Align the column default with the app default (50) on existing DBs. The inline
+  -- DEFAULT above only applies to fresh CREATE TABLE; this catches legacy rows'
+  -- table default. Idempotent.
+  ALTER TABLE groups ALTER COLUMN max_members SET DEFAULT 50;
 END $$;
