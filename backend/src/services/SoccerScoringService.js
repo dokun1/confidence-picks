@@ -35,6 +35,10 @@ export const KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'fina
 // the `bucket` field on a scored result and as the per-user count keys.
 export const BUCKETS = ['wins_correct', 'losses', 'draws_correct', 'draws_incorrect'];
 
+// Bump whenever scoring logic changes so the leaderboard cache invalidates once
+// (see WorldCupLeaderboardService.buildVersionString). '1' = pre-bonus; '2' = score bonus.
+export const SCORING_VERSION = '2';
+
 export function isKnockoutStage(stage) {
   return KNOCKOUT_STAGES.has(stage);
 }
@@ -143,6 +147,27 @@ export function scoreSoccerPick(pick, game) {
 }
 
 /**
+ * Optional knockout score-prediction bonus, independent of the advance pick and
+ * the actual winner. Compares the predicted scoreline to the on-field score
+ * (homeScore/awayScore — excludes PK kicks). +2 exact; +1 if off by one goal
+ * (L1 distance 1) OR the exact mirror (right scoreline, teams flipped); else 0.
+ * Returns 0 for non-knockout, non-final, or missing-prediction inputs.
+ */
+export function scoreKnockoutScoreBonus(pick, game) {
+  if (!isKnockoutStage(game?.stage)) return 0;
+  if (!isFinal(game)) return 0;
+  const ph = pick?.predicted_home_score;
+  const pa = pick?.predicted_away_score;
+  if (ph == null || pa == null) return 0;
+  const ah = Number(game.homeScore ?? 0);
+  const aa = Number(game.awayScore ?? 0);
+  if (ph === ah && pa === aa) return 2;                 // exact
+  if (Math.abs(ph - ah) + Math.abs(pa - aa) === 1) return 1; // off by one goal
+  if (ph === aa && pa === ah) return 1;                 // mirror (teams flipped)
+  return 0;
+}
+
+/**
  * Aggregate one user's scored picks into a leaderboard row.
  *
  * @param {Array<{ pick: object, game: object }>} entries - this user's picks
@@ -153,13 +178,15 @@ export function scoreSoccerPick(pick, game) {
  *   number of decided matches the user picked.
  */
 export function aggregateUserScore(entries = []) {
-  const row = { points: 0, wins_correct: 0, losses: 0, draws_correct: 0, draws_incorrect: 0 };
+  const row = { points: 0, wins_correct: 0, losses: 0, draws_correct: 0, draws_incorrect: 0, bonus_points: 0 };
 
   for (const { pick, game } of entries) {
     const { points, bucket, scored } = scoreSoccerPick(pick, game);
     if (!scored) continue;
     row.points += points;
     row[bucket] += 1;
+    const bonus = scoreKnockoutScoreBonus(pick, game);
+    if (bonus > 0) { row.points += bonus; row.bonus_points += bonus; }
   }
 
   return row;
