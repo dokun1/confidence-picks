@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../designsystem/components/Button';
 import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
+import ScoreBonusTooltip from '../../designsystem/components/ScoreBonusTooltip';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
 import {
   type MatchPick,
@@ -569,7 +570,16 @@ export default function WorldCupPicksTab({
             the team that advances = 3 pts, everyone else = 0. Penalties still count as advancing, so
             there&apos;s no &ldquo;Draw&rdquo; option — just the two teams.
           </li>
+          <li>
+            Knockout score bonus (optional): predict the final score for extra points — exact score
+            = +2; off by one goal, or the right scoreline with the teams flipped = +1. PK shootouts
+            count as a draw score.
+          </li>
         </ul>
+        {/* Score-bonus first-visit tooltip — only when knockout matches are in view. */}
+        <div className="mt-xs flex items-center gap-xs">
+          <ScoreBonusTooltip hasKnockoutMatches={visibleMatches.some((m) => m.isKnockout)} />
+        </div>
       </div>
 
       {/* Flat browse list */}

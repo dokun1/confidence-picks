@@ -107,6 +107,9 @@ describe('WorldCupPicksTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearWorldCupCache();
+    // Clear localStorage so the ScoreBonusTooltip seen-flag doesn't leak between
+    // tests and cause unexpected open/closed states.
+    localStorage.clear();
     mockGetAllWorldCupStages.mockResolvedValue(stagesResponse([groupMatch, r16Match]));
     // Default: source group is the user's only WC group. Tests exercising the
     // dropdown re-mock with multiple groups.
@@ -150,6 +153,28 @@ describe('WorldCupPicksTab', () => {
   // A knockout-only group hides every group-stage game so members can only pick
   // knockout matches. The fixtures above are one group game (Mexico) + one
   // knockout game (Canada), so the group game must vanish and the knockout stay.
+  describe('score-bonus rules line', () => {
+    it('renders the Knockout score bonus li in a regular group', async () => {
+      renderTab();
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Mexico vs ') ?? false, {
+        selector: 'span',
+      });
+      expect(
+        screen.getByText(/Knockout score bonus \(optional\):.*exact score = \+2/),
+      ).toBeInTheDocument();
+    });
+
+    it('renders the Knockout score bonus li in a knockout-only group', async () => {
+      render(<WorldCupPicksTab identifier="la-crew" knockoutOnly />);
+      await screen.findByText((_c, n) => n?.textContent?.startsWith('Canada vs ') ?? false, {
+        selector: 'span',
+      });
+      expect(
+        screen.getByText(/Knockout score bonus \(optional\):.*exact score = \+2/),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('knockout-only group', () => {
     function queryHome(homeName: string) {
       return screen.queryByText(
