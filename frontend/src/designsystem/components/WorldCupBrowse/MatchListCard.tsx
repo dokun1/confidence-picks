@@ -164,17 +164,20 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
 
             return (
               <>
-                {/* One horizontal row: home pick · score – score · away pick.
-                    Group games are three-way (Draw replaces the score inputs);
-                    knockout games are single-elimination (no Draw), and the two
-                    optional score fields sit between the teams at the same height. */}
+                {/* One horizontal row of three equal-width slots: home pick ·
+                    middle · away pick. In group games the middle slot is the
+                    Draw choice; in knockout games (no Draw) it holds the two
+                    optional score fields, centered. Keeping the middle slot
+                    flex-1 (not shrink-to-fit) means the team buttons stay the
+                    same width as a three-way pick instead of stretching to
+                    swallow the leftover space. */}
                 <div className="flex items-center gap-xs">
                   <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
                   {!game.isKnockout ? (
                     <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
                   ) : onScoreChange ? (
                     <div
-                      className="flex shrink-0 items-center gap-xxs"
+                      className="flex flex-1 items-center justify-center gap-xxs"
                       aria-label="Predict the score (optional)"
                       title={picked ? 'Optional: predict the score for bonus points' : 'Pick a team first to predict the score'}
                     >
