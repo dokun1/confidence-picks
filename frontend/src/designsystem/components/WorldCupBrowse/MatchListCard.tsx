@@ -164,20 +164,23 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
 
             return (
               <>
-                {/* One horizontal row of three equal-width slots: home pick ·
-                    middle · away pick. In group games the middle slot is the
-                    Draw choice; in knockout games (no Draw) it holds the two
-                    optional score fields, centered. Keeping the middle slot
-                    flex-1 (not shrink-to-fit) means the team buttons stay the
-                    same width as a three-way pick instead of stretching to
-                    swallow the leftover space. */}
-                <div className="flex items-center gap-xs">
+                {/* Three equal-width columns: home pick · middle · away pick. A
+                    CSS grid (not flex) so every column is exactly one third on
+                    both card types — in a group game the middle third is the Draw
+                    choice; in a knockout game (no Draw) it holds the two optional
+                    score fields, centered. With flex, each column's content width
+                    skews the split, so knockout team buttons came out wider than a
+                    group card's thirds; grid-cols-3 (three minmax(0,1fr) tracks)
+                    pins them to exactly a third regardless of content. The empty
+                    spacer keeps the away button in the third column when there's
+                    no Draw and no score inputs (read-only knockout). */}
+                <div className="grid grid-cols-3 items-stretch gap-xs">
                   <ChoiceButton team={game.home} odds={game.home.moneyline} record={game.home.record} selected={game.picked === 'home'} onClick={() => onPick(game.id, 'home')} disabled={disabled || !teamsAssigned} />
                   {!game.isKnockout ? (
                     <ChoiceButton odds={game.drawOdds} selected={game.picked === 'draw'} onClick={() => onPick(game.id, 'draw')} disabled={disabled || !teamsAssigned} />
                   ) : onScoreChange ? (
                     <div
-                      className="flex flex-1 items-center justify-center gap-xxs"
+                      className="flex min-w-0 items-center justify-center gap-xxs"
                       aria-label="Predict the score (optional)"
                       title={picked ? 'Optional: predict the score for bonus points' : 'Pick a team first to predict the score'}
                     >
@@ -185,7 +188,9 @@ export default function MatchListCard({ game, now, onPick, onOpenDetail, disable
                       <span className={picked ? 'text-content-subtle' : 'text-content-subtle/40'}>–</span>
                       {scoreInput('away', awayVal, game.away.name)}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div aria-hidden="true" />
+                  )}
                   <ChoiceButton team={game.away} odds={game.away.moneyline} record={game.away.record} selected={game.picked === 'away'} onClick={() => onPick(game.id, 'away')} disabled={disabled || !teamsAssigned} />
                 </div>
                 {/* Both-or-neither hint: shown when exactly one score is filled. */}
