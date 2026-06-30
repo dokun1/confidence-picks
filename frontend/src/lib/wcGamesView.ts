@@ -63,6 +63,15 @@ export interface BrowseGame {
   savedPicked?: boolean;
   /** Knockout matches can't end in a draw (PKs decide) — disables the Draw pick. */
   isKnockout: boolean;
+  /**
+   * The side that advanced on a knockout match, resolved from the backend
+   * `winnerTeamId` (the only signal on a penalty shootout, where the regulation
+   * scoreline is level — e.g. 1-1). 'home' | 'away' once the bracket has decided
+   * who went through; absent on group-stage games and on knockouts not yet
+   * resolved. `outcomeOf` trusts this over the scoreline so a PK result is never
+   * mistaken for a draw. See worldCupBrowseAdapter.
+   */
+  winner?: 'home' | 'away';
   /** Goal/card timeline once the match has started. Absent before kickoff. */
   events?: MatchEvent[];
   /** FIFA group letter ('A'–'L'). Present only on group-stage games. */
@@ -245,8 +254,29 @@ export function sortGames(games: BrowseGame[], key: SortKey): BrowseGame[] {
   return copy;
 }
 
-/** The outcome of a played match from its scoreline, or null if not yet scored. */
-export function outcomeOf(g: Pick<BrowseGame, 'homeScore' | 'awayScore'>): MatchResult | null {
+/**
+ * The outcome of a played match, or null if not yet scoreable.
+ *
+ * Knockout matches advance exactly one team: a level 90'/120' scoreline (e.g.
+ * 1-1) is decided by penalties, so the regulation score is NOT the result.
+ * Trust the resolved advancing side (`winner`, from the backend `winnerTeamId`)
+ * over the scoreline — otherwise a PK shootout reads as a draw, mis-scoring both
+ * the side that actually advanced (shown as a non-win) and the eliminated side
+ * (shown as a partial-credit "draw"). When a knockout has no resolved advancer
+ * yet, only a clear regulation lead decides it; a level score stays undecided
+ * (a knockout never resolves to 'draw'). Group-stage matches use the scoreline,
+ * where a level result is a genuine draw. Mirrors backend deriveActualResult.
+ */
+export function outcomeOf(
+  g: Pick<BrowseGame, 'homeScore' | 'awayScore' | 'isKnockout' | 'winner'>,
+): MatchResult | null {
+  if (g.isKnockout) {
+    if (g.winner === 'home' || g.winner === 'away') return g.winner;
+    if (g.homeScore == null || g.awayScore == null) return null;
+    if (g.homeScore > g.awayScore) return 'home';
+    if (g.awayScore > g.homeScore) return 'away';
+    return null;
+  }
   if (g.homeScore == null || g.awayScore == null) return null;
   if (g.homeScore > g.awayScore) return 'home';
   if (g.awayScore > g.homeScore) return 'away';

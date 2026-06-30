@@ -264,6 +264,38 @@ describe('outcomeOf / resultShade / pickVerdict', () => {
     expect(pickVerdict(final(2, 0))).toBeNull(); // no pick
     expect(pickVerdict(game({ picked: 'home' }))).toBeNull(); // not final
   });
+
+  // Knockout PK shootout: a level 90' scoreline (e.g. 1-1) is decided on
+  // penalties, so the result is the advancing side (`winner`), never a draw.
+  describe('knockout penalty-shootout outcome (winner over scoreline)', () => {
+    const ko = (over: Partial<BrowseGame> = {}) =>
+      game({ status: 'FINAL', isKnockout: true, homeScore: 1, awayScore: 1, ...over });
+
+    it('resolves a level-score knockout by the advancing side, not a draw', () => {
+      expect(outcomeOf(ko({ winner: 'away' }))).toBe('away');
+      expect(outcomeOf(ko({ winner: 'home' }))).toBe('home');
+    });
+
+    it('the eliminated pick is a loss, the advancing pick is a win — never partial', () => {
+      // Germany (home) lost to Paraguay (away) on penalties at 1-1.
+      expect(resultShade('home', outcomeOf(ko({ winner: 'away' })))).toBe('loss');
+      expect(resultShade('away', outcomeOf(ko({ winner: 'away' })))).toBe('win');
+      expect(pickVerdict(ko({ winner: 'away', picked: 'home' }))).toBe('incorrect');
+      expect(pickVerdict(ko({ winner: 'away', picked: 'away' }))).toBe('correct');
+    });
+
+    it('a clear regulation knockout still resolves by the scoreline', () => {
+      expect(outcomeOf(ko({ homeScore: 2, awayScore: 1 }))).toBe('home');
+      expect(outcomeOf(ko({ homeScore: 0, awayScore: 3 }))).toBe('away');
+    });
+
+    it('an unresolved level-score knockout is undecided, never a draw', () => {
+      // No winner yet (e.g. winnerTeamId not captured): stays null so it scores
+      // nothing, rather than mis-reading 1-1 as a draw.
+      expect(outcomeOf(ko())).toBeNull();
+      expect(pickVerdict(ko({ picked: 'home' }))).toBeNull();
+    });
+  });
 });
 
 describe('buildSections (pipeline)', () => {

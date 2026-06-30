@@ -256,6 +256,54 @@ Both fixes apply to ongoing AND knockout-only World Cup groups (the stale-matchu
 fix is at the cache layer, shared by all WC pools). `?refresh=true` / `?force=1` on
 the stage routes still force-bypass the cache.
 
+## SEV: penalty-shootout knockout scored as a draw (2026-06)
+
+**Symptom:** Germany 1-1 Paraguay went to PKs (Paraguay advanced). A user who
+picked Germany saw the match as a draw and a partial-credit **"~ +1"** badge,
+when a knockout loss should be **0**.
+
+**Root cause — frontend only (the visible bug).** A PK shootout has a *level*
+regulation scoreline (1-1); the advancing side is carried by `winnerTeamId`, NOT
+the score. The backend scores correctly (`SoccerScoringService.deriveActualResult`
+already prefers `winnerTeamId` for knockouts), but the frontend derived the result
+purely from the scoreline: `wcGamesView.outcomeOf()` read `homeScore`/`awayScore`
+only, and `worldCupBrowseAdapter.toBrowseGames()` never even carried `winnerTeamId`
+onto `BrowseGame`. So a 1-1 PK game read as `'draw'` → `resultShade('home','draw')`
+→ `'partial'` → the "~ +1" badge (MatchListCard line ~59), and the Correct/Incorrect
+filter chips (`pickVerdict`) were wrong too. **The displayed badge is frontend-
+derived, not the server leaderboard value** — so the user's actual standings were
+only wrong if the backend `winnerTeamId` was itself unresolved (see below).
+
+**Fix (committed):**
+- **Frontend:** `BrowseGame.winner?: 'home'|'away'` (the advancing side), mapped in
+  `toBrowseGames` from `m.winnerTeamId` vs `homeTeam.id`/`awayTeam.id` (string-
+  compared). `outcomeOf` is now knockout-aware — trusts `winner` over the
+  scoreline; an unresolved level knockout returns `null` (undecided, never
+  `'draw'`); group stage unchanged. This **mirrors backend `deriveActualResult`**
+  exactly. `outcomeOf`'s `Pick<>` now needs `isKnockout`+`winner` (callers pass full
+  `BrowseGame`, so only tests changed).
+- **Backend hardening (defensive + enables auto-recalc):**
+  1. `winnerHomeAwayFromESPN` now falls back to `competitors[].shootoutScore` (higher
+     PK tally advanced) when ESPN's `winner` flag is absent — the only other PK
+     signal, in case ESPN lags the flag at finalization.
+  2. New `hasUnresolvedKnockoutWinner(cachedSet, stage)` + an `isStageCacheFresh`
+     trigger (same per-stage throttle as the placeholder refresh): a FINAL knockout
+     with a level score and `winnerTeamId == null` re-checks ESPN instead of serving
+     the unscored row for 24h. Recovering the winner bumps the row's `last_updated`.
+
+**Recalculation is automatic — no script.** `WorldCupLeaderboardService.getLeaderboardVersion`
+keys the snapshot cache on `MAX(last_updated)` among FINAL `world_cup` games. The
+moment a game row's `winnerTeamId` is corrected (self-heal re-fetch persists it,
+bumping `last_updated`), the version string changes and **every group's leaderboard
+recomputes from scratch on next read**. If `winnerTeamId` was already correct, the
+self-heal never fires and the board was already right — only the frontend display
+needed the fix.
+
+**Mental model:** the advancing team on a knockout is `winnerTeamId`, never the
+1-1 scoreline. Any code that asks "who won?" from a WC match must consult it for
+knockouts — frontend `outcomeOf` and backend `deriveActualResult` are the two
+seams, and they must agree.
+
 ## Commands
 
 ```bash

@@ -480,3 +480,132 @@ describe('GameService.resolveWinnerTeamId (pure)', () => {
     assert.strictEqual(GameService.resolveWinnerTeamId(game, 'qf', 'home'), null);
   });
 });
+
+describe('GameService.winnerHomeAwayFromESPN (pure)', () => {
+  const event = (competitors) => ({ competitions: [{ competitors }] });
+
+  test('reads the ESPN winner flag when present', () => {
+    const e = event([
+      { homeAway: 'home', winner: false, score: '1' },
+      { homeAway: 'away', winner: true, score: '1', shootoutScore: '4' },
+    ]);
+    assert.strictEqual(GameService.winnerHomeAwayFromESPN(e), 'away');
+  });
+
+  test('falls back to the shootout tally when no winner flag is set (level score PK)', () => {
+    // ESPN can briefly publish a finalized 1-1 shootout without the winner flag
+    // while still carrying shootoutScore — the away side won the shootout 4-3.
+    const e = event([
+      { homeAway: 'home', score: '1', shootoutScore: '3' },
+      { homeAway: 'away', score: '1', shootoutScore: '4' },
+    ]);
+    assert.strictEqual(GameService.winnerHomeAwayFromESPN(e), 'away');
+  });
+
+  test('the winner flag wins over the shootout tally when both are present', () => {
+    const e = event([
+      { homeAway: 'home', winner: true, score: '1', shootoutScore: '2' },
+      { homeAway: 'away', score: '1', shootoutScore: '5' },
+    ]);
+    assert.strictEqual(GameService.winnerHomeAwayFromESPN(e), 'home');
+  });
+
+  test('no flag and no/level shootout tally yields null', () => {
+    assert.strictEqual(GameService.winnerHomeAwayFromESPN(event([
+      { homeAway: 'home', score: '1' },
+      { homeAway: 'away', score: '1' },
+    ])), null);
+    assert.strictEqual(GameService.winnerHomeAwayFromESPN(event([
+      { homeAway: 'home', score: '1', shootoutScore: '3' },
+      { homeAway: 'away', score: '1', shootoutScore: '3' },
+    ])), null);
+  });
+});
+
+describe('GameService self-heal for an unresolved FINAL knockout (PK winner)', () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_ESPN = 'true';
+    MockESPNService.configure();
+    GameService._lastStageFetchAt.clear();
+  });
+  afterEach(() => {
+    mock.restoreAll();
+    MockESPNService.reset();
+    delete process.env.USE_MOCK_ESPN;
+    GameService._lastStageFetchAt.clear();
+  });
+
+  // A FINAL knockout level at 1-1 (a penalty shootout) whose winnerTeamId was
+  // never captured — recently updated, not live, not near kickoff, real teams —
+  // so the unresolved-winner rule is the ONLY thing that can force a refresh.
+  const stuckPk = (overrides = {}) => new Game({
+    id: 1,
+    espnId: '901',
+    homeTeam: { id: '481', name: 'Germany', abbreviation: 'GER', isActive: true },
+    awayTeam: { id: '478', name: 'France', abbreviation: 'FRA', isActive: true },
+    gameDate: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    status: 'FINAL',
+    completed: true,
+    homeScore: 1,
+    awayScore: 1,
+    winnerTeamId: null,
+    league: 'world_cup',
+    stage: 'r32',
+    events: [],
+    lastUpdated: new Date(),
+    ...overrides,
+  });
+
+  test('hasUnresolvedKnockoutWinner flags only a FINAL, level-score, winnerless knockout', () => {
+    assert.strictEqual(GameService.hasUnresolvedKnockoutWinner([stuckPk()], 'r32'), true);
+    // Resolved winner → not stuck.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutWinner([stuckPk({ winnerTeamId: '478' })], 'r32'), false);
+    // Clear regulation scoreline → resolvable from scores, not stuck.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutWinner([stuckPk({ homeScore: 2, awayScore: 1 })], 'r32'), false);
+    // Not final → not yet a result.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutWinner([stuckPk({ status: 'IN_PROGRESS', completed: false })], 'r32'), false);
+    // The group stage genuinely allows a level final result (a draw), never flagged.
+    assert.strictEqual(GameService.hasUnresolvedKnockoutWinner([stuckPk()], 'group'), false);
+  });
+
+  test('an unresolved FINAL knockout forces a refresh, throttled to once per window', () => {
+    const now = Date.now();
+    assert.strictEqual(GameService.isStageCacheFresh([stuckPk()], 'r32', now), false);
+    GameService._lastStageFetchAt.set('r32', now - 60 * 1000);
+    assert.strictEqual(GameService.isStageCacheFresh([stuckPk()], 'r32', now), true);
+    GameService._lastStageFetchAt.set('r32', now - 6 * 60 * 1000);
+    assert.strictEqual(GameService.isStageCacheFresh([stuckPk()], 'r32', now), false);
+  });
+
+  test('getWorldCupStage re-fetches and recovers winnerTeamId for a stuck PK knockout', async () => {
+    let savedWinner;
+    mock.method(Game, 'findByLeagueStage', async () => [stuckPk()]);
+    mock.method(Game, 'findByESPNIds', async () => new Map([[ '901', stuckPk() ]]));
+    mock.method(Game.prototype, 'save', async function save() {
+      this.id = this.id || 1;
+      savedWinner = this.winnerTeamId;
+      return this;
+    });
+    // ESPN now reports the shootout: level 1-1, France (away) advances on PKs.
+    mock.method(MockESPNService, 'fetchSoccerWeek', async () => [
+      buildMockWorldCupEvent({
+        id: '901',
+        date: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        homeTeam: WORLD_CUP_2026_TEAMS.GER,
+        awayTeam: WORLD_CUP_2026_TEAMS.FRA,
+        homeScore: 1,
+        awayScore: 1,
+        status: 'finalPK',
+        stage: 'r32',
+        period: 2,
+        winner: 'away',
+        shootout: { home: 3, away: 4 },
+      }),
+    ]);
+
+    const games = await GameService.getWorldCupStage('r32');
+    const pk = games.find(g => g.espnId === '901');
+    assert.strictEqual(pk.winnerTeamId, WORLD_CUP_2026_TEAMS.FRA.id, 'away advances on penalties');
+    assert.strictEqual(savedWinner, WORLD_CUP_2026_TEAMS.FRA.id, 'recovered winner is persisted (bumps last_updated → busts leaderboard cache)');
+  });
+});
