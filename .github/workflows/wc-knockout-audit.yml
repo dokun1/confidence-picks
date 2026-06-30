@@ -1,0 +1,84 @@
+name: WC Knockout Winner Audit (one-off)
+
+# Manually-triggered run of backend/scripts/checkWorldCupKnockoutWinners.js for
+# the penalty-shootout SEV. It connects to the production DB, lists every FINAL
+# knockout's winner status (flagging STUCK level-score/null-winner games that
+# score nobody), and diffs every world_cup_2026 group's recomputed leaderboard
+# against its stored snapshot. Output goes to the job log only (read via the
+# Actions API) — it posts nothing.
+#
+# Pick the mode when dispatching:
+#   diagnose                  (default) read-only: report unresolved knockouts +
+#                             which leaderboards WOULD change. Writes nothing.
+#   force-resolve             re-fetch every stage from ESPN to recover & PERSIST
+#                             any stuck winner_team_id (bumps last_updated, which
+#                             busts the leaderboard cache), then preview board diffs.
+#   force-resolve-recompute   the above, and rewrite every group's snapshot so the
+#                             corrected board is served immediately.
+#
+# Required secret (Settings -> Secrets and variables -> Actions):
+#   PROD_DATABASE_URL  the production Postgres connection string. DATABASE_URL is
+#                      accepted as a fallback. NODE_ENV=production enables SSL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'What the run should do'
+        type: choice
+        default: diagnose
+        options:
+          - diagnose
+          - force-resolve
+          - force-resolve-recompute
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: pnpm install
+
+      - name: Run knockout winner audit
+        working-directory: ./backend
+        run: |
+          set -uo pipefail
+          if [ -z "${PROD_DATABASE_URL:-}" ] && [ -z "${DATABASE_URL:-}" ]; then
+            echo 'FATAL: no database connection string.'
+            echo 'Add a PROD_DATABASE_URL repository secret (the production Postgres URL)'
+            echo 'under Settings -> Secrets and variables -> Actions, then re-run.'
+            exit 1
+          fi
+
+          case "$MODE" in
+            diagnose)                 FLAGS='' ;;
+            force-resolve)            FLAGS='--force-resolve' ;;
+            force-resolve-recompute)  FLAGS='--force-resolve --recompute' ;;
+            *)                        echo "Unknown mode '$MODE'"; exit 1 ;;
+          esac
+
+          echo "Running: node scripts/checkWorldCupKnockoutWinners.js $FLAGS"
+          echo '----------------------------------------------------------------'
+          node scripts/checkWorldCupKnockoutWinners.js $FLAGS

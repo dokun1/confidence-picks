@@ -182,6 +182,25 @@ export class GameService {
     );
   }
 
+  // Does this knockout slate hold a FINAL match that advanced nobody? A knockout
+  // always produces one advancing team, so a completed knockout with a level
+  // regulation score (e.g. a 1-1 penalty shootout) and no resolved winnerTeamId
+  // is stuck: the scoreline can't break the tie and the PK winner signal (ESPN's
+  // competitor.winner / shootoutScore) lives only on the live event, not the
+  // cached row. Such a row scores nobody (deriveActualResult → undecided), so we
+  // re-check ESPN to recover the advancing side. Group/NFL rows and any knockout
+  // with a clear regulation winner are never flagged. Mirrors the frontend's
+  // outcomeOf "unresolved knockout" branch.
+  static hasUnresolvedKnockoutWinner(cachedSet, stage) {
+    if (!GameService.KNOCKOUT_STAGES.has(stage)) return false;
+    return cachedSet.some(
+      (g) =>
+        (g.status === 'FINAL' || g.completed === true) &&
+        (g.winnerTeamId == null) &&
+        Number(g.homeScore) === Number(g.awayScore),
+    );
+  }
+
   // How often a placeholder-bearing knockout stage may re-check ESPN. Bracket
   // slots resolve as OTHER stages' games finish, which this stage's own rows can't
   // signal (their date/status/score don't move when only the matchup resolves), so
@@ -208,6 +227,18 @@ export class GameService {
     // after the 24h staleness TTL. Throttled per stage so an all-placeholder
     // bracket early in the tournament can't refetch every stage on every request.
     if (GameService.hasUnresolvedKnockoutParticipants(cachedSet, stage)) {
+      const lastFetch = GameService._lastStageFetchAt.get(stage) ?? 0;
+      if (now - lastFetch >= GameService.PLACEHOLDER_REFRESH_THROTTLE_MS) return false;
+    }
+
+    // Proactive winner-resolution refresh: a FINAL knockout that advanced nobody
+    // (level score, null winnerTeamId — e.g. a penalty shootout whose winner flag
+    // wasn't captured at finalization) re-checks ESPN to recover the advancing
+    // side, since the PK signal isn't recoverable from the cached row. Throttled
+    // per stage with the same budget as the placeholder refresh so it can't hammer
+    // ESPN. Recovering the winner bumps the row's last_updated, which busts the
+    // leaderboard snapshot cache and recomputes every group's board for this game.
+    if (GameService.hasUnresolvedKnockoutWinner(cachedSet, stage)) {
       const lastFetch = GameService._lastStageFetchAt.get(stage) ?? 0;
       if (now - lastFetch >= GameService.PLACEHOLDER_REFRESH_THROTTLE_MS) return false;
     }
@@ -336,10 +367,26 @@ export class GameService {
   // competitors[].winner === true on the advancing team — notably on PK
   // shootouts, where the 90' scoreline is level and is the only signal of who
   // went through. Returns 'home' | 'away' | null.
+  //
+  // Fallback: when no competitor carries winner === true (ESPN occasionally lags
+  // the flag on a just-finalized shootout while still publishing the shootout
+  // tally), resolve from competitors[].shootoutScore — the side with the higher
+  // penalty tally advanced. This is the only other authoritative PK signal and it
+  // keeps a level-score knockout from persisting with a null winnerTeamId. A level
+  // shootout tally (or none) yields null, unchanged.
   static winnerHomeAwayFromESPN(espnEvent) {
     const competitors = espnEvent?.competitions?.[0]?.competitors || [];
     const flagged = competitors.find(c => c.winner === true);
-    return flagged ? flagged.homeAway : null;
+    if (flagged) return flagged.homeAway;
+
+    const home = competitors.find(c => c.homeAway === 'home');
+    const away = competitors.find(c => c.homeAway === 'away');
+    const homePk = Number(home?.shootoutScore);
+    const awayPk = Number(away?.shootoutScore);
+    if (Number.isFinite(homePk) && Number.isFinite(awayPk) && homePk !== awayPk) {
+      return homePk > awayPk ? 'home' : 'away';
+    }
+    return null;
   }
 
   // Persist a freshly-fetched stage game, but never let a write failure take down

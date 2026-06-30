@@ -62,6 +62,21 @@ export function toBrowseGames(matches: WorldCupMatch[], draft: DraftMap, scoreDr
     // pick enabled on knockout matches. Every non-group stage is single-elimination
     // (PKs decide), so Draw must be disabled — see MatchListCard.
     isKnockout: m.stage !== 'group',
+    // Resolve the advancing side from the backend `winnerTeamId` so a knockout
+    // decided on penalties (level regulation score, e.g. 1-1) scores by who went
+    // through rather than reading as a draw. Mapped to home/away by team id;
+    // left absent when there's no resolved winner or it matches neither side
+    // (then outcomeOf falls back to the scoreline). Group-stage games have no
+    // single advancer, so this stays absent there. Ids compared as strings —
+    // winnerTeamId is a string and TeamData.id is a string.
+    winner:
+      m.winnerTeamId == null
+        ? undefined
+        : String(m.winnerTeamId) === String(m.homeTeam.id)
+          ? 'home'
+          : String(m.winnerTeamId) === String(m.awayTeam.id)
+            ? 'away'
+            : undefined,
     events: m.events,
     // Group-stage games carry a FIFA group letter (A–L) derived from the team
     // abbreviation. Knockout teams may share abbreviations with group-stage

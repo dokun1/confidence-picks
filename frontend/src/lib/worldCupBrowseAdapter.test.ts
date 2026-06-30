@@ -51,6 +51,25 @@ describe('toBrowseGames', () => {
     expect(toBrowseGames([match({ status: 'POSTPONED' as WorldCupMatch['status'] })], {})[0].status).toBe('SCHEDULED');
   });
 
+  describe('winner (knockout advancing side from winnerTeamId)', () => {
+    // home id '1', away id '2' from the factory.
+    it('maps winnerTeamId to the home/away side', () => {
+      expect(toBrowseGames([match({ stage: 'r32', winnerTeamId: '1' })], {})[0].winner).toBe('home');
+      expect(toBrowseGames([match({ stage: 'r32', winnerTeamId: '2' })], {})[0].winner).toBe('away');
+    });
+    it('is absent when there is no resolved winner', () => {
+      expect(toBrowseGames([match({ stage: 'r32', winnerTeamId: null })], {})[0].winner).toBeUndefined();
+      expect(toBrowseGames([match({ stage: 'r32' })], {})[0].winner).toBeUndefined();
+    });
+    it('is absent when winnerTeamId matches neither side (falls back to scoreline)', () => {
+      expect(toBrowseGames([match({ stage: 'r32', winnerTeamId: '999' })], {})[0].winner).toBeUndefined();
+    });
+    it('survives a numeric-vs-string id mismatch', () => {
+      const m = match({ stage: 'r32', winnerTeamId: 2 as unknown as string });
+      expect(toBrowseGames([m], {})[0].winner).toBe('away');
+    });
+  });
+
   it('maps odds.threeWay + team record + real espnId onto BrowseGame', () => {
     const m = match({
       id: 42,
