@@ -19,6 +19,11 @@ export class Game {
   this.completed = data.completed; // boolean
   this.statusDescription = data.statusDescription; // e.g. 'Final' / 'Halftime'
   this.statusDetail = data.statusDetail; // e.g. 'Q3 05:32'
+  // True when ESPN reports the game as postponed. ESPN models a postponement as
+  // state 'pre' with name STATUS_POSTPONED, so `status` stays SCHEDULED (picks
+  // remain open for the rescheduled date) — but callers need to tell a genuine
+  // upcoming kickoff apart from a postponement whose original time has passed.
+  this.postponed = data.postponed ?? false;
   this.clock = data.clock; // seconds remaining in current period (number)
   this.displayClock = data.displayClock; // formatted clock string
   this.period = data.period; // current period number
@@ -174,6 +179,7 @@ static fromESPNData(espnGame, opts = {}) {
     },
     gameDate: new Date(espnGame.date),
     status: normalized,
+    postponed: isPostponed(statusType.name, statusType.detail),
     rawStatus: statusType.name,
     statusCategory: normalized,
     statusState: statusType.state, // 'pre' | 'in' | 'post'
@@ -381,6 +387,7 @@ static fromDbRow(row) {
     period: row.period,
     displayClock: row.display_clock,
     statusDetail: row.status_detail,
+    postponed: isPostponed(row.status, row.status_detail),
     homeScore: row.home_score,
     odds: row.odds ? (typeof row.odds === 'string' ? JSON.parse(row.odds) : row.odds) : null,
     probability: row.probability ? (typeof row.probability === 'string' ? JSON.parse(row.probability) : row.probability) : null,
@@ -451,6 +458,7 @@ static async findByLeagueStage(league, stage) {
       completed: this.completed,
       statusDescription: this.statusDescription,
       statusDetail: this.statusDetail,
+      postponed: this.postponed,
       clock: this.clock,
       displayClock: this.displayClock,
       period: this.period,
@@ -470,4 +478,16 @@ static async findByLeagueStage(league, stage) {
       createdAt: this.createdAt
     };
   }
+}
+
+/**
+ * ESPN encodes a postponement as state 'pre' + name STATUS_POSTPONED, which the
+ * three-way normalization above flattens into SCHEDULED. Recover that signal from
+ * either the raw status name (fresh ESPN payloads) or the persisted status detail
+ * (DB round-trips, where the raw name is replaced by the normalized status).
+ */
+function isPostponed(rawName, detail) {
+  if (typeof rawName === 'string' && rawName.toUpperCase().includes('POSTPONED')) return true;
+  if (typeof detail === 'string' && /postponed/i.test(detail)) return true;
+  return false;
 }

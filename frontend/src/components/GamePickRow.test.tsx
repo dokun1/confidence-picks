@@ -85,6 +85,31 @@ describe('GamePickRow', () => {
     expect(props.onClearPick).toHaveBeenCalled();
   });
 
+  // A postponed game arrives as status SCHEDULED (so it stays pickable for the
+  // rescheduled date) with postponed:true. Without the flag it rendered as
+  // "not started" beside a kickoff time that had already passed.
+  it('labels a postponed game rather than showing it as not started', () => {
+    const props = {
+      ...baseProps(),
+      game: scheduledGame({ postponed: true }),
+    };
+    render(<GamePickRow {...props} />);
+    expect(screen.getByText('postponed')).toBeInTheDocument();
+    expect(screen.queryByText('not started')).not.toBeInTheDocument();
+  });
+
+  it('keeps a postponed game pickable', () => {
+    const props = {
+      ...baseProps(),
+      game: scheduledGame({ postponed: true }),
+    };
+    render(<GamePickRow {...props} />);
+    // Still editable: the winner radios accept input and the confidence picker exists.
+    fireEvent.click(screen.getByRole('radio', { name: 'Pick Bills to win' }));
+    expect(props.onToggleWinner).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Confidence for/ })).toBeInTheDocument();
+  });
+
   it('renders a read-only confidence (no picker) for a final game', () => {
     const props = {
       ...baseProps(),

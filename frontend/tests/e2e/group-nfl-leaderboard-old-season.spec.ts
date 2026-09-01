@@ -1,13 +1,20 @@
 import { test, expect } from '@playwright/test'
 
 // Regression guard for old groups losing their scores after the NFL season
-// rolls over. An NFL (non-World-Cup) group's Leaderboard tab — the page's
-// default tab — must render real standings from GET .../scoreboard for the
-// newest season that has pick data (2025 here), not an empty "current season"
-// view or the old "Leaderboard coming soon" placeholder. All API calls are
-// stubbed so the flow never reaches a real backend and never depends on the
-// machine's calendar date.
+// rolls over. In the OFFSEASON an NFL (non-World-Cup) group's Leaderboard tab —
+// the page's default tab — must render real standings from GET .../scoreboard
+// for the newest season that has pick data (2025 here), not an empty "current
+// season" view or the old "Leaderboard coming soon" placeholder. Once the new
+// season is under way the tab lands on it instead; that case is covered below.
+// All API calls are stubbed so the flow never reaches a real backend, and the
+// clock is pinned so the result never depends on the machine's calendar date.
 test('old NFL group leaderboard renders past-season standings', async ({ page }) => {
+  // The season default is now date-aware: the current season wins while it is
+  // under way, and the newest season with data wins in the offseason. Pin the
+  // clock to June so this spec keeps its original meaning (and its promise not
+  // to depend on the machine's calendar date).
+  await page.clock.setFixedTime(new Date('2026-06-15T12:00:00Z'))
+
   // Visit the app first so localStorage is writable for this origin.
   await page.goto('/login')
 
@@ -113,4 +120,88 @@ test('old NFL group leaderboard renders past-season standings', async ({ page })
   // And the request that produced it targeted the old season with data.
   expect(scoreboardQuery).not.toBeNull()
   expect(scoreboardQuery!.get('season')).toBe('2025')
+})
+
+// The companion case: once the new season is under way, the same group with the
+// same past-season data lands on the CURRENT season instead. A season is a
+// fresh slate, so Week 1 must not open on last season's final standings — and
+// the prior season stays one dropdown click away.
+test('in-season, the same old group lands on the current season', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-09-15T12:00:00Z'))
+
+  await page.goto('/login')
+
+  await page.evaluate(() => {
+    const payload = {
+      userId: 1,
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+      pictureUrl: null,
+      exp: 9999999999,
+    }
+    const token = `header.${btoa(JSON.stringify(payload))}.sig`
+    localStorage.setItem('accessToken', token)
+  })
+
+  await page.route('**/api/**', (route) => route.fulfill({ json: {} }))
+
+  const requestedSeasons: string[] = []
+
+  await page.route('**/api/groups/**', async (route) => {
+    const url = new URL(route.request().url())
+    const path = url.pathname
+
+    if (path.endsWith('/members') || path.endsWith('/messages')) {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (path.endsWith('/picks/seasons')) {
+      // Same old group: its only pick data is 2025, and 2026 has nothing yet.
+      await route.fulfill({ json: { seasons: [2025] } })
+      return
+    }
+    if (path.endsWith('/scoreboard')) {
+      const season = url.searchParams.get('season') ?? ''
+      requestedSeasons.push(season)
+      if (season === '2025') {
+        await route.fulfill({
+          json: {
+            season: 2025,
+            seasonType: 2,
+            weeks: [1],
+            users: [
+              { userId: 1, name: 'Ada Lovelace', pictureUrl: null, weekly: [{ week: 1, points: 15 }], totalPoints: 15 },
+            ],
+          },
+        })
+        return
+      }
+      // 2026 has no scored picks yet.
+      await route.fulfill({ json: { season: 2026, seasonType: 2, weeks: [], users: [] } })
+      return
+    }
+    await route.fulfill({
+      json: {
+        id: '1',
+        name: 'Sunday Squad',
+        identifier: 'sunday-squad',
+        description: 'Old NFL group',
+        memberCount: 2,
+        userRole: 'member',
+      },
+    })
+  })
+
+  await page.goto('/group-details?group=sunday-squad')
+  await expect(page.getByRole('heading', { name: 'Sunday Squad' })).toBeVisible()
+
+  // Lands on the current season, empty, with the reason spelled out.
+  await expect(page.getByLabel('Select season')).toHaveValue('2026')
+  await expect(page.getByText(/No points yet for the 2026 season/)).toBeVisible()
+  expect(requestedSeasons).toContain('2026')
+
+  // Last season's standings are still one click away.
+  await page.getByLabel('Select season').selectOption('2025')
+  await expect(page.getByRole('list').getByText('Ada Lovelace')).toBeVisible()
+  await expect(page.getByRole('list').getByText('15')).toBeVisible()
 })

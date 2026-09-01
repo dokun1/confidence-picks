@@ -37,6 +37,8 @@ export interface PickGame {
   awayScore?: number;
   homeScore?: number;
   status: string;
+  /** ESPN reports the game as postponed; `status` still reads SCHEDULED. */
+  postponed?: boolean;
   gameDate: string;
   displayClock?: string;
   period?: number;
@@ -67,15 +69,23 @@ export interface GamePickRowProps {
   onClearPick: () => void;
 }
 
-/** Map the backend status enum to a human label, matching the Svelte source. */
-function deriveStatus(status: string): 'final' | 'in progress' | 'not started' {
+/**
+ * Map the backend status enum to a human label, matching the Svelte source.
+ * A postponed game normalizes to SCHEDULED upstream (picks stay open for the
+ * rescheduled date), so it would otherwise read "not started" next to a kickoff
+ * time that has already passed — label it for what it is instead.
+ */
+function deriveStatus(
+  status: string,
+  postponed?: boolean,
+): 'final' | 'in progress' | 'not started' | 'postponed' {
   switch (status) {
     case 'FINAL':
       return 'final';
     case 'IN_PROGRESS':
       return 'in progress';
     default:
-      return 'not started';
+      return postponed ? 'postponed' : 'not started';
   }
 }
 
@@ -112,6 +122,7 @@ const STATUS_BADGE: Record<ReturnType<typeof deriveStatus>, string> = {
   final: 'bg-success-600 text-neutral-0',
   'in progress': 'bg-error-600 text-neutral-0',
   'not started': 'bg-secondary-200 text-secondary-700 dark:bg-secondary-700 dark:text-secondary-200',
+  postponed: 'bg-warning-600 text-neutral-0',
 };
 
 export default function GamePickRow({
@@ -140,10 +151,10 @@ export default function GamePickRow({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [showPicker]);
 
-  const status = deriveStatus(game.status);
+  const status = deriveStatus(game.status, game.postponed);
   // Public games carry no `meta`; derive from status. Honor a richer payload if present.
   const final = game.meta?.final ?? status === 'final';
-  const locked = game.meta?.locked ?? status !== 'not started';
+  const locked = game.meta?.locked ?? (status !== 'not started' && status !== 'postponed');
   const editable = !final && !locked && !disabled;
 
   const awayTeamId = Number(game.awayTeam.id);
@@ -332,7 +343,7 @@ export default function GamePickRow({
         </div>
       </div>
 
-      {!final && status === 'not started' && game.odds && (
+      {!final && (status === 'not started' || status === 'postponed') && game.odds && (
         <div className="flex items-center gap-xs text-[0.65rem] font-semibold text-content-muted">
           <span className="uppercase">Odds:</span>
           {game.odds.favoriteAbbr ? (
