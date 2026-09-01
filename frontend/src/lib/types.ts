@@ -70,6 +70,8 @@ export interface GameData {
   awayScore: number;
   status: string;
   statusDetail?: string;
+  /** ESPN reports the game as postponed; `status` still reads SCHEDULED. */
+  postponed?: boolean;
   gameDate: string;
   week: number;
   season: number;
