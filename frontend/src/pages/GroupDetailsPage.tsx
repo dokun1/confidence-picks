@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { getGroup, getMembers, getMessages, getUnreadStatus, markMessagesRead } from '../lib/groupsService.js';
 import type { GroupDetail, GroupMember, GroupMessage } from '../lib/groupsService';
 import { getWorldCupLeaderboard, getAllWorldCupStages, getMyWorldCupPicks } from '../lib/worldCupService.js';
+import { getClosestWeek, getPicks } from '../lib/picksService.js';
+import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
 import { writeCache, wcCacheKeys } from '../lib/worldCupCache';
 import { countNeedsPick } from '../lib/wcNeedsPick';
 import type { SavedView } from '../lib/wcGamesView';
@@ -65,6 +67,10 @@ function GroupNotFound({ message, onBack }: { message: string; onBack: () => voi
   );
 }
 
+// ESPN regular season. Mirrors PicksTab's SEASON_TYPE — the NFL banner resolves
+// the same week the Picks tab shows.
+const NFL_SEASON_TYPE = 2;
+
 export default function GroupDetailsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -90,6 +96,8 @@ export default function GroupDetailsPage() {
   // How many picks the viewer still owes in this (World Cup) pool. Drives the
   // leaderboard warning banner; 0 keeps it hidden.
   const [needsPickCount, setNeedsPickCount] = useState(0);
+  // The NFL week the "make picks" banner refers to, so its copy can name it.
+  const [nflPickWeek, setNflPickWeek] = useState<number | null>(null);
   // Drives the red dot on the Chat tab. Fetched independently of the mount fetch
   // (a failure here must not collapse the whole page into the Not Found UI), and
   // cleared the moment the user opens the chat.
@@ -206,6 +214,39 @@ export default function GroupDetailsPage() {
     };
   }, [identifier, group?.poolType, group?.knockoutOnly, activeTab]);
 
+  // NFL counterpart of the World Cup effect above. GET .../picks already returns
+  // totalGames and pickedCount for the week, so the count costs one extra call
+  // on top of resolving the week — no per-game diffing here. Same constraints:
+  // Leaderboard tab only (the banner's only home), re-run on tab return so the
+  // count goes stale-free after picking, and entirely best-effort.
+  useEffect(() => {
+    if (!identifier || activeTab !== 'leaderboard') return;
+    if (!group || group.poolType === 'world_cup_2026') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const wk = await getClosestWeek(identifier, getCurrentNFLSeason(), NFL_SEASON_TYPE);
+        if (cancelled || wk?.week == null) return;
+        const resp = await getPicks(identifier, {
+          season: wk.season ?? getCurrentNFLSeason(),
+          seasonType: wk.seasonType ?? NFL_SEASON_TYPE,
+          week: wk.week,
+        });
+        if (cancelled) return;
+        const total = Number(resp?.totalGames ?? 0);
+        const picked = Number(resp?.pickedCount ?? 0);
+        setNflPickWeek(wk.week);
+        setNeedsPickCount(Math.max(0, total - picked));
+      } catch {
+        /* non-fatal: leave the banner hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [identifier, group, activeTab]);
+
+
   // No identifier in the query string: nothing to load, show the error UI early.
   if (!identifier) {
     return (
@@ -275,6 +316,12 @@ export default function GroupDetailsPage() {
     setSearchParams(next, { replace: true });
   }
 
+  // NFL banner CTA: GamesPage is a separate route and needs the group on the
+  // query string to know where to save.
+  function goToNflPicks() {
+    navigate(`/games?groupId=${encodeURIComponent(identifier ?? '')}`);
+  }
+
   // getGroup returns userRole (NOT isOwner); admin is the owning role.
   const isOwner = group.userRole === 'admin';
   // World Cup pools render the tournament-shaped tab variants. Absent/NFL pools
@@ -333,6 +380,16 @@ export default function GroupDetailsPage() {
         {isWorldCup && activeTab === 'leaderboard' && needsPickCount > 0 && (
           <Banner variant="warning" action={{ label: 'Make your picks', onClick: goToNeedsPick }}>
             You have {needsPickCount} {needsPickCount === 1 ? 'pick' : 'picks'} available to make.
+          </Banner>
+        )}
+
+        {/* NFL pools send the CTA to GamesPage instead: it is the only place NFL
+            picks can be made, and it is unreachable without a ?groupId, so this
+            banner and the Picks tab link are its only in-app entry points. */}
+        {!isWorldCup && activeTab === 'leaderboard' && needsPickCount > 0 && (
+          <Banner variant="warning" action={{ label: 'Make your picks', onClick: goToNflPicks }}>
+            You have {needsPickCount} {needsPickCount === 1 ? 'pick' : 'picks'} available to make
+            {nflPickWeek != null ? ` in Week ${nflPickWeek}` : ''}.
           </Banner>
         )}
 
