@@ -1,14 +1,20 @@
 import { test, expect } from '@playwright/test'
 
 // Regression guard for old groups losing their pick history after the NFL
-// season rolls over. An NFL group whose pick data lives in a past season (2025
-// here) must still land on that season's picks: the Picks tab resolves the
-// group's seasons (GET .../picks/seasons), defaults to the newest one WITH
-// data — not the empty current calendar season — resolves that season's
-// closest week, and renders the member-picks matrix for it. All API calls are
-// stubbed so the flow never reaches a real backend and never depends on the
-// machine's calendar date.
+// season rolls over. In the OFFSEASON an NFL group whose pick data lives in a
+// past season (2025 here) must still land on that season's picks: the Picks tab
+// resolves the group's seasons (GET .../picks/seasons), defaults to the newest
+// one WITH data — not the empty current calendar season — resolves that
+// season's closest week, and renders the member-picks matrix for it. All API
+// calls are stubbed so the flow never reaches a real backend, and the clock is
+// pinned so the result never depends on the machine's calendar date.
 test('old NFL group picks tab renders the past season picks matrix', async ({ page }) => {
+  // The season default is now date-aware: the current season wins while it is
+  // under way, and the newest season with data wins in the offseason. Pin the
+  // clock to June so this spec keeps its original meaning (and its promise not
+  // to depend on the machine's calendar date).
+  await page.clock.setFixedTime(new Date('2026-06-15T12:00:00Z'))
+
   // Visit the app first so localStorage is writable for this origin.
   await page.goto('/login')
 
