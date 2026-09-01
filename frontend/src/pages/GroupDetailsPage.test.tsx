@@ -78,7 +78,7 @@ import {
   getUnreadStatus,
   markMessagesRead,
 } from '../lib/groupsService.js';
-import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
+import { getClosestWeek, getPicks, getPickSeasons, getScoreboard } from '../lib/picksService.js';
 import { isNFLSeasonUnderway } from '../lib/nflSeasonUtils.js';
 import {
   getWorldCupLeaderboard,
@@ -92,6 +92,7 @@ const mockGetMyGroups = vi.mocked(getMyGroups);
 const mockGetUnreadStatus = vi.mocked(getUnreadStatus);
 const mockMarkMessagesRead = vi.mocked(markMessagesRead);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
+const mockGetPicks = vi.mocked(getPicks);
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const mockGetScoreboard = vi.mocked(getScoreboard);
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
@@ -266,6 +267,44 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByRole('columnheader', { name: 'W2' })).toBeInTheDocument();
     // The scoreboard was fetched for the old season with data, not the current one.
     expect(mockGetScoreboard).toHaveBeenCalledWith('sunday-squad', { season: 2024, seasonType: 2 });
+  });
+
+  // NFL picks are made on GamesPage, a separate route that is unreachable
+  // without a ?groupId — so this banner is one of only two in-app ways in.
+  it('offers an NFL make-picks banner routed to GamesPage', async () => {
+    mockGetGroup.mockResolvedValue(memberGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+    mockGetPickSeasons.mockResolvedValue({ seasons: [2025] });
+    mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
+    // 16 games on the slate, 4 already picked -> 12 owed.
+    mockGetPicks.mockResolvedValue({ games: [], totalGames: 16, pickedCount: 4 });
+
+    renderPage();
+    await screen.findByRole('heading', { name: memberGroup.name });
+
+    const banner = await screen.findByText(/12 picks available to make in Week 1/);
+    expect(banner).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make your picks' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/games?groupId=sunday-squad');
+  });
+
+  it('hides the NFL banner once every game is picked', async () => {
+    mockGetGroup.mockResolvedValue(memberGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+    mockGetPickSeasons.mockResolvedValue({ seasons: [2025] });
+    mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
+    mockGetPicks.mockResolvedValue({ games: [], totalGames: 16, pickedCount: 16 });
+
+    renderPage();
+    await screen.findByRole('heading', { name: memberGroup.name });
+
+    await waitFor(() => expect(mockGetPicks).toHaveBeenCalled());
+    expect(screen.queryByText(/available to make/)).not.toBeInTheDocument();
   });
 
   it('hides the Owner badge for a non-admin member', async () => {

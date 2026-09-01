@@ -42,6 +42,10 @@ export interface PicksGame {
 export interface GetPicksResponse {
   games: PicksGame[];
   picks?: MemberPicks[] | Record<string, PickData[]>;
+  /** Games on the week's slate. Returned by the route; used for the picks-owed count. */
+  totalGames?: number;
+  /** How many of them the viewer has assigned a confidence to. */
+  pickedCount?: number;
 }
 
 export function getClosestWeek(

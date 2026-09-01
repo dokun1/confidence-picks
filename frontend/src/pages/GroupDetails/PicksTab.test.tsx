@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PicksTab from './PicksTab';
 import type { GroupMember } from '../../lib/groupsService';
@@ -67,14 +68,22 @@ describe('PicksTab', () => {
   });
 
   it('shows a loading state before the fetch resolves', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     expect(screen.getByText('Loading picks…')).toBeInTheDocument();
     // Let the in-flight fetch settle so its state update happens inside act().
     await screen.findByText('BUF @ NE');
   });
 
   it('defaults to the current season once it is under way, even with no picks yet', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     // The season is running, so week resolution and the picks fetch target 2026
     // even though the group's only pick data is from 2025.
@@ -87,7 +96,11 @@ describe('PicksTab', () => {
 
   it('falls back to the latest season with data during the offseason', async () => {
     vi.mocked(isNFLSeasonUnderway).mockReturnValueOnce(false);
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2025, 2);
     expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2025, seasonType: 2, week: 2 });
@@ -95,14 +108,36 @@ describe('PicksTab', () => {
 
   it('falls back to the current season when the group has no pick data', async () => {
     mockGetPickSeasons.mockResolvedValue({ seasons: [] });
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2026, 2);
     expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2026, seasonType: 2, week: 2 });
   });
 
+  // The matrix is read-only; GamesPage is the editor and is unreachable without
+  // a ?groupId, so this link is the tab's only route into making a pick.
+  it('offers a Make picks link carrying the group identifier', async () => {
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
+    await screen.findByText('BUF @ NE');
+
+    const link = screen.getByRole('link', { name: 'Make picks' });
+    expect(link).toHaveAttribute('href', `/games?groupId=${identifier}`);
+  });
+
   it('refetches picks when the week selector changes', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     expect(mockGetPicks).toHaveBeenCalledTimes(1);
 
@@ -113,7 +148,11 @@ describe('PicksTab', () => {
   });
 
   it('re-resolves the closest week when the season selector changes', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     expect(mockGetClosestWeek).toHaveBeenCalledTimes(1);
 
@@ -122,7 +161,11 @@ describe('PicksTab', () => {
   });
 
   it('renders the GroupPicks matrix with member columns and adapted picks', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     // Member column headers.
     expect(await screen.findByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
@@ -135,7 +178,11 @@ describe('PicksTab', () => {
   });
 
   it('re-runs the fetch when the GroupPicks Refresh action is invoked', async () => {
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     await screen.findByText('BUF @ NE');
     expect(mockGetPicks).toHaveBeenCalledTimes(1);
 
@@ -148,13 +195,21 @@ describe('PicksTab', () => {
       games,
       picks: { m1: [{ gameId: 1, pickedTeamId: '1', confidence: 7, won: true, points: 7 }] },
     });
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText('7')).toBeInTheDocument();
   });
 
   it('shows an error message and no GroupPicks when the fetch fails', async () => {
     mockGetPicks.mockRejectedValue(new Error('Failed to load picks'));
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText('Failed to load picks')).toBeInTheDocument();
     // The error branch replaces the matrix entirely — GroupPicks' header/columns are absent.
     expect(screen.queryByText('Group Picks')).not.toBeInTheDocument();
@@ -164,7 +219,11 @@ describe('PicksTab', () => {
 
   it('renders gracefully when the response carries no picks', async () => {
     mockGetPicks.mockResolvedValue({ games });
-    render(<PicksTab identifier={identifier} members={members} />);
+    render(
+      <MemoryRouter>
+        <PicksTab identifier={identifier} members={members} />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText('BUF @ NE')).toBeInTheDocument();
   });
 });
