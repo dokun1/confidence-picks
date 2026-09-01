@@ -27,7 +27,10 @@ vi.mock('../lib/groupsService.js', () => ({
 // picks / scoreboard). Mock those so the tabs render deterministically;
 // getClosestWeek is left pending in the tab-switching test so the picks tab
 // sits in its loading state.
-vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2025) }));
+vi.mock('../lib/nflSeasonUtils.js', () => ({
+  getCurrentNFLSeason: vi.fn(() => 2025),
+  isNFLSeasonUnderway: vi.fn(() => true),
+}));
 vi.mock('../lib/picksService.js', () => ({
   getClosestWeek: vi.fn(),
   getPicks: vi.fn(),
@@ -76,6 +79,7 @@ import {
   markMessagesRead,
 } from '../lib/groupsService.js';
 import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
+import { isNFLSeasonUnderway } from '../lib/nflSeasonUtils.js';
 import {
   getWorldCupLeaderboard,
   getAllWorldCupStages,
@@ -228,14 +232,17 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument();
   });
 
-  it('renders the NFL leaderboard for the season that has pick data (old group)', async () => {
+  it('renders the NFL leaderboard for the season that has pick data (old group, offseason)', async () => {
     mockGetGroup.mockResolvedValue(memberGroup);
     mockGetMembers.mockResolvedValue(members);
     mockGetMessages.mockResolvedValue(messages);
-    // Old group: pick data only exists for 2024 while the (mocked) current
-    // season is 2025. The leaderboard must request the season that actually
-    // has data, not the empty current one — this is the regression that hid
-    // old groups' scores after the season rolled over.
+    // Old group in the offseason: pick data only exists for 2024 while the
+    // (mocked) current season is 2025, which has no games yet. The leaderboard
+    // must request the season that actually has data, not the empty current one
+    // — this is the regression that hid old groups' scores after the season
+    // rolled over. (Once 2025 is under way the tab lands on 2025 instead; that
+    // is covered in LeaderboardTab/useSeasonOptions tests.)
+    vi.mocked(isNFLSeasonUnderway).mockReturnValue(false);
     mockGetPickSeasons.mockResolvedValue({ seasons: [2024] });
     mockGetScoreboard.mockResolvedValue({
       season: 2024,

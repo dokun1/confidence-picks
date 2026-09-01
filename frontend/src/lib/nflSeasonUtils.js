@@ -27,3 +27,20 @@ export function getCurrentNFLSeason() {
   // For all other months (March through December), use the current year
   return year;
 }
+
+/**
+ * True when the NFL season returned by getCurrentNFLSeason() is actually under
+ * way — September through February. March-August is the offseason, when the
+ * "current" season exists on the calendar but has no games and no picks yet.
+ *
+ * Used to decide whether a group should land on the current season or on the
+ * most recent season that has data.
+ *
+ * @param {Date} [now] injectable for tests
+ * @returns {boolean}
+ */
+export function isNFLSeasonUnderway(now = new Date()) {
+  const month = now.getMonth(); // 0-indexed
+  // Sep(8)-Dec(11) = regular season; Jan(0)-Feb(1) = playoffs of that same season.
+  return month >= 8 || month <= 1;
+}

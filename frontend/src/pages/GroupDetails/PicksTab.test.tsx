@@ -6,9 +6,14 @@ import type { GetPicksResponse } from '../../lib/picksService';
 
 // Mock the season helper so the derived season is deterministic, and the picks
 // service so the test fully controls the fetched shape without touching network.
-// The "current" season is 2026 (offseason) while the group's pick data lives in
-// 2025 — the regression scenario: the tab must default to the season with data.
-vi.mock('../../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2026) }));
+// The "current" season is 2026 and it is under way, while the group's only pick
+// data is from 2025: the tab must land on 2026 (a season is a fresh slate) and
+// still offer 2025. Flipping isNFLSeasonUnderway to false covers the offseason,
+// where landing on an empty season is what used to make old groups look wiped.
+vi.mock('../../lib/nflSeasonUtils.js', () => ({
+  getCurrentNFLSeason: vi.fn(() => 2026),
+  isNFLSeasonUnderway: vi.fn(() => true),
+}));
 vi.mock('../../lib/picksService.js', () => ({
   getClosestWeek: vi.fn(),
   getPicks: vi.fn(),
@@ -16,6 +21,7 @@ vi.mock('../../lib/picksService.js', () => ({
 }));
 
 import { getClosestWeek, getPicks, getPickSeasons } from '../../lib/picksService.js';
+import { isNFLSeasonUnderway } from '../../lib/nflSeasonUtils.js';
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
 const mockGetPicks = vi.mocked(getPicks);
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
@@ -67,17 +73,24 @@ describe('PicksTab', () => {
     await screen.findByText('BUF @ NE');
   });
 
-  it('defaults to the latest season with pick data, not the empty current season', async () => {
+  it('defaults to the current season once it is under way, even with no picks yet', async () => {
     render(<PicksTab identifier={identifier} members={members} />);
     await screen.findByText('BUF @ NE');
-    // Current NFL season is 2026 (offseason) but the group's data is in 2025:
-    // the closest-week resolution and picks fetch must both target 2025.
+    // The season is running, so week resolution and the picks fetch target 2026
+    // even though the group's only pick data is from 2025.
+    expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2026, 2);
+    expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2026, seasonType: 2, week: 2 });
+    const seasonSelect = screen.getByLabelText('Select season') as HTMLSelectElement;
+    expect(seasonSelect.value).toBe('2026');
+    expect(Array.from(seasonSelect.options).map((o) => o.value)).toEqual(['2026', '2025']);
+  });
+
+  it('falls back to the latest season with data during the offseason', async () => {
+    vi.mocked(isNFLSeasonUnderway).mockReturnValueOnce(false);
+    render(<PicksTab identifier={identifier} members={members} />);
+    await screen.findByText('BUF @ NE');
     expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2025, 2);
     expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2025, seasonType: 2, week: 2 });
-    // The season selector defaults to 2025 while still offering the current season.
-    const seasonSelect = screen.getByLabelText('Select season') as HTMLSelectElement;
-    expect(seasonSelect.value).toBe('2025');
-    expect(Array.from(seasonSelect.options).map((o) => o.value)).toEqual(['2026', '2025']);
   });
 
   it('falls back to the current season when the group has no pick data', async () => {
@@ -95,7 +108,7 @@ describe('PicksTab', () => {
 
     fireEvent.change(screen.getByLabelText('Select week'), { target: { value: '5' } });
     await waitFor(() =>
-      expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2025, seasonType: 2, week: 5 }),
+      expect(mockGetPicks).toHaveBeenCalledWith(identifier, { season: 2026, seasonType: 2, week: 5 }),
     );
   });
 
@@ -104,8 +117,8 @@ describe('PicksTab', () => {
     await screen.findByText('BUF @ NE');
     expect(mockGetClosestWeek).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText('Select season'), { target: { value: '2026' } });
-    await waitFor(() => expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2026, 2));
+    fireEvent.change(screen.getByLabelText('Select season'), { target: { value: '2025' } });
+    await waitFor(() => expect(mockGetClosestWeek).toHaveBeenCalledWith(identifier, 2025, 2));
   });
 
   it('renders the GroupPicks matrix with member columns and adapted picks', async () => {
