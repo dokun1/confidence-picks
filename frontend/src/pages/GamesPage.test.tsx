@@ -69,6 +69,23 @@ describe('GamesPage', () => {
     expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false');
   });
 
+  // GamesPage is a separate route from the group, so without this link the only
+  // way back to the picks grid is the browser's Back button.
+  it('links back to the group picks grid, naming the group', async () => {
+    renderPage();
+    await screen.findByText('Bills');
+
+    const back = await screen.findByRole('link', { name: /Back to/ });
+    expect(back).toHaveAttribute('href', '/group-details?group=sunday-squad&tab=picks');
+  });
+
+  it('omits the back link when no group is in the URL', async () => {
+    renderPage('/games');
+    await screen.findByText('Bills');
+
+    expect(screen.queryByRole('link', { name: /Back to/ })).not.toBeInTheDocument();
+  });
+
   it('renders one row per game', async () => {
     renderPage();
     expect(await screen.findByText('Bills')).toBeInTheDocument();

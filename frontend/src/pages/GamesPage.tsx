@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import Button from '../designsystem/components/Button';
 import Card from '../designsystem/components/Card';
@@ -323,8 +323,35 @@ export default function GamesPage() {
     }
   }
 
+  // Whichever group we arrived from — its friendly name once my-groups resolves,
+  // otherwise the identifier from the URL.
+  const backGroupName = groupId
+    ? (myGroups.find((g) => g.identifier === groupId)?.name ?? groupId)
+    : null;
+
   return (
     <div className="mx-auto max-w-4xl">
+      {/* Arriving here from a group is one-way otherwise: this page is a separate
+          route, so without this the only way back to the picks grid is the
+          browser's Back button. Mirrors GroupDetailsPage's "Back to Groups". */}
+      {groupId && (
+        <Link
+          to={`/group-details?group=${encodeURIComponent(groupId)}&tab=picks`}
+          className="mb-sm flex items-center text-secondary-600 transition-colors hover:text-secondary-900 dark:text-secondary-400 dark:hover:text-secondary-100"
+        >
+          <svg
+            className="mr-xs h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to {backGroupName}
+        </Link>
+      )}
+
       <h1 className="text-2xl font-bold text-secondary-900 dark:text-neutral-0">NFL Games</h1>
 
       {/* How scoring works — confidence pools assign each game a rank, so the
