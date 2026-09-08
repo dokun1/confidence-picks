@@ -59,6 +59,32 @@ export function formatCents(cents: number | null | undefined): string | null {
 }
 
 /**
+ * Reduce a memo to characters that survive any encoder: letters, digits and
+ * hyphens. Spaces become hyphens; everything else is dropped.
+ *
+ * This exists because of how Venmo actually delivers a note to its app. Tapped
+ * from a native context, iOS intercepts the universal link and Venmo receives
+ * our percent-encoding intact. Tapped from an in-app browser (a WKWebView
+ * inside another app), iOS does NOT intercept -- venmo.com loads, and its own
+ * JavaScript rebuilds a `venmo://paycharge?...` handoff URL using a
+ * form-urlencoder, which writes spaces as `+`. The Venmo app then shows that
+ * memo without form-decoding it, so the user reads "Fall+2026+dues".
+ *
+ * We cannot change Venmo's bridge, and we cannot detect which path a tap will
+ * take. So the note is made encoding-proof instead: a string that needs no
+ * escaping cannot be re-escaped wrongly. "Fall 2026 dues" -> "Fall-2026-dues",
+ * which renders identically down both paths.
+ */
+export function sanitizeNote(note: string | null | undefined): string | null {
+  if (!note) return null;
+  const cleaned = note
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, '-') // any run of other chars -> one hyphen
+    .replace(/^-+|-+$/g, '');       // no leading/trailing hyphens
+  return cleaned.length === 0 ? null : cleaned;
+}
+
+/**
  * Cents -> the plain decimal string both services expect in a URL ("20.00").
  * Deliberately not `formatCents`: neither service accepts a `$` or a thousands
  * separator in the amount.
@@ -80,12 +106,11 @@ export function buildVenmoLink(
   if (!user || amountCents === null || amountCents === undefined) return null;
 
   const params = [`txn=pay`, `amount=${centsToUrlAmount(amountCents)}`];
-  if (note && note.trim().length > 0) {
-    // Percent-encode spaces as %20, NOT `+`. Venmo's own docs show the `+`
-    // form, but the iOS app does not decode it -- a note sent as
-    // "Test+Group+1+dues" renders with the plus signs literally in the memo
-    // field. Verified against the app, 2026-09-07.
-    params.push(`note=${encodeURIComponent(note.trim())}`);
+  // sanitizeNote guarantees the memo needs no percent-encoding, which is the
+  // only way to survive Venmo's in-app-browser handoff intact. See its docstring.
+  const safeNote = sanitizeNote(note);
+  if (safeNote) {
+    params.push(`note=${safeNote}`);
   }
 
   return `https://venmo.com/${encodeURIComponent(user)}?${params.join('&')}`;

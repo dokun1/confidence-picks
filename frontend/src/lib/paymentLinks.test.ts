@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeHandle,
+  sanitizeNote,
   formatCents,
   buildVenmoLink,
   buildCashAppLink,
@@ -51,23 +52,58 @@ describe('formatCents', () => {
   });
 });
 
+// The memo must survive Venmo's in-app-browser handoff, which re-encodes the
+// query string with a form-urlencoder (spaces -> `+`) that the Venmo app then
+// renders literally. A note needing no escaping cannot be re-escaped wrongly.
+describe('sanitizeNote', () => {
+  it('turns spaces into hyphens so no encoder can mangle them', () => {
+    expect(sanitizeNote('Fall 2026 dues')).toBe('Fall-2026-dues');
+  });
+
+  it('collapses a run of punctuation and spaces into a single hyphen', () => {
+    expect(sanitizeNote('dues  &  fees')).toBe('dues-fees');
+  });
+
+  it('strips leading and trailing hyphens', () => {
+    expect(sanitizeNote('  !dues!  ')).toBe('dues');
+  });
+
+  it('leaves an already-safe note untouched', () => {
+    expect(sanitizeNote('Fall-2026-dues')).toBe('Fall-2026-dues');
+  });
+
+  it('returns null when nothing survives', () => {
+    expect(sanitizeNote('!!!')).toBeNull();
+    expect(sanitizeNote('')).toBeNull();
+    expect(sanitizeNote(null)).toBeNull();
+  });
+});
+
 describe('buildVenmoLink', () => {
   it('builds the documented web deeplink with amount in dollars', () => {
     const url = buildVenmoLink('dana-smith', 2000, 'Fall dues');
     expect(url).toBe(
-      'https://venmo.com/dana-smith?txn=pay&amount=20.00&note=Fall%20dues',
+      'https://venmo.com/dana-smith?txn=pay&amount=20.00&note=Fall-dues',
     );
+  });
+
+  // The whole point of sanitizing: the emitted URL must contain no percent
+  // escapes and no plus signs in the note, on any input.
+  it('emits a note that needs no encoding at all', () => {
+    const url = buildVenmoLink('dana', 2000, 'Q3 pool dues & fees');
+    const note = url!.split('note=')[1];
+    expect(note).toBe('Q3-pool-dues-fees');
+    expect(note).not.toContain('%');
+    expect(note).not.toContain('+');
   });
 
   it('accepts a handle pasted with the @ sigil', () => {
     expect(buildVenmoLink('@dana-smith', 500, 'x')).toContain('venmo.com/dana-smith');
   });
 
-  // Venmo's docs show `+` for spaces, but the iOS app renders `+` literally in
-  // the memo. %20 is what actually produces a clean note.
-  it('encodes spaces in the note as %20, never +', () => {
+  it('renders spaces in the note as hyphens', () => {
     const url = buildVenmoLink('dana', 100, 'Q3 pool dues');
-    expect(url).toContain('note=Q3%20pool%20dues');
+    expect(url).toContain('note=Q3-pool-dues');
     expect(url).not.toContain('+');
   });
 
@@ -85,10 +121,16 @@ describe('buildVenmoLink', () => {
     expect(buildVenmoLink('dana', null, 'x')).toBeNull();
   });
 
-  it('percent-encodes characters that would break the query string', () => {
+  it('drops characters that would need escaping in the query string', () => {
     const url = buildVenmoLink('dana', 100, 'dues & fees');
-    expect(url).toContain('%26');
-    expect(url).not.toContain(' & ');
+    expect(url).toContain('note=dues-fees');
+    expect(url).not.toContain('&fees');
+  });
+
+  it('omits the note when nothing survives sanitising', () => {
+    expect(buildVenmoLink('dana', 100, '!!!')).toBe(
+      'https://venmo.com/dana?txn=pay&amount=1.00',
+    );
   });
 });
 
