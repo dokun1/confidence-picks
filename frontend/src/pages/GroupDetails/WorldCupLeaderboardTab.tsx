@@ -7,6 +7,11 @@ import { peekCache, writeCache, wcCacheKeys } from '../../lib/worldCupCache';
 export interface WorldCupLeaderboardTabProps {
   /** Group identifier; the leaderboard fetch keys off the same `?group=` value. */
   identifier: string;
+  /**
+   * Forwarded from the group object: when true the pool is knockout-only and
+   * the two draw columns are hidden in TournamentLeaderboard.
+   */
+  knockoutOnly?: boolean;
 }
 
 // World Cup variant of the Leaderboard tab. Owns its own fetch (mirrors PicksTab)
@@ -18,7 +23,7 @@ export interface WorldCupLeaderboardTabProps {
 // cached per group and seeded synchronously on mount. A warm cache paints the
 // last-known standings instantly and refreshes silently in the background; only
 // a cold (first-ever) load shows the "Loading…" blank.
-export default function WorldCupLeaderboardTab({ identifier }: WorldCupLeaderboardTabProps) {
+export default function WorldCupLeaderboardTab({ identifier, knockoutOnly = false }: WorldCupLeaderboardTabProps) {
   const cacheKey = wcCacheKeys.leaderboard(identifier);
   const cached = peekCache<TournamentLeaderboardRow[]>(cacheKey);
   const [rows, setRows] = useState<TournamentLeaderboardRow[]>(cached ?? []);
@@ -60,7 +65,7 @@ export default function WorldCupLeaderboardTab({ identifier }: WorldCupLeaderboa
       ) : error ? (
         <p className="text-error-600 dark:text-error-400">{error}</p>
       ) : (
-        <TournamentLeaderboard rows={rows} />
+        <TournamentLeaderboard rows={rows} knockoutOnly={knockoutOnly} />
       )}
     </div>
   );

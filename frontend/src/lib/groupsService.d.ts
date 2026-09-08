@@ -23,8 +23,8 @@ export interface GroupDetail {
   createdAt?: string;
   poolType?: PoolType;
   // Dues. `duesEnabled` gates the rest; amounts are integer cents (USD).
-  // The three payment affordances are independent -- a group may use a Venmo
-  // handle, a Cash App cashtag, free-text instructions, or any combination.
+  // A group collects one way: `duesPaymentMethod` says which of the three
+  // value fields below is live.
   duesEnabled?: boolean;
   /** The group's single payment method: how members are told to pay. */
   duesPaymentMethod?: 'venmo' | 'cashapp' | 'other' | null;
@@ -37,6 +37,8 @@ export interface GroupDetail {
   duesCollectorUserId?: number | null;
   /** Denormalised collector display name, so the banner needs no extra fetch. */
   duesCollectorName?: string | null;
+  // World Cup 2026 sub-setting: group allows only knockout-stage picks.
+  knockoutOnly?: boolean;
 }
 
 export interface GroupMember {
@@ -68,6 +70,7 @@ export function createGroup(payload: {
   identifier: string;
   description?: string;
   poolType?: PoolType;
+  knockoutOnly?: boolean;
 }): Promise<void>;
 export function getGroup(identifier: string): Promise<GroupDetail>;
 export function getMembers(identifier: string): Promise<GroupMember[]>;

@@ -52,7 +52,10 @@ export async function getMyGroups() {
   createdByPictureUrl: g.createdByPictureUrl || null,
   // Forwarded so the picks pages can fan a single submit out to every group
   // of the same poolType ('save to all my World Cup groups' / NFL groups).
-  poolType: g.poolType || null
+  poolType: g.poolType || null,
+  // World Cup knockout-only sub-setting; lets the picks tab hide group-stage
+  // games even on the standalone /world-cup surface (no group object loaded).
+  knockoutOnly: Boolean(g.knockoutOnly)
   }));
 }
 
@@ -62,10 +65,13 @@ export async function createGroup(payload) {
     identifier: payload.identifier,
     description: payload.description,
     isPublic: true,
-    maxMembers: 40
+    maxMembers: payload.maxMembers ?? 50
   };
   // Only forward poolType when provided so existing NFL group creation is unchanged.
   if (payload.poolType) body.poolType = payload.poolType;
+  // knockoutOnly is a World Cup sub-setting; only forward it when truthy so NFL
+  // group creation is byte-for-byte unchanged (the server rejects it for NFL).
+  if (payload.knockoutOnly) body.knockoutOnly = true;
   const res = await authFetch(`${apiBase()}`, {
     method: 'POST',
     body: JSON.stringify(body)
@@ -89,7 +95,13 @@ export async function getGroup(identifier) {
   if (!res.ok) throw new Error('Failed to load group');
   const data = await res.json();
   // Map the backend snake_case pool_type onto a camelCase poolType property.
-  return { ...data, ...(data.pool_type != null ? { poolType: data.pool_type } : {}) };
+  // The Group model serializes camelCase (poolType/knockoutOnly), but tolerate a
+  // raw snake_case row too (some callers/tests stub the bare DB shape).
+  return {
+    ...data,
+    ...(data.pool_type != null ? { poolType: data.pool_type } : {}),
+    ...(data.knockout_only != null ? { knockoutOnly: data.knockout_only } : {}),
+  };
 }
 
 export async function getMembers(identifier) {
@@ -191,6 +203,12 @@ export async function updateGroup(identifier, updates) {
   if (res.status === 400) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Invalid group update');
+  }
+  // 409: the new member limit is below the current member count. Surface the
+  // server's message verbatim so the admin sees that members must leave first.
+  if (res.status === 409) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Member limit is below the current member count; members must leave first');
   }
   if (!res.ok) throw new Error('Failed to update group');
   return await res.json();

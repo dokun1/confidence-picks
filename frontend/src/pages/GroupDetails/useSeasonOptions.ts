@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCurrentNFLSeason } from '../../lib/nflSeasonUtils.js';
+import { getCurrentNFLSeason, isNFLSeasonUnderway } from '../../lib/nflSeasonUtils.js';
 import { getPickSeasons } from '../../lib/picksService.js';
 
 export interface SeasonOptions {
@@ -16,11 +16,17 @@ export interface SeasonOptions {
  * Resolve the group's selectable seasons and the default selection for the
  * Leaderboard and Picks tabs.
  *
- * The default is the newest season that actually has pick data — NOT the
- * current NFL season. During the offseason getCurrentNFLSeason() already
- * points at the upcoming (empty) season, which is exactly how old groups lost
- * their picks and scores; defaulting to the latest season with data keeps the
- * history visible while still offering the current season in the dropdown.
+ * Once the current season is under way (September-February) that season is the
+ * default, even before anyone has picked — a group is a fresh slate each year,
+ * so in Week 1 members should land on the new season rather than on last year's
+ * final standings. The empty state explains the lack of points, and prior
+ * seasons stay one dropdown click away.
+ *
+ * In the offseason (March-August) the current season exists on the calendar but
+ * has no games and no picks. Defaulting to it there is exactly how old groups
+ * used to look wiped, so out of season we fall back to the newest season that
+ * actually has data.
+ *
  * The seasons fetch is best-effort: on failure we fall back to the current
  * season so the tab still renders.
  */
@@ -46,7 +52,9 @@ export function useSeasonOptions(identifier: string): SeasonOptions {
       if (cancelled) return;
       const merged = [...new Set([currentSeason, ...withData])].sort((a, b) => b - a);
       setOptions(merged);
-      setSeason(withData.length > 0 ? Math.max(...withData) : currentSeason);
+      const preferCurrent =
+        withData.includes(currentSeason) || isNFLSeasonUnderway() || withData.length === 0;
+      setSeason(preferCurrent ? currentSeason : Math.max(...withData));
       setResolved(true);
     })();
     return () => {

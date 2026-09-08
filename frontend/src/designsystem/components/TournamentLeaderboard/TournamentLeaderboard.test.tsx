@@ -21,6 +21,7 @@ function makeRow(overrides: Partial<TournamentLeaderboardRow> & Pick<TournamentL
     rank: 1,
     tied: false,
     points: 0,
+    bonus_points: 0,
     wins_correct: 0,
     losses: 0,
     draws_correct: 0,
@@ -33,6 +34,7 @@ const ZARA = makeRow({
   userId: 101,
   name: 'Zara',
   points: 40,
+  bonus_points: 5,
   wins_correct: 11,
   losses: 22,
   draws_correct: 33,
@@ -43,6 +45,7 @@ const MILO = makeRow({
   userId: 102,
   name: 'Milo',
   points: 50,
+  bonus_points: 8,
   wins_correct: 13,
   losses: 24,
   draws_correct: 35,
@@ -53,6 +56,7 @@ const ADA = makeRow({
   userId: 103,
   name: 'Ada',
   points: 60,
+  bonus_points: 12,
   wins_correct: 15,
   losses: 26,
   draws_correct: 37,
@@ -138,6 +142,59 @@ describe('TournamentLeaderboard', () => {
     });
   });
 
+  describe('Bonus column', () => {
+    it('renders the Bonus column header', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      expect(screen.getByRole('columnheader', { name: 'Bonus' })).toBeInTheDocument();
+    });
+
+    it('renders bonus_points for each row in the desktop table', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      ROWS.forEach(row => {
+        const tr = tableRowFor(row.name);
+        expect(within(tr).getByText(String(row.bonus_points))).toBeInTheDocument();
+      });
+    });
+
+    it("keeps each member's bonus in their own row", () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      const zaraRow = tableRowFor('Zara');
+      expect(within(zaraRow).getByText(String(ZARA.bonus_points))).toBeInTheDocument();
+      expect(within(zaraRow).queryByText(String(MILO.bonus_points))).not.toBeInTheDocument();
+    });
+  });
+
+  describe('knockoutOnly prop — draw columns', () => {
+    it('shows draw column headers when knockoutOnly is false (default)', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      expect(screen.getByRole('columnheader', { name: 'Draws Correct' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Draws Incorrect' })).toBeInTheDocument();
+    });
+
+    it('hides both draw column headers when knockoutOnly is true', () => {
+      render(<TournamentLeaderboard rows={ROWS} knockoutOnly />);
+      expect(screen.queryByRole('columnheader', { name: 'Draws Correct' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('columnheader', { name: 'Draws Incorrect' })).not.toBeInTheDocument();
+    });
+
+    it('still shows Wins Correct, Losses, Points, and Bonus when knockoutOnly is true', () => {
+      render(<TournamentLeaderboard rows={ROWS} knockoutOnly />);
+      expect(screen.getByRole('columnheader', { name: 'Points' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Wins Correct' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Losses' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Bonus' })).toBeInTheDocument();
+    });
+
+    it('still renders draw values in each row when knockoutOnly is false', () => {
+      render(<TournamentLeaderboard rows={ROWS} />);
+      ROWS.forEach(row => {
+        const tr = tableRowFor(row.name);
+        expect(within(tr).getByText(String(row.draws_correct))).toBeInTheDocument();
+        expect(within(tr).getByText(String(row.draws_incorrect))).toBeInTheDocument();
+      });
+    });
+  });
+
   describe('mobile list — card-free stacked layout', () => {
     it('renders one list item per entry, in the supplied order', () => {
       render(<TournamentLeaderboard rows={ROWS} />);
@@ -158,6 +215,20 @@ describe('TournamentLeaderboard', () => {
         expect(within(li).getByText(String(row.draws_correct))).toBeInTheDocument();
         expect(within(li).getByText(String(row.draws_incorrect))).toBeInTheDocument();
       });
+    });
+
+    it('chip grid columns match the chip count — 5 in a regular pool, 3 when knockout-only', () => {
+      const { rerender } = render(<TournamentLeaderboard rows={ROWS} />);
+      // Regular: 4 tiebreaker chips + Bonus = 5 chips → an even single row.
+      const grid = mobileItemFor(ROWS[0].name).querySelector('div.grid');
+      expect(grid?.className).toMatch(/grid-cols-5/);
+      expect(grid?.children).toHaveLength(5);
+
+      rerender(<TournamentLeaderboard rows={ROWS} knockoutOnly />);
+      // Knockout-only: 2 chips (draws hidden) + Bonus = 3 chips → grid-cols-3.
+      const koGrid = mobileItemFor(ROWS[0].name).querySelector('div.grid');
+      expect(koGrid?.className).toMatch(/grid-cols-3/);
+      expect(koGrid?.children).toHaveLength(3);
     });
 
     it('is a card-free list (no bordered card wrapper)', () => {

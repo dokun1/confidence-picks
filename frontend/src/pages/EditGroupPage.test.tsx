@@ -82,15 +82,39 @@ describe('EditGroupPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Create Group' }));
     });
 
-    // The immutable identifier is the first arg; the payload carries only the
-    // mutable name/description (no identifier).
+    // The immutable identifier is the first arg; the payload carries the mutable
+    // name/description plus the member limit (defaulting to 50 here since the
+    // fixture group has no maxMembers), and never the identifier.
     expect(mockUpdateGroup).toHaveBeenCalledWith('test-group', {
       name: 'Renamed Group',
       description: 'Updated description',
+      maxMembers: 50,
     });
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/groups');
     });
+  });
+
+  it('reflects a World Cup knockout group: WC pool type + knockout, both locked', async () => {
+    // Regression: the edit form used to omit poolType/knockoutOnly from
+    // initialValues, so a World Cup group showed "NFL Weekly" by default.
+    mockGetGroup.mockResolvedValue({
+      name: 'LTK World Cup Knockout Picks',
+      identifier: 'test-group',
+      description: '',
+      maxMembers: 200,
+      poolType: 'world_cup_2026',
+      knockoutOnly: true,
+    });
+    renderPage();
+
+    const select = await screen.findByLabelText('Pool Type');
+    expect(select).toHaveValue('world_cup_2026');
+    expect(select).toBeDisabled();
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
   });
 
   it('renders a not-found message and no form when getGroup rejects', async () => {

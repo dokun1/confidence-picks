@@ -179,6 +179,131 @@ exported (single-stage callers/tests), but no component fans out anymore.
   applies there too. The NFL `LeaderboardTab` has no cache yet, so the
   parallel-prefetch optimization is currently World-Cup-only.
 
+## Feature: "knockout stage picks only" WC groups (2026-06)
+
+A `world_cup_2026` sub-setting, chosen at group creation and **immutable** (like
+`pool_type`). When on, the group only allows picks on knockout-stage games; the
+group stage (`stage = 'group'`) is hidden in the UI and rejected server-side.
+Scoring/leaderboard are unchanged — they already sum per-match over whatever picks
+exist.
+
+- **Column:** `groups.knockout_only BOOLEAN NOT NULL DEFAULT false`. Defined in
+  `schema.sql` (CREATE + idempotent `DO $$` ALTER) and `backend/scripts/addWorldCupColumns.js`.
+- **Deploy (automatic, self-healing):** prod runs with `INIT_DB` unset, so neither
+  `schema.sql` nor the migration script runs on a normal deploy — and `create()`'s
+  INSERT names `knockout_only`, so a missing column would 500 *every* new group.
+  `Group.ensureKnockoutOnlyColumn()` closes this the same way `ensureChatReadsSchema`
+  / `GroupInvite.ensureLinkInviteSchema` do: `create()` calls it first, it adds the
+  column (`ADD COLUMN IF NOT EXISTS`) on the first group creation after deploy, then
+  a static `Group._knockoutOnlyColumnEnsured` latch makes every later create a
+  zero-query no-op ("back to normal"). Reads already tolerate a missing column
+  (`SELECT g.*` → undefined → false). `INIT_DB=true` and the migration script remain
+  as explicit/ops alternatives but are no longer required.
+- **Model:** `Group` carries `knockoutOnly` (camelCase) through the constructor,
+  `create()`, `findByIdentifier()`, `getUserGroups()`. Left out of `update()`'s
+  `allowedFields` on purpose (immutable).
+- **Backend enforcement:** `POST /api/groups` rejects `knockoutOnly` when
+  `poolType !== 'world_cup_2026'` (400). Both WC pick routes in `worldCupPicks.js`
+  (self + admin-override) read `stage` back from the games row and reject any
+  group-stage pick via `groupStagePickViolations()` (400 `{ error, gameIds }`).
+- **Frontend:** `CreateGroupForm` shows the checkbox only for a WC pool (cleared
+  on switch to NFL). `WorldCupPicksTab` takes a `knockoutOnly` prop
+  (`GroupDetailsPage` passes `group.knockoutOnly`) and also derives it from its own
+  `getMyGroups` fetch as a fallback for the standalone `/world-cup` page; it filters
+  `stage === 'group'` matches out of `visibleMatches` before render/count.
+- **Test seams:** several exact-payload assertions
+  (`CreateGroupForm.test.tsx`, `CreateGroupPage.test.tsx`) now include
+  `knockoutOnly`. WC-pick-route tests stub `Group.findByIdentifier` to return
+  `{ ..., knockoutOnly: true }` and add `stage` to the `FROM games` row mock.
+
+## Fixes: WC needs-pick banner + stale knockout matchups (2026-06)
+
+Two independent bugs surfaced by a knockout-only group; fixed together.
+
+**1. Banner/dot over-counts in a knockout-only group.** The leaderboard banner
+(`GroupDetailsPage`) and the groups-list dot (`GroupsPage`) both call
+`countNeedsPick(matches, picks, now)` ([wcNeedsPick.ts](frontend/src/lib/wcNeedsPick.ts)),
+which counted the *unfiltered* slate — so a knockout-only group counted the
+remaining pickable **group-stage** games it can't actually pick (banner said 13,
+Picks tab said 1). Both screens already share the same `needsPick`/`teamsDecided`
+predicate; the only divergence was the missing stage filter. Fix: `countNeedsPick`
+takes an optional `knockoutOnly` arg that drops `stage === 'group'` before counting;
+both call sites pass the group's flag (`group?.knockoutOnly` / `g.knockoutOnly`).
+Ongoing pools pass `false` → unchanged.
+
+**2. Resolved knockout matchups served stale (placeholders).** Two compounding
+backend causes, both pre-existing:
+- `Game.isDifferentFrom()` ([Game.js](backend/src/models/Game.js)) compared
+  date/status/score/period/clock/statusDetail/eventCount but **not team identity**,
+  so when ESPN swaps a bracket placeholder ("Third Place Group B/E/F/I/J", abbr
+  `3RD`, `isActive:false`) for the resolved team (Bosnia/`BIH`/`isActive:true`) with
+  no other field changing, the cache update gate never fired. Fix: also diff a
+  team-identity fingerprint over **stable** fields only — `id | abbreviation |
+  isActive` — for home and away. Volatile fields (record/form/logo/odds) are
+  deliberately excluded so NFL/group-stage rows never churn.
+- `GameService.isStageCacheFresh()` served future SCHEDULED games from the DB for up
+  to 24h without consulting ESPN, so even with the diff fix nothing re-fetched.
+  Fix: a **proactive, throttled** trigger — a knockout stage still holding
+  placeholder participants (`hasUnresolvedKnockoutParticipants` /
+  `isPlaceholderTeam`, mirroring the frontend `teamDecided` rule) re-checks ESPN at
+  most once per `PLACEHOLDER_REFRESH_THROTTLE_MS` (5 min), tracked per stage in the
+  in-process `_lastStageFetchAt` map (set in `getWorldCupStage` whenever ESPN is
+  fetched). `isStageCacheFresh` now takes `(cachedSet, stage, now)`; the old
+  2-arg/`stage=null` calls skip the placeholder branch (group stage never has
+  placeholders anyway). Bounds ESPN to traffic-independent ~1 call/stage/5min.
+
+Both fixes apply to ongoing AND knockout-only World Cup groups (the stale-matchup
+fix is at the cache layer, shared by all WC pools). `?refresh=true` / `?force=1` on
+the stage routes still force-bypass the cache.
+
+## SEV: penalty-shootout knockout scored as a draw (2026-06)
+
+**Symptom:** Germany 1-1 Paraguay went to PKs (Paraguay advanced). A user who
+picked Germany saw the match as a draw and a partial-credit **"~ +1"** badge,
+when a knockout loss should be **0**.
+
+**Root cause — frontend only (the visible bug).** A PK shootout has a *level*
+regulation scoreline (1-1); the advancing side is carried by `winnerTeamId`, NOT
+the score. The backend scores correctly (`SoccerScoringService.deriveActualResult`
+already prefers `winnerTeamId` for knockouts), but the frontend derived the result
+purely from the scoreline: `wcGamesView.outcomeOf()` read `homeScore`/`awayScore`
+only, and `worldCupBrowseAdapter.toBrowseGames()` never even carried `winnerTeamId`
+onto `BrowseGame`. So a 1-1 PK game read as `'draw'` → `resultShade('home','draw')`
+→ `'partial'` → the "~ +1" badge (MatchListCard line ~59), and the Correct/Incorrect
+filter chips (`pickVerdict`) were wrong too. **The displayed badge is frontend-
+derived, not the server leaderboard value** — so the user's actual standings were
+only wrong if the backend `winnerTeamId` was itself unresolved (see below).
+
+**Fix (committed):**
+- **Frontend:** `BrowseGame.winner?: 'home'|'away'` (the advancing side), mapped in
+  `toBrowseGames` from `m.winnerTeamId` vs `homeTeam.id`/`awayTeam.id` (string-
+  compared). `outcomeOf` is now knockout-aware — trusts `winner` over the
+  scoreline; an unresolved level knockout returns `null` (undecided, never
+  `'draw'`); group stage unchanged. This **mirrors backend `deriveActualResult`**
+  exactly. `outcomeOf`'s `Pick<>` now needs `isKnockout`+`winner` (callers pass full
+  `BrowseGame`, so only tests changed).
+- **Backend hardening (defensive + enables auto-recalc):**
+  1. `winnerHomeAwayFromESPN` now falls back to `competitors[].shootoutScore` (higher
+     PK tally advanced) when ESPN's `winner` flag is absent — the only other PK
+     signal, in case ESPN lags the flag at finalization.
+  2. New `hasUnresolvedKnockoutWinner(cachedSet, stage)` + an `isStageCacheFresh`
+     trigger (same per-stage throttle as the placeholder refresh): a FINAL knockout
+     with a level score and `winnerTeamId == null` re-checks ESPN instead of serving
+     the unscored row for 24h. Recovering the winner bumps the row's `last_updated`.
+
+**Recalculation is automatic — no script.** `WorldCupLeaderboardService.getLeaderboardVersion`
+keys the snapshot cache on `MAX(last_updated)` among FINAL `world_cup` games. The
+moment a game row's `winnerTeamId` is corrected (self-heal re-fetch persists it,
+bumping `last_updated`), the version string changes and **every group's leaderboard
+recomputes from scratch on next read**. If `winnerTeamId` was already correct, the
+self-heal never fires and the board was already right — only the frontend display
+needed the fix.
+
+**Mental model:** the advancing team on a knockout is `winnerTeamId`, never the
+1-1 scoreline. Any code that asks "who won?" from a WC match must consult it for
+knockouts — frontend `outcomeOf` and backend `deriveActualResult` are the two
+seams, and they must agree.
+
 ## Commands
 
 ```bash

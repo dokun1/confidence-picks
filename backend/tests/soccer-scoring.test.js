@@ -157,6 +157,7 @@ describe('aggregateUserScore', () => {
       losses: 1,
       draws_correct: 1,
       draws_incorrect: 1,
+      bonus_points: 0,
     });
     // Buckets partition the decided picks (5 decided here).
     assert.strictEqual(row.wins_correct + row.losses + row.draws_correct + row.draws_incorrect, 5);
@@ -164,7 +165,7 @@ describe('aggregateUserScore', () => {
 
   test('empty input yields a zeroed row', () => {
     assert.deepStrictEqual(aggregateUserScore(), {
-      points: 0, wins_correct: 0, losses: 0, draws_correct: 0, draws_incorrect: 0,
+      points: 0, wins_correct: 0, losses: 0, draws_correct: 0, draws_incorrect: 0, bonus_points: 0,
     });
   });
 });

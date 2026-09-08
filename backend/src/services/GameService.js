@@ -158,13 +158,90 @@ export class GameService {
   // group stage is the only World Cup phase where a 'draw' is a terminal result.
   static KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
 
+  // Bracket-placeholder detection, mirroring the frontend's teamDecided rule
+  // (wcGamesView.ts). A knockout slot is unresolved until the bracket decides it;
+  // ESPN seeds it with isActive:false, a digit-bearing abbreviation (3RD, 1G, 2K),
+  // and a qualification-path name ("Third Place Group …", "Group G Winner").
+  static PLACEHOLDER_NAME = /\b(winner|runner-?up|loser|place|group|tbd)\b|\//i;
+
+  static isPlaceholderTeam(t) {
+    if (!t) return true;
+    if (t.isActive === false) return true;
+    if (typeof t.abbreviation === 'string' && /\d/.test(t.abbreviation)) return true;
+    if (typeof t.name === 'string' && GameService.PLACEHOLDER_NAME.test(t.name)) return true;
+    return false;
+  }
+
+  // Does this knockout-stage slate still hold an unresolved matchup? Only knockout
+  // stages can (the group stage always has two real teams), so a non-knockout
+  // stage is never flagged.
+  static hasUnresolvedKnockoutParticipants(cachedSet, stage) {
+    if (!GameService.KNOCKOUT_STAGES.has(stage)) return false;
+    return cachedSet.some(
+      (g) => GameService.isPlaceholderTeam(g.homeTeam) || GameService.isPlaceholderTeam(g.awayTeam),
+    );
+  }
+
+  // Does this knockout slate hold a FINAL match that advanced nobody? A knockout
+  // always produces one advancing team, so a completed knockout with a level
+  // regulation score (e.g. a 1-1 penalty shootout) and no resolved winnerTeamId
+  // is stuck: the scoreline can't break the tie and the PK winner signal (ESPN's
+  // competitor.winner / shootoutScore) lives only on the live event, not the
+  // cached row. Such a row scores nobody (deriveActualResult → undecided), so we
+  // re-check ESPN to recover the advancing side. Group/NFL rows and any knockout
+  // with a clear regulation winner are never flagged. Mirrors the frontend's
+  // outcomeOf "unresolved knockout" branch.
+  static hasUnresolvedKnockoutWinner(cachedSet, stage) {
+    if (!GameService.KNOCKOUT_STAGES.has(stage)) return false;
+    return cachedSet.some(
+      (g) =>
+        (g.status === 'FINAL' || g.completed === true) &&
+        (g.winnerTeamId == null) &&
+        Number(g.homeScore) === Number(g.awayScore),
+    );
+  }
+
+  // How often a placeholder-bearing knockout stage may re-check ESPN. Bracket
+  // slots resolve as OTHER stages' games finish, which this stage's own rows can't
+  // signal (their date/status/score don't move when only the matchup resolves), so
+  // we poll — but throttled per stage so a tournament-long wall of placeholders
+  // can't hammer ESPN on every leaderboard/picks load.
+  static PLACEHOLDER_REFRESH_THROTTLE_MS = 5 * 60 * 1000;
+
+  // Per-stage timestamp of the last ESPN fetch, used only to throttle the
+  // placeholder-resolution refresh above. In-process (per serverless instance);
+  // a cold start just costs one extra fetch, which is fine.
+  static _lastStageFetchAt = new Map();
+
   // Decide whether a persisted World Cup stage slate can be served without an
   // ESPN refresh. Mirrors getGamesForWeek's freshness rules: in-progress games
   // tolerate a cache up to 60s old, SCHEDULED games at/past their start time
   // (with a 2-minute look-ahead) force a refresh unless we refreshed within the
   // last minute, and otherwise the 24h isStale() rule applies.
-  static isStageCacheFresh(cachedSet, now = Date.now()) {
+  static isStageCacheFresh(cachedSet, stage = null, now = Date.now()) {
     if (cachedSet.length === 0) return false;
+
+    // Proactive matchup-resolution refresh: a knockout stage still holding
+    // placeholder participants re-checks ESPN so newly-decided bracket matchups
+    // (e.g. "Third Place Group B" → "Bosnia") surface promptly instead of only
+    // after the 24h staleness TTL. Throttled per stage so an all-placeholder
+    // bracket early in the tournament can't refetch every stage on every request.
+    if (GameService.hasUnresolvedKnockoutParticipants(cachedSet, stage)) {
+      const lastFetch = GameService._lastStageFetchAt.get(stage) ?? 0;
+      if (now - lastFetch >= GameService.PLACEHOLDER_REFRESH_THROTTLE_MS) return false;
+    }
+
+    // Proactive winner-resolution refresh: a FINAL knockout that advanced nobody
+    // (level score, null winnerTeamId — e.g. a penalty shootout whose winner flag
+    // wasn't captured at finalization) re-checks ESPN to recover the advancing
+    // side, since the PK signal isn't recoverable from the cached row. Throttled
+    // per stage with the same budget as the placeholder refresh so it can't hammer
+    // ESPN. Recovering the winner bumps the row's last_updated, which busts the
+    // leaderboard snapshot cache and recomputes every group's board for this game.
+    if (GameService.hasUnresolvedKnockoutWinner(cachedSet, stage)) {
+      const lastFetch = GameService._lastStageFetchAt.get(stage) ?? 0;
+      if (now - lastFetch >= GameService.PLACEHOLDER_REFRESH_THROTTLE_MS) return false;
+    }
 
     // One-time events backfill: a started match (IN_PROGRESS or FINAL) whose
     // events column is still NULL was cached before goal/card parsing existed.
@@ -213,7 +290,7 @@ export class GameService {
     try {
       if (!forceRefresh) {
         const cachedSet = await Game.findByLeagueStage('world_cup', stage);
-        if (GameService.isStageCacheFresh(cachedSet)) {
+        if (GameService.isStageCacheFresh(cachedSet, stage)) {
           for (const g of cachedSet) {
             // Persisted winner wins; recompute from scores for rows written
             // before winner_team_id existed (regulation results only — a PK
@@ -225,6 +302,10 @@ export class GameService {
       }
 
       const service = getESPNService();
+      // Record the fetch up front so the placeholder-resolution throttle counts
+      // from when we asked ESPN, not when it answered — and a failed fetch still
+      // backs off rather than retrying on every request.
+      GameService._lastStageFetchAt.set(stage, Date.now());
       const espnEvents = await service.fetchSoccerWeek('fifa.world', stage);
       const cachedById = await Game.findByESPNIds(espnEvents.map(e => e.id));
 
@@ -286,10 +367,26 @@ export class GameService {
   // competitors[].winner === true on the advancing team — notably on PK
   // shootouts, where the 90' scoreline is level and is the only signal of who
   // went through. Returns 'home' | 'away' | null.
+  //
+  // Fallback: when no competitor carries winner === true (ESPN occasionally lags
+  // the flag on a just-finalized shootout while still publishing the shootout
+  // tally), resolve from competitors[].shootoutScore — the side with the higher
+  // penalty tally advanced. This is the only other authoritative PK signal and it
+  // keeps a level-score knockout from persisting with a null winnerTeamId. A level
+  // shootout tally (or none) yields null, unchanged.
   static winnerHomeAwayFromESPN(espnEvent) {
     const competitors = espnEvent?.competitions?.[0]?.competitors || [];
     const flagged = competitors.find(c => c.winner === true);
-    return flagged ? flagged.homeAway : null;
+    if (flagged) return flagged.homeAway;
+
+    const home = competitors.find(c => c.homeAway === 'home');
+    const away = competitors.find(c => c.homeAway === 'away');
+    const homePk = Number(home?.shootoutScore);
+    const awayPk = Number(away?.shootoutScore);
+    if (Number.isFinite(homePk) && Number.isFinite(awayPk) && homePk !== awayPk) {
+      return homePk > awayPk ? 'home' : 'away';
+    }
+    return null;
   }
 
   // Persist a freshly-fetched stage game, but never let a write failure take down

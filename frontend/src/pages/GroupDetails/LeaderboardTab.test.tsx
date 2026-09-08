@@ -6,13 +6,17 @@ import type { ScoreboardResponse } from '../../lib/picksService';
 // The "current" season is 2026 (offseason) while the group's pick data lives in
 // 2025 — the regression scenario: the leaderboard must default to the season
 // with data so old groups keep their scores visible.
-vi.mock('../../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2026) }));
+vi.mock('../../lib/nflSeasonUtils.js', () => ({
+  getCurrentNFLSeason: vi.fn(() => 2026),
+  isNFLSeasonUnderway: vi.fn(() => true),
+}));
 vi.mock('../../lib/picksService.js', () => ({
   getPickSeasons: vi.fn(),
   getScoreboard: vi.fn(),
 }));
 
 import { getPickSeasons, getScoreboard } from '../../lib/picksService.js';
+import { isNFLSeasonUnderway } from '../../lib/nflSeasonUtils.js';
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const mockGetScoreboard = vi.mocked(getScoreboard);
 
@@ -44,13 +48,26 @@ describe('LeaderboardTab', () => {
     await screen.findAllByText('Alice');
   });
 
-  it('defaults to the latest season with pick data and fetches its scoreboard', async () => {
+  it('defaults to the current season once it is under way, keeping prior seasons selectable', async () => {
+    // A new season is a fresh slate: members should land on it in week 1 rather
+    // than on last season's final standings, which are one dropdown click away.
+    render(<LeaderboardTab identifier={identifier} />);
+    await screen.findAllByText('Alice');
+    expect(mockGetScoreboard).toHaveBeenCalledWith(identifier, { season: 2026, seasonType: 2 });
+    const seasonSelect = screen.getByLabelText('Select season') as HTMLSelectElement;
+    expect(seasonSelect.value).toBe('2026');
+    expect(Array.from(seasonSelect.options).map((o) => o.value)).toEqual(['2026', '2025']);
+  });
+
+  it('falls back to the latest season with data during the offseason', async () => {
+    // March-August: the current season exists on the calendar but has no games.
+    // Landing there is what used to make old groups look wiped.
+    vi.mocked(isNFLSeasonUnderway).mockReturnValueOnce(false);
     render(<LeaderboardTab identifier={identifier} />);
     await screen.findAllByText('Alice');
     expect(mockGetScoreboard).toHaveBeenCalledWith(identifier, { season: 2025, seasonType: 2 });
     const seasonSelect = screen.getByLabelText('Select season') as HTMLSelectElement;
     expect(seasonSelect.value).toBe('2025');
-    expect(Array.from(seasonSelect.options).map((o) => o.value)).toEqual(['2026', '2025']);
   });
 
   it('renders standings sorted by total points with a weekly breakdown', async () => {

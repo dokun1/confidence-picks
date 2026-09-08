@@ -446,5 +446,37 @@ function generateKnockoutSlate({ baseDate, year = 2026 }) {
     winner: 'home'
   });
 
-  return [r16Match, pkMatch, finalMatch];
+  // Match 4 (SCHEDULED): Round of 16, upcoming. FRA vs CAN — teams assigned, not yet
+  // kicked off. A local tester can open the Picks tab and enter a score prediction.
+  // Date is anchored a few days in the future relative to KO_OPEN so it's always
+  // upcoming regardless of which anchor day the test or server uses.
+  const sched1Date = new Date(Date.UTC(year, 6, 3, 19, 0, 0)); // Jul 3
+  const schedMatch1 = buildMockWorldCupEvent({
+    id: '760614',
+    date: sched1Date,
+    homeTeam: WORLD_CUP_2026_TEAMS.FRA,
+    awayTeam: WORLD_CUP_2026_TEAMS.CAN,
+    homeScore: 0,
+    awayScore: 0,
+    status: 'scheduled',
+    stage: 'r16',
+    season: year
+  });
+
+  // Match 5 (SCHEDULED): Quarter-final, upcoming. ARG vs ENG — another editable
+  // score-prediction candidate, different stage (qf) for variety.
+  const sched2Date = new Date(Date.UTC(year, 6, 5, 22, 0, 0)); // Jul 5
+  const schedMatch2 = buildMockWorldCupEvent({
+    id: '760615',
+    date: sched2Date,
+    homeTeam: WORLD_CUP_2026_TEAMS.ARG,
+    awayTeam: WORLD_CUP_2026_TEAMS.ENG,
+    homeScore: 0,
+    awayScore: 0,
+    status: 'scheduled',
+    stage: 'qf',
+    season: year
+  });
+
+  return [r16Match, pkMatch, finalMatch, schedMatch1, schedMatch2];
 }

@@ -10,7 +10,19 @@ export interface CreateGroupFormValues {
   identifier: string;
   description: string;
   poolType: PoolType;
+  /**
+   * World Cup 2026 sub-setting. When true, the group only allows picks on
+   * knockout-stage games. Always false unless poolType is 'world_cup_2026'.
+   */
+  knockoutOnly: boolean;
+  /** Maximum members allowed in the group. Bounded to [2, 500]. */
+  maxMembers: number;
 }
+
+/** Absolute member-limit bounds, mirrored on the server. */
+const MEMBER_LIMIT_MIN = 2;
+const MEMBER_LIMIT_MAX = 500;
+const MEMBER_LIMIT_DEFAULT = 50;
 
 export interface CreateGroupFormProps {
   /**
@@ -31,6 +43,7 @@ interface FormErrors {
   name?: string;
   identifier?: string;
   description?: string;
+  maxMembers?: string;
 }
 
 interface ToastState {
@@ -54,7 +67,11 @@ function slugifyName(name: string): string {
  * CreateGroupForm is a fully controlled form for creating (or editing) a group.
  *
  * - Auto-generates the Group ID slug from the name unless the user manually edits it.
- * - If `initialValues.identifier` is provided the Group ID field is locked.
+ * - Edit mode is signalled by `initialValues.identifier` being present — the same
+ *   single signal already used to lock the Group ID. In edit mode the Group ID
+ *   AND the immutable pool fields (pool type, knockout-only) are locked, because
+ *   the update route does not accept changes to any of them. (The only two callers
+ *   are CreateGroupPage — no initialValues — and EditGroupPage — identifier set.)
  * - Manages async submission with an internal loading state.
  * - Displays success/error feedback via InlineToast anchored above the submit button.
  */
@@ -67,6 +84,19 @@ export default function CreateGroupForm({
   const [identifier, setIdentifier] = useState(initialValues?.identifier ?? '');
   const [description, setDescription] = useState(initialValues?.description ?? '');
   const [poolType, setPoolType] = useState<PoolType>(initialValues?.poolType ?? 'nfl_weekly');
+  const [knockoutOnly, setKnockoutOnly] = useState<boolean>(initialValues?.knockoutOnly ?? false);
+  // Stored as a string so the number input can be edited freely (incl. transient
+  // empty/partial values); parsed + bounds-checked on submit.
+  const [maxMembers, setMaxMembers] = useState<string>(
+    String(initialValues?.maxMembers ?? MEMBER_LIMIT_DEFAULT)
+  );
+  // The knockout-only setting is meaningful only for World Cup pools, so it lives
+  // behind the pool-type choice and rides along on it.
+  const isWorldCup = poolType === 'world_cup_2026';
+  // Edit mode uses the same single signal as the Group ID lock below: a supplied
+  // identifier. In edit mode pool type + knockout-only are immutable (the update
+  // route ignores them), so the form locks those controls too.
+  const isEditMode = !!initialValues?.identifier;
   const [identifierManuallyEdited, setIdentifierManuallyEdited] = useState(
     !!initialValues?.identifier
   );
@@ -111,6 +141,16 @@ export default function CreateGroupForm({
       newErrors.description = 'Description must be 200 characters or less';
     }
 
+    const parsedMax = Number(maxMembers);
+    if (
+      maxMembers.trim() === '' ||
+      !Number.isInteger(parsedMax) ||
+      parsedMax < MEMBER_LIMIT_MIN ||
+      parsedMax > MEMBER_LIMIT_MAX
+    ) {
+      newErrors.maxMembers = `Member limit must be a whole number between ${MEMBER_LIMIT_MIN} and ${MEMBER_LIMIT_MAX}`;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -121,7 +161,9 @@ export default function CreateGroupForm({
 
     setLoading(true);
     try {
-      await onSubmit({ name, identifier, description, poolType });
+      // knockoutOnly only travels with a World Cup pool; force it off otherwise
+      // so a stale toggle from a since-changed pool type can never leak through.
+      await onSubmit({ name, identifier, description, poolType, knockoutOnly: isWorldCup && knockoutOnly, maxMembers: Number(maxMembers) });
       setToast({ open: true, message: 'Group created!', variant: 'success' });
     } catch (err) {
       setToast({
@@ -190,6 +232,40 @@ export default function CreateGroupForm({
 
         <div>
           <label
+            htmlFor="max-members"
+            className="block text-sm font-medium text-secondary-700 dark:text-secondary-200 mb-1"
+          >
+            Member limit
+          </label>
+          {/* Bounds are enforced by validateForm (consistent with the other
+              fields), not native min/max — native constraint validation would
+              silently block submit before our inline error could show. */}
+          <input
+            id="max-members"
+            type="number"
+            inputMode="numeric"
+            // step="any" disables native stepMismatch validation (default step=1
+            // would block submit on a non-integer like 12.5 before validateForm's
+            // integer check could surface the inline message).
+            step="any"
+            value={maxMembers}
+            onChange={(e) => setMaxMembers(e.target.value)}
+            disabled={loading}
+            aria-invalid={!!errors.maxMembers}
+            className="block w-full rounded-md border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-500 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-100"
+          />
+          {errors.maxMembers ? (
+            <p className="mt-1 text-sm text-error-600 dark:text-error-400">{errors.maxMembers}</p>
+          ) : (
+            <p className="mt-1 text-sm text-secondary-500 dark:text-secondary-400">
+              Up to {MEMBER_LIMIT_MAX} members. You can raise this anytime; lowering it below the
+              current member count requires members to leave first.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
             htmlFor="pool-type"
             className="block text-sm font-medium text-secondary-700 dark:text-secondary-200 mb-1"
           >
@@ -198,14 +274,52 @@ export default function CreateGroupForm({
           <select
             id="pool-type"
             value={poolType}
-            onChange={(e) => setPoolType(e.target.value as PoolType)}
-            disabled={loading}
+            onChange={(e) => {
+              const next = e.target.value as PoolType;
+              setPoolType(next);
+              // Leaving World Cup clears the sub-setting so it never travels with
+              // an NFL pool (the server rejects that combination anyway).
+              if (next !== 'world_cup_2026') setKnockoutOnly(false);
+            }}
+            disabled={loading || isEditMode}
             className="block w-full rounded-md border border-secondary-300 px-3 py-2 text-secondary-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-500 dark:bg-secondary-900 dark:border-secondary-600 dark:text-secondary-100"
           >
             <option value="nfl_weekly">NFL Weekly</option>
             <option value="world_cup_2026">World Cup 2026</option>
           </select>
+          {isEditMode && (
+            <p className="mt-1 text-sm text-secondary-500 dark:text-secondary-400">
+              Pool type can&apos;t be changed after creation.
+            </p>
+          )}
         </div>
+
+        {/* World Cup 2026 sub-setting. Only shown for a World Cup pool — it has no
+            meaning for NFL. When on, the group's Picks tab hides group-stage games
+            and the server rejects any group-stage pick. */}
+        {isWorldCup && (
+          <div className="rounded-md border border-secondary-200 bg-secondary-50 p-3 dark:border-secondary-700 dark:bg-secondary-900/40">
+            <label htmlFor="knockout-only" className="flex items-start gap-3 cursor-pointer">
+              <input
+                id="knockout-only"
+                type="checkbox"
+                checked={knockoutOnly}
+                onChange={(e) => setKnockoutOnly(e.target.checked)}
+                disabled={loading || isEditMode}
+                className="mt-0.5 h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+              />
+              <span className="text-sm">
+                <span className="block font-medium text-secondary-900 dark:text-secondary-100">
+                  Knockout stage picks only
+                </span>
+                <span className="block text-secondary-500 dark:text-secondary-400">
+                  Members can only pick knockout games (Round of 32 onward). Group-stage
+                  games are excluded. This can&apos;t be changed after the group is created.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
 
         <div className="flex space-x-3 pt-4">
           <div className="relative inline-toast-anchor">

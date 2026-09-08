@@ -55,8 +55,9 @@ CREATE TABLE IF NOT EXISTS groups (
   identifier VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly unique identifier
   description TEXT,
   is_public BOOLEAN DEFAULT true,
-  max_members INTEGER DEFAULT 20 CHECK (max_members <= 40 AND max_members >= 2),
+  max_members INTEGER DEFAULT 50 CONSTRAINT groups_max_members_range CHECK (max_members <= 500 AND max_members >= 2),
   pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly' CHECK (pool_type IN ('nfl_weekly','world_cup_2026')), -- pick-pool variant
+  knockout_only BOOLEAN NOT NULL DEFAULT false, -- world_cup_2026 sub-setting: members may only pick knockout-stage games (no group stage)
   avatar_url VARCHAR(500),
   created_by INTEGER REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -175,6 +176,8 @@ CREATE TABLE IF NOT EXISTS user_picks (
   season_type INTEGER NOT NULL,
   won BOOLEAN NULL, -- populated when game final
   points INTEGER NULL, -- confidence if won else 0 when final
+  predicted_home_score INTEGER NULL, -- World Cup knockout score prediction (home side)
+  predicted_away_score INTEGER NULL, -- World Cup knockout score prediction (away side)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, group_id, game_id), -- one pick record per game per user per group
@@ -251,6 +254,12 @@ BEGIN
   ) THEN
     ALTER TABLE groups ADD COLUMN pool_type VARCHAR(20) NOT NULL DEFAULT 'nfl_weekly'
       CHECK (pool_type IN ('nfl_weekly','world_cup_2026'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'knockout_only'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN knockout_only BOOLEAN NOT NULL DEFAULT false;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -401,6 +410,44 @@ BEGIN
     RAISE NOTICE 'Created correct confidence unique index with group_id';
   END IF;
 END $$;
+-- Raise the group member ceiling from 40 to 500. The original cap was an inline
+-- unnamed CHECK auto-named groups_max_members_check; existing databases still have
+-- it, so drop it and install the named groups_max_members_range (<=500) constraint.
+-- Fresh databases get groups_max_members_range directly from the CREATE TABLE above,
+-- making this a no-op for them. Idempotent: safe to re-run.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'groups_max_members_check'
+  ) THEN
+    ALTER TABLE groups DROP CONSTRAINT groups_max_members_check;
+    RAISE NOTICE 'Dropped legacy groups_max_members_check (<=40) constraint';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'groups_max_members_range'
+  ) THEN
+    ALTER TABLE groups ADD CONSTRAINT groups_max_members_range
+      CHECK (max_members <= 500 AND max_members >= 2);
+    RAISE NOTICE 'Added groups_max_members_range (<=500) constraint';
+  END IF;
+  -- Align the column default with the app default (50) on existing DBs. The inline
+  -- DEFAULT above only applies to fresh CREATE TABLE; this catches legacy rows'
+  -- table default. Idempotent.
+  ALTER TABLE groups ALTER COLUMN max_members SET DEFAULT 50;
+END $$;
+
+-- Add predicted score columns to user_picks for World Cup knockout score-bonus feature.
+-- Idempotent: safe to re-run on a database that already has these columns.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='predicted_home_score') THEN
+    ALTER TABLE user_picks ADD COLUMN predicted_home_score INTEGER NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_picks' AND column_name='predicted_away_score') THEN
+    ALTER TABLE user_picks ADD COLUMN predicted_away_score INTEGER NULL;
+  END IF;
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- Group dues (forward-only, idempotent).
 --

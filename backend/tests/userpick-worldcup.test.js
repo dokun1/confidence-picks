@@ -40,7 +40,7 @@ describe('UserPick constructor serialization', () => {
 describe('buildWorldCupUpsert', () => {
   const base = { userId: 7, groupId: 3, season: 2026, seasonType: 5, week: 1 };
 
-  test('emits 7 contiguous params per pick in column order', () => {
+  test('emits 9 contiguous params per pick in column order (including score prediction columns)', () => {
     const { sql, values } = buildWorldCupUpsert({
       ...base,
       picks: [
@@ -48,11 +48,11 @@ describe('buildWorldCupUpsert', () => {
         { gameId: 11, pickedResult: 'draw' },
       ],
     });
-    assert.match(sql, /INSERT INTO user_picks \(user_id, group_id, game_id, picked_result, week, season, season_type\)/);
-    assert.match(sql, /\(\$1,\$2,\$3,\$4,\$5,\$6,\$7\),\(\$8,\$9,\$10,\$11,\$12,\$13,\$14\)/);
+    assert.match(sql, /INSERT INTO user_picks \(user_id, group_id, game_id, picked_result, week, season, season_type, predicted_home_score, predicted_away_score\)/);
+    assert.match(sql, /\(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9\),\(\$10,\$11,\$12,\$13,\$14,\$15,\$16,\$17,\$18\)/);
     assert.deepStrictEqual(values, [
-      7, 3, 10, 'home', 1, 2026, 5,
-      7, 3, 11, 'draw', 1, 2026, 5,
+      7, 3, 10, 'home', 1, 2026, 5, null, null,
+      7, 3, 11, 'draw', 1, 2026, 5, null, null,
     ]);
   });
 

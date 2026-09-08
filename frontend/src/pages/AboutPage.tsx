@@ -15,9 +15,9 @@ export default function AboutPage() {
           <p>
             Each week you rank that week&apos;s games by how confident you are. With N games on the
             slate, your surest pick is worth N points, the next is worth N−1, and so on down to 1.
-            Get a pick right and you bank the points you assigned it; get it wrong and you score
-            nothing for that game. Picks lock at kickoff, and scores accumulate across the season —
-            rewarding consistent accuracy over lucky one-off calls.
+            Get a pick right and you bank the points you assigned it; get it wrong and you lose
+            that same number, so a confident miss is expensive. Picks lock at kickoff, and scores
+            accumulate across the season — rewarding consistent accuracy over lucky one-off calls.
           </p>
         </div>
 

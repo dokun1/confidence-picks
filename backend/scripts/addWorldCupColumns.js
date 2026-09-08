@@ -80,6 +80,18 @@ async function addWorldCupColumns() {
     `);
     console.log('   ✅ groups.pool_type ensured');
 
+    // 4c. groups.knockout_only — world_cup_2026 sub-setting. When true, members may
+    //     only pick knockout-stage games; group-stage picks are rejected. Added as
+    //     NOT NULL DEFAULT false: Postgres backfills every existing row with false
+    //     atomically as part of the ADD, so the column is non-null from the start
+    //     and every existing group (NFL and World Cup alike) is unaffected.
+    console.log('\n4c. Adding groups.knockout_only (boolean NOT NULL default false)...');
+    await pool.query(`
+      ALTER TABLE groups
+      ADD COLUMN IF NOT EXISTS knockout_only BOOLEAN NOT NULL DEFAULT false
+    `);
+    console.log('   ✅ groups.knockout_only ensured');
+
     // 4b. games.winner_team_id — the resolved advancing-team id for soccer
     //     knockout matches. Persisted because ESPN's competitor.winner flag (the
     //     only signal on a PK shootout) isn't recoverable from a cached row's
@@ -95,14 +107,25 @@ async function addWorldCupColumns() {
     `);
     console.log('   ✅ games.winner_team_id ensured');
 
+    // 4d. user_picks.predicted_home_score / predicted_away_score — optional knockout
+    //     score predictions for the bonus. Nullable INTEGER; NFL, group-stage, and
+    //     no-prediction picks leave them NULL. Mirrors the write- and read-path
+    //     self-heal (UserPick.ensureScorePredictionColumns) so a deterministic
+    //     migration covers them too — the leaderboard + picks reads SELECT these,
+    //     so a deploy that serves a read before any pick write would 500 without them.
+    console.log('\n4d. Adding user_picks.predicted_home_score / predicted_away_score (integer nullable)...');
+    await pool.query(`ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_home_score INTEGER NULL`);
+    await pool.query(`ALTER TABLE user_picks ADD COLUMN IF NOT EXISTS predicted_away_score INTEGER NULL`);
+    console.log('   ✅ user_picks.predicted_home_score / predicted_away_score ensured');
+
     // 5. Verify the columns landed with the expected shape.
     console.log('\n5. Verifying added columns...');
     const verify = await pool.query(`
       SELECT table_name, column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
       WHERE (table_name = 'games' AND column_name IN ('league', 'stage', 'winner_team_id'))
-         OR (table_name = 'user_picks' AND column_name = 'picked_result')
-         OR (table_name = 'groups' AND column_name = 'pool_type')
+         OR (table_name = 'user_picks' AND column_name IN ('picked_result', 'predicted_home_score', 'predicted_away_score'))
+         OR (table_name = 'groups' AND column_name IN ('pool_type', 'knockout_only'))
       ORDER BY table_name, column_name
     `);
     verify.rows.forEach(col => {

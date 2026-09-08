@@ -5,3 +5,9 @@
 
 /** Returns the NFL season year (the year the season started) for today's date. */
 export function getCurrentNFLSeason(): number;
+
+/**
+ * True when the current NFL season is actually under way (September-February),
+ * false during the March-August offseason.
+ */
+export function isNFLSeasonUnderway(now?: Date): boolean;

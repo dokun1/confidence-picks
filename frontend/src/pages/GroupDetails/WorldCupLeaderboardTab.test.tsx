@@ -24,6 +24,7 @@ const rows: TournamentLeaderboardRow[] = [
     rank: 1,
     tied: false,
     points: 12,
+    bonus_points: 3,
     wins_correct: 4,
     losses: 1,
     draws_correct: 2,
@@ -36,6 +37,7 @@ const rows: TournamentLeaderboardRow[] = [
     rank: 2,
     tied: false,
     points: 7,
+    bonus_points: 0,
     wins_correct: 2,
     losses: 2,
     draws_correct: 1,
@@ -132,5 +134,29 @@ describe('WorldCupLeaderboardTab', () => {
     expect(screen.queryByText('flaky network')).not.toBeInTheDocument();
     const table = screen.getByRole('table');
     expect(within(table).getByText('Alice')).toBeInTheDocument();
+  });
+
+  // knockoutOnly forwarding: the tab accepts the prop and passes it through to
+  // TournamentLeaderboard. When true, draw column headers are absent.
+  it('forwards knockoutOnly=true: draw columns are hidden in the rendered table', async () => {
+    mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: rows });
+
+    render(<WorldCupLeaderboardTab identifier={identifier} knockoutOnly />);
+
+    const table = await screen.findByRole('table');
+    expect(within(table).queryByText('Draws Correct')).not.toBeInTheDocument();
+    expect(within(table).queryByText('Draws Incorrect')).not.toBeInTheDocument();
+    // Bonus column must still appear.
+    expect(within(table).getByText('Bonus')).toBeInTheDocument();
+  });
+
+  it('forwards knockoutOnly=false (default): draw columns are present in the rendered table', async () => {
+    mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: rows });
+
+    render(<WorldCupLeaderboardTab identifier={identifier} />);
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Draws Correct')).toBeInTheDocument();
+    expect(within(table).getByText('Draws Incorrect')).toBeInTheDocument();
   });
 });

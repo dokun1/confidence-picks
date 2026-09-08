@@ -27,7 +27,10 @@ vi.mock('../lib/groupsService.js', () => ({
 // picks / scoreboard). Mock those so the tabs render deterministically;
 // getClosestWeek is left pending in the tab-switching test so the picks tab
 // sits in its loading state.
-vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 2025) }));
+vi.mock('../lib/nflSeasonUtils.js', () => ({
+  getCurrentNFLSeason: vi.fn(() => 2025),
+  isNFLSeasonUnderway: vi.fn(() => true),
+}));
 vi.mock('../lib/picksService.js', () => ({
   getClosestWeek: vi.fn(),
   getPicks: vi.fn(),
@@ -75,7 +78,8 @@ import {
   getUnreadStatus,
   markMessagesRead,
 } from '../lib/groupsService.js';
-import { getClosestWeek, getPickSeasons, getScoreboard } from '../lib/picksService.js';
+import { getClosestWeek, getPicks, getPickSeasons, getScoreboard } from '../lib/picksService.js';
+import { isNFLSeasonUnderway } from '../lib/nflSeasonUtils.js';
 import {
   getWorldCupLeaderboard,
   getAllWorldCupStages,
@@ -88,6 +92,7 @@ const mockGetMyGroups = vi.mocked(getMyGroups);
 const mockGetUnreadStatus = vi.mocked(getUnreadStatus);
 const mockMarkMessagesRead = vi.mocked(markMessagesRead);
 const mockGetClosestWeek = vi.mocked(getClosestWeek);
+const mockGetPicks = vi.mocked(getPicks);
 const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const mockGetScoreboard = vi.mocked(getScoreboard);
 const mockGetWorldCupLeaderboard = vi.mocked(getWorldCupLeaderboard);
@@ -255,14 +260,17 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByRole('heading', { name: 'Members' })).toBeInTheDocument();
   });
 
-  it('renders the NFL leaderboard for the season that has pick data (old group)', async () => {
+  it('renders the NFL leaderboard for the season that has pick data (old group, offseason)', async () => {
     mockGetGroup.mockResolvedValue(memberGroup);
     mockGetMembers.mockResolvedValue(members);
     mockGetMessages.mockResolvedValue(messages);
-    // Old group: pick data only exists for 2024 while the (mocked) current
-    // season is 2025. The leaderboard must request the season that actually
-    // has data, not the empty current one — this is the regression that hid
-    // old groups' scores after the season rolled over.
+    // Old group in the offseason: pick data only exists for 2024 while the
+    // (mocked) current season is 2025, which has no games yet. The leaderboard
+    // must request the season that actually has data, not the empty current one
+    // — this is the regression that hid old groups' scores after the season
+    // rolled over. (Once 2025 is under way the tab lands on 2025 instead; that
+    // is covered in LeaderboardTab/useSeasonOptions tests.)
+    vi.mocked(isNFLSeasonUnderway).mockReturnValue(false);
     mockGetPickSeasons.mockResolvedValue({ seasons: [2024] });
     mockGetScoreboard.mockResolvedValue({
       season: 2024,
@@ -286,6 +294,44 @@ describe('GroupDetailsPage', () => {
     expect(screen.getByRole('columnheader', { name: 'W2' })).toBeInTheDocument();
     // The scoreboard was fetched for the old season with data, not the current one.
     expect(mockGetScoreboard).toHaveBeenCalledWith('sunday-squad', { season: 2024, seasonType: 2 });
+  });
+
+  // NFL picks are made on GamesPage, a separate route that is unreachable
+  // without a ?groupId — so this banner is one of only two in-app ways in.
+  it('offers an NFL make-picks banner routed to GamesPage', async () => {
+    mockGetGroup.mockResolvedValue(memberGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+    mockGetPickSeasons.mockResolvedValue({ seasons: [2025] });
+    mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
+    // 16 games on the slate, 4 already picked -> 12 owed.
+    mockGetPicks.mockResolvedValue({ games: [], totalGames: 16, pickedCount: 4 });
+
+    renderPage();
+    await screen.findByRole('heading', { name: memberGroup.name });
+
+    const banner = await screen.findByText(/12 picks available to make in Week 1/);
+    expect(banner).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make your picks' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/games?groupId=sunday-squad');
+  });
+
+  it('hides the NFL banner once every game is picked', async () => {
+    mockGetGroup.mockResolvedValue(memberGroup);
+    mockGetMembers.mockResolvedValue(members);
+    mockGetMessages.mockResolvedValue(messages);
+    mockGetPickSeasons.mockResolvedValue({ seasons: [2025] });
+    mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
+    mockGetPicks.mockResolvedValue({ games: [], totalGames: 16, pickedCount: 16 });
+
+    renderPage();
+    await screen.findByRole('heading', { name: memberGroup.name });
+
+    await waitFor(() => expect(mockGetPicks).toHaveBeenCalled());
+    expect(screen.queryByText(/available to make/)).not.toBeInTheDocument();
   });
 
   it('hides the Owner badge for a non-admin member', async () => {
@@ -382,6 +428,7 @@ describe('GroupDetailsPage', () => {
             rank: 1,
             tied: false,
             points: 12,
+            bonus_points: 0,
             wins_correct: 4,
             losses: 1,
             draws_correct: 2,
@@ -414,6 +461,7 @@ describe('GroupDetailsPage', () => {
           rank: 1,
           tied: false,
           points: 12,
+          bonus_points: 0,
           wins_correct: 4,
           losses: 1,
           draws_correct: 2,
@@ -513,6 +561,34 @@ describe('GroupDetailsPage', () => {
       await waitFor(() => expect(mockGetMyWorldCupPicks).toHaveBeenCalled());
 
       expect(screen.queryByText(/available to make/i)).not.toBeInTheDocument();
+    });
+
+    it('counts only knockout games in the banner for a knockout-only group', async () => {
+      // A knockout-only group can't pick group-stage games, so the leaderboard
+      // banner must exclude them too — matching the Picks tab. Without the fix the
+      // banner would count both games ("2 picks…"); with it, only the knockout one.
+      mockGetGroup.mockResolvedValue({ ...worldCupGroup, knockoutOnly: true });
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+      const knockoutMatch: WorldCupMatch = {
+        id: 20,
+        stage: 'r32',
+        homeTeam: { id: '3', name: 'United States', abbreviation: 'USA', logo: '' },
+        awayTeam: { id: '4', name: 'Bosnia', abbreviation: 'BIH', logo: '' },
+        homeScore: 0,
+        awayScore: 0,
+        status: 'SCHEDULED',
+        isKnockout: true,
+        gameDate: (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d.toISOString(); })(),
+      };
+      // One pickable group-stage game (excluded) + one decided knockout game.
+      mockGetAllWorldCupStages.mockResolvedValue({ games: [wcMatch, knockoutMatch], count: 2, cached: false });
+      mockGetMyWorldCupPicks.mockResolvedValue({ picks: [] });
+
+      renderPage();
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+
+      expect(await screen.findByText(/1 pick available to make/i)).toBeInTheDocument();
+      expect(screen.queryByText(/2 picks available to make/i)).not.toBeInTheDocument();
     });
 
     it('banner CTA deeplinks to the Picks tab with the "Needs pick" chip pre-selected', async () => {

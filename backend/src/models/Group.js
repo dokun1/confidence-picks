@@ -19,6 +19,16 @@ const CAMEL_TO_COLUMN = {
 };
 
 export class Group {
+  // Self-heal latch for the knockout_only column (see ensureKnockoutOnlyColumn).
+  // Once the column is confirmed present in this process, every later create()
+  // skips even the catalog lookup — so the migration cost is paid at most once per
+  // warm lambda and then "goes back to normal" (zero extra queries).
+  static _knockoutOnlyColumnEnsured = false;
+
+  // Self-heal latch for the max_members CHECK constraint (see
+  // ensureMaxMembersConstraint). Same warm-instance fast path as above.
+  static _maxMembersConstraintEnsured = false;
+
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -57,11 +67,92 @@ export class Group {
     // Denormalised for display so the banner can say "you owe Dana" without a
     // second round-trip to /members.
     this.duesCollectorName = data.duesCollectorName ?? null;
+    // World Cup 2026 sub-setting: when true, members may only pick knockout-stage
+    // games (no group stage). Defaults to false so NFL pools and ordinary WC pools
+    // are unaffected. The WC picks routes read this to reject group-stage picks.
+    this.knockoutOnly = data.knockoutOnly ?? false;
+  }
+
+  // Ensure the groups.knockout_only column exists. Production resilience: prod
+  // runs with INIT_DB unset, so schema.sql is NOT synced on deploy — mirror the
+  // ensureChatReadsSchema / GroupInvite.ensureLinkInviteSchema self-heal so the
+  // column lands automatically on the first group creation after a deploy, with no
+  // manual migration or INIT_DB toggle. This matters specifically for create():
+  // its INSERT names knockout_only, so a missing column would 500 EVERY new group
+  // (NFL included). Reads already tolerate a missing column (SELECT g.* yields
+  // undefined -> false), so only this write path needs the gate. Idempotent: a
+  // single indexed catalog lookup that early-returns once latched, and the ALTER
+  // itself is ADD COLUMN IF NOT EXISTS (safe under concurrent cold starts).
+  static async ensureKnockoutOnlyColumn() {
+    if (this._knockoutOnlyColumnEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'groups' AND column_name = 'knockout_only'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing knockout_only column – adding');
+        await pool.query(
+          `ALTER TABLE groups ADD COLUMN IF NOT EXISTS knockout_only BOOLEAN NOT NULL DEFAULT false`
+        );
+        console.log('[groups] knockout_only column added');
+      }
+      // Latch only after a confirmed present/added column, so the next create
+      // settles into the zero-query fast path.
+      this._knockoutOnlyColumnEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next create retry
+      // rather than permanently believing the column is present.
+      console.warn('[groups] Failed to ensure knockout_only column (may already exist):', e.message);
+    }
+  }
+
+  // Ensure the groups.max_members CHECK allows up to 500. Production resilience:
+  // prod runs with INIT_DB unset, so schema.sql is NOT synced on deploy, and the
+  // legacy inline constraint (groups_max_members_check) still caps at 40. Because
+  // create() now defaults max_members to 50, a missing migration would 500 EVERY
+  // new group. Mirror the ensureKnockoutOnlyColumn self-heal: swap the legacy
+  // <=40 constraint for the named groups_max_members_range (<=500) on the first
+  // create/update after a deploy, then latch. Concurrency-safe: DROP ... IF EXISTS
+  // is idempotent, and a duplicate ADD from a racing cold start throws into the
+  // catch (which does NOT latch, so the next call settles to a no-op).
+  static async ensureMaxMembersConstraint() {
+    if (this._maxMembersConstraintEnsured) return; // warm-instance fast path
+    try {
+      const { rows } = await pool.query(
+        `SELECT conname FROM pg_constraint WHERE conname IN ('groups_max_members_check', 'groups_max_members_range')`
+      );
+      const names = rows.map((r) => r.conname);
+      const hasNew = names.includes('groups_max_members_range');
+      const hasLegacy = names.includes('groups_max_members_check');
+      if (hasLegacy || !hasNew) {
+        console.log('[groups] Migrating max_members constraint to allow up to 500');
+        await pool.query(`ALTER TABLE groups DROP CONSTRAINT IF EXISTS groups_max_members_check`);
+        if (!hasNew) {
+          await pool.query(
+            `ALTER TABLE groups ADD CONSTRAINT groups_max_members_range CHECK (max_members <= 500 AND max_members >= 2)`
+          );
+        }
+        console.log('[groups] max_members constraint now allows up to 500');
+      }
+      // Align the column default with the app default (50). Idempotent metadata-only
+      // change; only matters for inserts that omit max_members (the API always sends it).
+      await pool.query(`ALTER TABLE groups ALTER COLUMN max_members SET DEFAULT 50`);
+      this._maxMembersConstraintEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — let the next create/update retry.
+      console.warn('[groups] Failed to ensure max_members constraint (may already be applied):', e.message);
+    }
   }
 
   // Create new group
   static async create(groupData, creatorId) {
-    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType } = groupData;
+    const { name, identifier, description, isPublic, maxMembers, avatarUrl, poolType, knockoutOnly } = groupData;
+
+    // Self-heal schema before the INSERT: the knockout_only column must exist, and
+    // the max_members constraint must allow the new default (50 > the legacy 40
+    // cap). Both no-op once latched, so this is free on the steady-state path.
+    await Group.ensureKnockoutOnlyColumn();
+    await Group.ensureMaxMembersConstraint();
     
     // Ensure identifier is unique and URL-friendly
     // Clean identifier: lowercase, replace invalid chars with dash, collapse dashes, trim dashes
@@ -79,12 +170,12 @@ export class Group {
       // (see addWorldCupColumns.js migration), so omitting it preserves the
       // pre-WC behavior for NFL callers. Pass through when set.
       const groupQuery = `
-        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'))
+        INSERT INTO groups (name, identifier, description, is_public, max_members, avatar_url, created_by, pool_type, knockout_only)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'nfl_weekly'), COALESCE($9, false))
         RETURNING *
       `;
       const groupResult = await client.query(groupQuery, [
-        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null
+        name, cleanIdentifier, description, isPublic, maxMembers, avatarUrl, creatorId, poolType || null, knockoutOnly ?? null
       ]);
       
       const group = groupResult.rows[0];
@@ -110,7 +201,9 @@ export class Group {
         createdAt: group.created_at,
         updatedAt: group.updated_at,
         memberCount: 1,
-        userRole: 'admin'
+        userRole: 'admin',
+        poolType: group.pool_type,
+        knockoutOnly: group.knockout_only,
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -169,6 +262,7 @@ export class Group {
       duesPayoutNotes: row.dues_payout_notes,
       duesCollectorUserId: row.dues_collector_user_id,
       duesCollectorName: row.dues_collector_name,
+      knockoutOnly: row.knockout_only,
     });
   }
 
@@ -205,6 +299,7 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      knockoutOnly: row.knockout_only,
     }));
   }
 
@@ -431,7 +526,32 @@ export class Group {
     if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
       throw new Error('Only group admins can update group settings');
     }
-    
+
+    // Self-heal the max_members constraint so an admin raising the limit past the
+    // legacy 40 cap isn't rejected by a stale CHECK. No-op once latched.
+    await Group.ensureMaxMembersConstraint();
+
+    // Member-limit changes are bounded to [2, 500] and may not be lowered below the
+    // group's CURRENT member count — an admin must have members leave first. A group
+    // can be expanded freely up to the cap.
+    if (Object.prototype.hasOwnProperty.call(updates, 'maxMembers')) {
+      const newMax = updates.maxMembers;
+      if (!Number.isInteger(newMax) || newMax < 2 || newMax > 500) {
+        throw new Error('Member limit must be a whole number between 2 and 500');
+      }
+      const { rows } = await pool.query(
+        'SELECT COUNT(*)::int AS count FROM group_memberships WHERE group_id = $1',
+        [groupId]
+      );
+      const currentCount = rows[0].count;
+      if (newMax < currentCount) {
+        throw new Error(
+          `Member limit (${newMax}) is below the current member count (${currentCount}). ` +
+          `Members must leave the group before you can lower the limit this far.`
+        );
+      }
+    }
+
     const allowedFields = [
       'name', 'description', 'is_public', 'max_members', 'avatar_url',
       // Dues settings. Guarded by the admin check above, so turning dues on and

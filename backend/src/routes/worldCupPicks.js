@@ -3,6 +3,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { Group } from '../models/Group.js';
 import { UserPick, WORLD_CUP_RESULTS } from '../models/UserPick.js';
 import { computeLive, getGroupLeaderboardCached, leaderboardsMatch } from '../services/WorldCupLeaderboardService.js';
+import { isKnockoutStage } from '../services/SoccerScoringService.js';
 import pool from '../config/database.js';
 
 const router = express.Router();
@@ -14,6 +15,19 @@ async function ensureMembership(groupIdentifier, userId) {
   if (!group) throw new Error('GROUP_NOT_FOUND');
   if (!group.userRole) throw new Error('NOT_MEMBER');
   return group;
+}
+
+// Knockout-only enforcement. In a world_cup_2026 group created with
+// knockout_only=true, members may pick only knockout-stage games; the group stage
+// is off-limits. The frontend hides group-stage games for these pools, so a
+// group-stage gameId arriving here is anomalous — reject the whole batch with the
+// offending ids rather than silently dropping them. Returns the offending ids
+// (empty when the group is unrestricted or every pick is a knockout game).
+function groupStagePickViolations(group, picks, gameById) {
+  if (!group.knockoutOnly) return [];
+  return picks
+    .filter((p) => gameById.get(p.gameId)?.stage === 'group')
+    .map((p) => p.gameId);
 }
 
 /**
@@ -48,6 +62,24 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       }
     }
 
+    // Validate optional predicted scores. Both must be present together, and each
+    // must be a whole number in [0, 20]. Partial submission is an error.
+    for (const p of picks) {
+      const hasHome = p.predictedHomeScore != null;
+      const hasAway = p.predictedAwayScore != null;
+      if (hasHome !== hasAway) {
+        return res.status(400).json({ error: 'Both predicted scores required together', gameId: p.gameId });
+      }
+      if (hasHome) {
+        const home = p.predictedHomeScore;
+        const away = p.predictedAwayScore;
+        if (!Number.isInteger(home) || home < 0 || home > 20 ||
+            !Number.isInteger(away) || away < 0 || away > 20) {
+          return res.status(400).json({ error: 'Predicted score must be a whole number between 0 and 20', gameId: p.gameId });
+        }
+      }
+    }
+
     const group = await ensureMembership(groupId, req.user.id);
 
     if (picks.length === 0) {
@@ -58,7 +90,7 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
     // slot columns (season/season_type/week) the upsert requires.
     const gameIds = picks.map(p => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date, stage FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map(g => [g.id, g]));
@@ -67,6 +99,12 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       if (!gameById.has(p.gameId)) {
         return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       }
+    }
+
+    // Knockout-only groups reject any group-stage pick outright (see helper).
+    const groupStageIds = groupStagePickViolations(group, picks, gameById);
+    if (groupStageIds.length > 0) {
+      return res.status(400).json({ error: 'Group-stage picks are not allowed in this group', gameIds: groupStageIds });
     }
 
     // Lock picks at kickoff. game_date (the scheduled start) is the authoritative,
@@ -101,7 +139,17 @@ router.post('/group/:groupId/world-cup', authenticateToken, async (req, res) => 
       if (!bySlot.has(key)) {
         bySlot.set(key, { season: g.season, seasonType: g.season_type, week: g.week, picks: [] });
       }
-      bySlot.get(key).picks.push({ gameId: p.gameId, pickedResult: p.pickedResult });
+      // Only forward predicted scores for knockout-stage games; group-stage rows
+      // must never carry a score prediction.
+      const pickEntry = { gameId: p.gameId, pickedResult: p.pickedResult };
+      if (isKnockoutStage(g.stage)) {
+        pickEntry.predictedHomeScore = p.predictedHomeScore != null ? p.predictedHomeScore : null;
+        pickEntry.predictedAwayScore = p.predictedAwayScore != null ? p.predictedAwayScore : null;
+      } else {
+        pickEntry.predictedHomeScore = null;
+        pickEntry.predictedAwayScore = null;
+      }
+      bySlot.get(key).picks.push(pickEntry);
     }
 
     const saved = [];
@@ -145,8 +193,13 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
     const { groupId } = req.params;
     const group = await ensureMembership(groupId, req.user.id);
 
+    // Self-heal the score-prediction columns on the READ path too: a fresh deploy
+    // serves reads before any pick write has run the write-path ensure, and this
+    // SELECT names the columns — without this it 500s in that window.
+    await UserPick.ensureScorePredictionColumns();
+
     const { rows } = await pool.query(
-      `SELECT up.game_id, up.picked_result
+      `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score
        FROM user_picks up
        JOIN games g ON g.id = up.game_id
        WHERE up.user_id = $1
@@ -157,7 +210,12 @@ router.get('/group/:groupId/world-cup/me', authenticateToken, async (req, res) =
     );
 
     res.json({
-      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+      picks: rows.map((r) => ({
+        gameId: r.game_id,
+        pickedResult: r.picked_result,
+        predictedHomeScore: r.predicted_home_score,
+        predictedAwayScore: r.predicted_away_score,
+      })),
     });
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
@@ -255,8 +313,11 @@ router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (r
       return res.status(404).json({ error: 'User is not a member of this group' });
     }
 
+    // Self-heal the score-prediction columns on the read path (see /me above).
+    await UserPick.ensureScorePredictionColumns();
+
     const { rows } = await pool.query(
-      `SELECT up.game_id, up.picked_result
+      `SELECT up.game_id, up.picked_result, up.predicted_home_score, up.predicted_away_score
        FROM user_picks up
        JOIN games g ON g.id = up.game_id
        WHERE up.user_id = $1
@@ -267,7 +328,12 @@ router.get('/group/:groupId/world-cup/user/:userId', authenticateToken, async (r
     );
 
     res.json({
-      picks: rows.map((r) => ({ gameId: r.game_id, pickedResult: r.picked_result })),
+      picks: rows.map((r) => ({
+        gameId: r.game_id,
+        pickedResult: r.picked_result,
+        predictedHomeScore: r.predicted_home_score,
+        predictedAwayScore: r.predicted_away_score,
+      })),
       canEdit,
     });
   } catch (e) {
@@ -314,6 +380,24 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       }
     }
 
+    // Validate optional predicted scores. Both must be present together, and each
+    // must be a whole number in [0, 20]. Partial submission is an error.
+    for (const p of picks) {
+      const hasHome = p.predictedHomeScore != null;
+      const hasAway = p.predictedAwayScore != null;
+      if (hasHome !== hasAway) {
+        return res.status(400).json({ error: 'Both predicted scores required together', gameId: p.gameId });
+      }
+      if (hasHome) {
+        const home = p.predictedHomeScore;
+        const away = p.predictedAwayScore;
+        if (!Number.isInteger(home) || home < 0 || home > 20 ||
+            !Number.isInteger(away) || away < 0 || away > 20) {
+          return res.status(400).json({ error: 'Predicted score must be a whole number between 0 and 20', gameId: p.gameId });
+        }
+      }
+    }
+
     const group = await ensureMembership(groupId, req.user.id);
 
     // The single most important check in this file: only an admin of THIS group
@@ -335,7 +419,7 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
     // are upserted under targetUserId rather than the caller.
     const gameIds = picks.map((p) => p.gameId);
     const { rows: gameRows } = await pool.query(
-      `SELECT id, season, season_type, week, game_date FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
+      `SELECT id, season, season_type, week, game_date, stage FROM games WHERE id = ANY($1::int[]) AND league = 'world_cup'`,
       [gameIds]
     );
     const gameById = new Map(gameRows.map((g) => [g.id, g]));
@@ -343,6 +427,12 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       if (!gameById.has(p.gameId)) {
         return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       }
+    }
+
+    // Knockout-only groups reject any group-stage pick, even from an admin override.
+    const groupStageIds = groupStagePickViolations(group, picks, gameById);
+    if (groupStageIds.length > 0) {
+      return res.status(400).json({ error: 'Group-stage picks are not allowed in this group', gameIds: groupStageIds });
     }
 
     // Kickoff lock applies to admin overrides too: a started match's pick is
@@ -370,7 +460,17 @@ router.post('/group/:groupId/world-cup/user/:userId', authenticateToken, async (
       if (!bySlot.has(key)) {
         bySlot.set(key, { season: g.season, seasonType: g.season_type, week: g.week, picks: [] });
       }
-      bySlot.get(key).picks.push({ gameId: p.gameId, pickedResult: p.pickedResult });
+      // Only forward predicted scores for knockout-stage games; group-stage rows
+      // must never carry a score prediction.
+      const pickEntry = { gameId: p.gameId, pickedResult: p.pickedResult };
+      if (isKnockoutStage(g.stage)) {
+        pickEntry.predictedHomeScore = p.predictedHomeScore != null ? p.predictedHomeScore : null;
+        pickEntry.predictedAwayScore = p.predictedAwayScore != null ? p.predictedAwayScore : null;
+      } else {
+        pickEntry.predictedHomeScore = null;
+        pickEntry.predictedAwayScore = null;
+      }
+      bySlot.get(key).picks.push(pickEntry);
     }
 
     const saved = [];

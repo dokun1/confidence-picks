@@ -405,15 +405,20 @@ describe('Mock ESPN Data', () => {
     const GROUP_CLOSE = new Date('2026-06-27T23:59:59Z');
     const KNOCKOUT_STAGES = new Set(['r32', 'r16', 'qf', 'sf', 'third', 'final']);
 
-    test('should return 3 knockout matches', () => {
+    test('should return 5 knockout matches (3 FINAL + 2 SCHEDULED)', () => {
       const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
       assert.ok(Array.isArray(matches), 'Should return an array');
-      assert.strictEqual(matches.length, 3, 'Knockout slate should have 3 matches');
+      assert.strictEqual(matches.length, 5, 'Knockout slate should have 5 matches (3 final + 2 upcoming)');
+      const finals = matches.filter(m => m.competitions[0].status.type.completed);
+      assert.strictEqual(finals.length, 3, 'Exactly 3 knockout matches should be FINAL');
+      const scheduled = matches.filter(m => m.competitions[0].status.type.state === 'pre' && !m.competitions[0].status.type.completed);
+      assert.strictEqual(scheduled.length, 2, 'Exactly 2 knockout matches should be SCHEDULED/upcoming');
     });
 
-    test('should resolve every match to a single advancing winner', () => {
+    test('should resolve every FINAL match to a single advancing winner', () => {
       const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
-      matches.forEach(m => {
+      const completed = matches.filter(m => m.competitions[0].status.type.completed);
+      completed.forEach(m => {
         const competitors = m.competitions[0].competitors;
         const advancing = competitors.filter(c => c.winner === true);
         assert.strictEqual(advancing.length, 1, 'Exactly one competitor should be flagged winner');
@@ -440,10 +445,11 @@ describe('Mock ESPN Data', () => {
       assert.ok(advScore > Number(loser.shootoutScore), 'Advancing side should have the higher shootout tally');
     });
 
-    test('should resolve the other two matches in regulation', () => {
+    test('should resolve the other two FINAL matches in regulation', () => {
       const matches = generateMockWorldCupStage({ stage: 'knockout', year: 2026 });
-      const regulation = matches.filter(m => !/penalt|shootout/i.test(m.competitions[0].status.type.description));
-      assert.strictEqual(regulation.length, 2, 'Two knockouts should be regulation results');
+      const completed = matches.filter(m => m.competitions[0].status.type.completed);
+      const regulation = completed.filter(m => !/penalt|shootout/i.test(m.competitions[0].status.type.description));
+      assert.strictEqual(regulation.length, 2, 'Two FINAL knockouts should be regulation results');
       regulation.forEach(m => {
         const [home, away] = m.competitions[0].competitors;
         assert.notStrictEqual(home.score, away.score, 'Regulation knockout should not be level');

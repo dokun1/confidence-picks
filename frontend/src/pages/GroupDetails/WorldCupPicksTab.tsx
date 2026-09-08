@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Button from '../../designsystem/components/Button';
 import EmptyState from '../../designsystem/components/EmptyState';
 import InlineToast from '../../designsystem/components/InlineToast';
+import ScoreBonusTooltip from '../../designsystem/components/ScoreBonusTooltip';
 import type { ToastVariant } from '../../designsystem/components/InlineToast/InlineToast';
 import {
   type MatchPick,
@@ -36,6 +37,7 @@ import { toBrowseGames } from '../../lib/worldCupBrowseAdapter';
 // via the `toBrowseGames` adapter; the list owns all view/filter/sort/search state.
 
 type DraftMap = Record<number, MatchPickResult>;
+type ScoreDraft = Record<number, { home?: number | null; away?: number | null }>;
 
 interface FetchState {
   loading: boolean;
@@ -71,6 +73,13 @@ export interface WorldCupPicksTabProps {
   currentUserId?: string | number | null;
   /** Whether the caller is a group admin. Gates editing OTHER members' picks. */
   isAdmin?: boolean;
+  /**
+   * Knockout-only group: hide group-stage games entirely so members can only pick
+   * knockout matches. Passed by GroupDetailsPage (which has the loaded group) for
+   * instant correctness on first paint; the standalone /world-cup page omits it,
+   * so the tab also derives it from its own getMyGroups fetch as a fallback.
+   */
+  knockoutOnly?: boolean;
   /** Saved view the embedded games list opens on (e.g. 'needs-pick' from a deeplink). */
   initialView?: SavedView;
 }
@@ -80,6 +89,7 @@ export default function WorldCupPicksTab({
   members = [],
   currentUserId = null,
   isAdmin = false,
+  knockoutOnly,
   initialView,
 }: WorldCupPicksTabProps) {
   const groupId = identifier;
@@ -131,6 +141,12 @@ export default function WorldCupPicksTab({
     matches: cachedStages ?? [],
   });
   const [draft, setDraft] = useState<DraftMap>({});
+  // The picks already saved on the server for the selected person. Distinct from
+  // `draft` (which holds unsaved selections) so the "needs pick" filter keys off
+  // saved state — a drafted-but-unsubmitted pick keeps its game in the chip until
+  // Submit. Seeded on hydrate, merged on a successful submit, wiped on person switch.
+  const [savedDraft, setSavedDraft] = useState<DraftMap>({});
+  const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', variant: 'info' });
 
@@ -225,6 +241,8 @@ export default function WorldCupPicksTab({
     // state when a prop/derived value changes; it bails out the in-progress
     // render and re-runs before paint, so no stale draft is ever shown.
     setDraft({});
+    setSavedDraft({});
+    setScoreDraft({});
   }
 
   // Hydrate the draft from the SELECTED person's already-saved picks so a
@@ -235,6 +253,7 @@ export default function WorldCupPicksTab({
   useEffect(() => {
     if (!groupId) {
       setDraft({});
+      setSavedDraft({});
       return;
     }
     let cancelled = false;
@@ -246,10 +265,22 @@ export default function WorldCupPicksTab({
       .then((resp) => {
         if (cancelled) return;
         const next: DraftMap = {};
+        const nextScores: ScoreDraft = {};
         for (const p of resp.picks ?? []) {
-          if (p && p.gameId != null && p.pickedResult) next[p.gameId] = p.pickedResult;
+          if (p && p.gameId != null && p.pickedResult) {
+            next[p.gameId] = p.pickedResult;
+            // Hydrate score predictions for knockout picks if the API returned them.
+            if (p.predictedHomeScore != null || p.predictedAwayScore != null) {
+              nextScores[p.gameId] = {
+                home: p.predictedHomeScore ?? null,
+                away: p.predictedAwayScore ?? null,
+              };
+            }
+          }
         }
         setDraft(next);
+        setSavedDraft(next);
+        setScoreDraft(nextScores);
       })
       .catch(() => {
         // Best-effort — don't surface a toast for the silent hydrate; the user
@@ -264,33 +295,98 @@ export default function WorldCupPicksTab({
     // Airtight guard: a read-only viewer (non-admin looking at a teammate) can
     // never mutate the draft, even if a disabled control were somehow clicked.
     if (readOnly) return;
+    // Re-picking the selected outcome clears the pick.
+    const isUnpick = draft[matchId] === result;
     setDraft((prev) => {
       const next = { ...prev };
-      // Re-picking the selected outcome clears it; otherwise set the new outcome.
       if (next[matchId] === result) delete next[matchId];
       else next[matchId] = result;
       return next;
     });
+    // The score is an add-on to a pick: clearing the pick also drops any score
+    // prediction so an orphaned score can never linger (or be submitted).
+    if (isUnpick) {
+      setScoreDraft((prev) => {
+        if (!(matchId in prev)) return prev;
+        const next = { ...prev };
+        delete next[matchId];
+        return next;
+      });
+    }
+  }
+
+  function scoreChange(matchId: number, side: 'home' | 'away', value: number | null) {
+    if (readOnly) return;
+    setScoreDraft((prev) => ({
+      ...prev,
+      [matchId]: { ...prev[matchId], [side]: value },
+    }));
   }
 
   // Derive the flat browse-list games from the fetched matches + the current
   // draft. The list itself owns view/filter/sort state; we just feed it data and
   // route picks back through pickResult.
+  // Fallback knockout-only flag derived from the getMyGroups fetch (below), for
+  // the standalone /world-cup page where no group object — and thus no prop — is
+  // passed. The explicit prop (from GroupDetailsPage) always wins so first paint
+  // is correct.
+  const [derivedKnockoutOnly, setDerivedKnockoutOnly] = useState(false);
+  const effectiveKnockoutOnly = knockoutOnly ?? derivedKnockoutOnly;
+
+  // In a knockout-only group the group stage is off-limits, so drop those matches
+  // before anything renders or counts them. Everything downstream (browse list,
+  // empty state, submit bar) keys off this filtered view.
+  const visibleMatches = useMemo(
+    () =>
+      effectiveKnockoutOnly
+        ? fetchState.matches.filter((m) => m.stage !== 'group')
+        : fetchState.matches,
+    [fetchState.matches, effectiveKnockoutOnly],
+  );
   const browseGames = useMemo(
-    () => toBrowseGames(fetchState.matches, draft),
-    [fetchState.matches, draft],
+    () => toBrowseGames(visibleMatches, draft, scoreDraft, savedDraft),
+    [visibleMatches, draft, scoreDraft, savedDraft],
   );
   const now = useMemo(() => new Date(), []); // one stable "now" per mount for the list's date logic
   // "today" filtering can drift on a session left open past midnight; acceptable (server enforces locks).
 
-  const picks: MatchPick[] = useMemo(
-    () =>
-      Object.entries(draft).map(([gameId, pickedResult]) => ({
-        gameId: Number(gameId),
-        pickedResult,
-      })),
-    [draft],
+  // Submittable picks come from the VISIBLE matches only. In a knockout-only group
+  // this excludes any group-stage draft entry — guarding the window on the
+  // standalone page where `derivedKnockoutOnly` resolves a tick after mount and a
+  // group-stage game could be briefly pickable. Hidden games can't be submitted or
+  // counted, so the server's group-stage rejection is never even reached.
+  const visibleIds = useMemo(
+    () => new Set(visibleMatches.map((m) => m.id)),
+    [visibleMatches],
   );
+  const picks: MatchPick[] = useMemo(() => {
+    // Find which visible matches are knockout so we can include score predictions.
+    // Derive from the stage, NOT m.isKnockout: the /stages route never emits that
+    // flag (it arrives undefined), so trusting it dropped every score prediction
+    // from the submit payload. Mirrors the worldCupBrowseAdapter derivation.
+    const knockoutIds = new Set(
+      visibleMatches.filter((m) => m.stage !== 'group').map((m) => m.id),
+    );
+    return Object.entries(draft)
+      .filter(([gameId]) => visibleIds.has(Number(gameId)))
+      .map(([gameId, pickedResult]) => {
+        const id = Number(gameId);
+        const pick: MatchPick = { gameId: id, pickedResult };
+        // Only include score predictions for knockout matches; group-stage picks
+        // send no score fields.
+        if (knockoutIds.has(id)) {
+          const s = scoreDraft[id];
+          // Both-or-neither: only include score prediction when BOTH fields are
+          // present and are valid numbers. A one-sided entry is treated as no
+          // prediction (omit both) so the server never sees an invalid payload.
+          if (s && s.home != null && !isNaN(s.home) && s.away != null && !isNaN(s.away)) {
+            pick.predictedHomeScore = s.home;
+            pick.predictedAwayScore = s.away;
+          }
+        }
+        return pick;
+      });
+  }, [draft, visibleIds, visibleMatches, scoreDraft]);
 
   // Read-only viewers can never submit; everyone else needs a group + ≥1 pick.
   const canSubmit = !!groupId && picks.length > 0 && !submitting && !readOnly;
@@ -319,6 +415,10 @@ export default function WorldCupPicksTab({
     getMyGroups()
       .then((groups) => {
         if (cancelled) return;
+        // Derive this group's knockout-only flag from the roster fetch (used only
+        // when no explicit prop is supplied — e.g. the standalone /world-cup page).
+        const self = groups.find((g) => g.identifier === groupId);
+        if (self) setDerivedKnockoutOnly(Boolean(self.knockoutOnly));
         const wc: SaveTarget[] = groups
           .filter((g) => g.poolType === 'world_cup_2026')
           .map((g) => ({ identifier: g.identifier, name: g.name }));
@@ -344,6 +444,15 @@ export default function WorldCupPicksTab({
   async function submit() {
     if (!groupId || picks.length === 0) return;
 
+    // Promote the just-submitted picks into the saved baseline so their games
+    // leave the "needs pick" filter — only AFTER the server confirms the save.
+    const markSaved = () =>
+      setSavedDraft((prev) => {
+        const next = { ...prev };
+        for (const p of picks) next[p.gameId] = p.pickedResult;
+        return next;
+      });
+
     // Editing a teammate is a separate, deliberately narrow path: admins only,
     // this group only, no multi-group fan-out. The two guards here are belt-and
     // suspenders — the submit button is already disabled for read-only viewers
@@ -360,6 +469,7 @@ export default function WorldCupPicksTab({
       setSubmitting(true);
       try {
         await submitUserWorldCupPicks(groupId, selectedUserId, picks);
+        markSaved();
         setToast({
           open: true,
           message: `Saved ${selectedFirstName}'s picks`,
@@ -383,6 +493,7 @@ export default function WorldCupPicksTab({
       if (!targets.includes(groupId)) targets.push(groupId);
       if (targets.length === 1) {
         await submitWorldCupPicks(targets[0], picks);
+        markSaved();
         setToast({ open: true, message: 'Picks saved', variant: 'success' });
         return;
       }
@@ -391,6 +502,9 @@ export default function WorldCupPicksTab({
       );
       const ok = results.filter((r) => r.status === 'fulfilled').length;
       const fail = results.length - ok;
+      // Only clear the chip for THIS group's games once its own save succeeded.
+      const thisGroupIdx = targets.indexOf(groupId);
+      if (thisGroupIdx >= 0 && results[thisGroupIdx]?.status === 'fulfilled') markSaved();
       if (fail === 0) {
         setToast({
           open: true,
@@ -478,17 +592,32 @@ export default function WorldCupPicksTab({
           the sum across every match you pick.
         </p>
         <ul className="mt-xs list-disc space-y-xxs pl-lg">
-          <li>
-            <span className="font-medium text-secondary-900 dark:text-neutral-0">Group stage:</span>{' '}
-            winning team = 3 pts · a team that draws = 1 · pick &ldquo;Draw&rdquo; = 2 if it draws (1
-            if a team wins) · losing team = 0.
-          </li>
+          {/* This is a knockout-only group, so the group-stage scoring line is
+              omitted — those games can't be picked here. */}
+          {!effectiveKnockoutOnly && (
+            <li>
+              <span className="font-medium text-secondary-900 dark:text-neutral-0">Group stage:</span>{' '}
+              winning team = 3 pts · a team that draws = 1 · pick &ldquo;Draw&rdquo; = 2 if it draws (1
+              if a team wins) · losing team = 0.
+            </li>
+          )}
           <li>
             <span className="font-medium text-secondary-900 dark:text-neutral-0">Knockout:</span>{' '}
             the team that advances = 3 pts, everyone else = 0. Penalties still count as advancing, so
             there&apos;s no &ldquo;Draw&rdquo; option — just the two teams.
           </li>
+          <li>
+            Knockout score bonus (optional): predict the final score for extra points — exact score
+            = +2; off by one goal, or the right scoreline with the teams flipped = +1. PK shootouts
+            count as a draw score.
+          </li>
         </ul>
+        {/* Score-bonus first-visit tooltip — only when knockout matches are in view.
+            Derive knockout from the stage (the /stages route never emits isKnockout)
+            so the tooltip actually renders. Mirrors the worldCupBrowseAdapter rule. */}
+        <div className="mt-xs flex items-center gap-xs">
+          <ScoreBonusTooltip hasKnockoutMatches={visibleMatches.some((m) => m.stage !== 'group')} />
+        </div>
       </div>
 
       {/* Flat browse list */}
@@ -502,13 +631,21 @@ export default function WorldCupPicksTab({
               Try Again
             </Button>
           </div>
-        ) : fetchState.matches.length === 0 ? (
-          <EmptyState title="No matches yet" description="No matches found for this tournament." />
+        ) : visibleMatches.length === 0 ? (
+          <EmptyState
+            title="No matches yet"
+            description={
+              effectiveKnockoutOnly
+                ? 'No knockout matches are available yet. They appear once the bracket is set.'
+                : 'No matches found for this tournament.'
+            }
+          />
         ) : (
           <WorldCupGamesList
             games={browseGames}
             now={now}
             onPick={pickResult}
+            onScoreChange={readOnly ? undefined : scoreChange}
             disabled={submitting || readOnly}
             initialView={initialView}
           />
@@ -516,7 +653,7 @@ export default function WorldCupPicksTab({
       </div>
 
       {/* Spacer so the sticky bar never covers the last match row. */}
-      {fetchState.matches.length > 0 && <div className="h-20" aria-hidden="true" />}
+      {visibleMatches.length > 0 && <div className="h-20" aria-hidden="true" />}
 
       {/* Sticky submit bar — pinned to the bottom of the viewport so the user
           can submit from anywhere in the stage list without scrolling to the
@@ -528,7 +665,7 @@ export default function WorldCupPicksTab({
           two bars cross while scrolling, but below the match detail panel
           (z-40) — so the filter bar reads as tethered to the content sliding
           under it while this bar floats cleanly on top. */}
-      {fetchState.matches.length > 0 && (
+      {visibleMatches.length > 0 && (
         <div className="sticky bottom-0 z-20 -mx-sm sm:-mx-lg mt-lg border-t border-border bg-neutral-0/95 px-sm sm:px-lg py-sm shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.06)] backdrop-blur dark:bg-secondary-900/95">
           <div className="mx-auto flex max-w-4xl flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-xxs sm:flex-row sm:items-center sm:gap-md">

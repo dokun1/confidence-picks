@@ -17,6 +17,13 @@ export interface Group {
   createdAt: string;
   createdByName?: string | null;
   createdByPictureUrl?: string | null;
+  poolType?: PoolType | null;
+  /**
+   * World Cup 2026 sub-setting: when true the group only allows picks on
+   * knockout-stage games (group-stage games are hidden and rejected server-side).
+   * Always false/absent for NFL pools.
+   */
+  knockoutOnly?: boolean;
 }
 
 export interface GroupMember {
@@ -63,6 +70,8 @@ export interface GameData {
   awayScore: number;
   status: string;
   statusDetail?: string;
+  /** ESPN reports the game as postponed; `status` still reads SCHEDULED. */
+  postponed?: boolean;
   gameDate: string;
   week: number;
   season: number;
@@ -201,6 +210,10 @@ export interface WorldCupMatch {
 export interface MatchPick {
   gameId: number;
   pickedResult: MatchPickResult;
+  /** Optional score prediction for the home team. Knockout matches only. */
+  predictedHomeScore?: number | null;
+  /** Optional score prediction for the away team. Knockout matches only. */
+  predictedAwayScore?: number | null;
 }
 
 // One row of the tournament leaderboard. The shape mirrors the backend
@@ -225,6 +238,7 @@ export interface TournamentLeaderboardRow {
   /** True when this member shares its rank with an adjacent member. */
   tied: boolean;
   points: number;
+  bonus_points: number;
   wins_correct: number;
   losses: number;
   draws_correct: number;
