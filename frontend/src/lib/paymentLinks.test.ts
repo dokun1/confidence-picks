@@ -52,9 +52,11 @@ describe('formatCents', () => {
   });
 });
 
-// The memo must survive Venmo's in-app-browser handoff, which re-encodes the
+// The memo must survive venmo.com's web->app handoff, which re-encodes the
 // query string with a form-urlencoder (spaces -> `+`) that the Venmo app then
-// renders literally. A note needing no escaping cannot be re-escaped wrongly.
+// renders literally. That bridge runs even from Safari (verified on device), so
+// percent-encoding cannot survive it. A note needing no escaping can't be
+// re-escaped wrongly.
 describe('sanitizeNote', () => {
   it('turns spaces into hyphens so no encoder can mangle them', () => {
     expect(sanitizeNote('Fall 2026 dues')).toBe('Fall-2026-dues');

@@ -62,18 +62,19 @@ export function formatCents(cents: number | null | undefined): string | null {
  * Reduce a memo to characters that survive any encoder: letters, digits and
  * hyphens. Spaces become hyphens; everything else is dropped.
  *
- * This exists because of how Venmo actually delivers a note to its app. Tapped
- * from a native context, iOS intercepts the universal link and Venmo receives
- * our percent-encoding intact. Tapped from an in-app browser (a WKWebView
- * inside another app), iOS does NOT intercept -- venmo.com loads, and its own
- * JavaScript rebuilds a `venmo://paycharge?...` handoff URL using a
- * form-urlencoder, which writes spaces as `+`. The Venmo app then shows that
- * memo without form-decoding it, so the user reads "Fall+2026+dues".
+ * This exists because of how Venmo actually delivers a note to its app.
+ * venmo.com is NOT treated as a universal link that iOS hands straight to the
+ * app -- verified on device from Safari itself, which loaded the page and
+ * prompted "Open in Venmo?" rather than intercepting. So the page's own
+ * JavaScript builds the `venmo://paycharge?...` handoff, using a
+ * form-urlencoder that writes spaces as `+`; the Venmo app then displays that
+ * memo without form-decoding it, and the user reads "Fall+2026+dues".
  *
- * We cannot change Venmo's bridge, and we cannot detect which path a tap will
- * take. So the note is made encoding-proof instead: a string that needs no
- * escaping cannot be re-escaped wrongly. "Fall 2026 dues" -> "Fall-2026-dues",
- * which renders identically down both paths.
+ * That bridge is the normal path, not an edge case, and percent-encoding
+ * cannot survive it: %20 arrives re-encoded as `+` just the same. So the note
+ * is made encoding-proof instead of encoded correctly -- a string that needs no
+ * escaping cannot be re-escaped wrongly. "Fall 2026 dues" -> "Fall-2026-dues".
+ * Verified rendering cleanly in the Venmo app, 2026-09-07.
  */
 export function sanitizeNote(note: string | null | undefined): string | null {
   if (!note) return null;
