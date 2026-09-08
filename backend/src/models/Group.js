@@ -106,6 +106,55 @@ export class Group {
     }
   }
 
+  // Ensure every dues column exists. Production resilience: prod runs with
+  // INIT_DB unset, so schema.sql is NOT synced on deploy -- mirror the
+  // ensureKnockoutOnlyColumn / ensureMaxMembersConstraint self-heal.
+  //
+  // This one gates READS, not just writes, which the others do not. The dues
+  // queries name their columns explicitly -- findByIdentifier joins on
+  // g.dues_collector_user_id, getMembers selects gm.dues_paid_at, and the invite
+  // preview selects g.dues_enabled -- and Postgres errors on a missing column in
+  // a JOIN or select list rather than yielding undefined. Without this,
+  // findByIdentifier alone would 500 EVERY group route on the first deploy.
+  //
+  // Idempotent and concurrency-safe: ADD COLUMN IF NOT EXISTS throughout, one
+  // indexed catalog lookup that early-returns once latched.
+  static async ensureDuesSchema() {
+    if (this._duesSchemaEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'groups' AND column_name = 'dues_enabled'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing dues columns – adding');
+        await pool.query(`
+          ALTER TABLE groups
+            ADD COLUMN IF NOT EXISTS dues_enabled BOOLEAN NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS dues_payment_method VARCHAR(20) NULL,
+            ADD COLUMN IF NOT EXISTS dues_amount_cents INTEGER NULL,
+            ADD COLUMN IF NOT EXISTS dues_venmo_handle VARCHAR(64) NULL,
+            ADD COLUMN IF NOT EXISTS dues_cashapp_handle VARCHAR(64) NULL,
+            ADD COLUMN IF NOT EXISTS dues_instructions TEXT NULL,
+            ADD COLUMN IF NOT EXISTS dues_payout_notes TEXT NULL,
+            ADD COLUMN IF NOT EXISTS dues_collector_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
+        `);
+        await pool.query(`
+          ALTER TABLE group_memberships
+            ADD COLUMN IF NOT EXISTS dues_paid_at TIMESTAMP NULL,
+            ADD COLUMN IF NOT EXISTS dues_marked_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
+        `);
+        console.log('[groups] dues columns added');
+      }
+      // Latch only after a confirmed present/added column, so the next call
+      // settles into the zero-query fast path.
+      this._duesSchemaEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next call retry
+      // rather than permanently believing the columns are present.
+      console.warn('[groups] Failed to ensure dues columns (may already exist):', e.message);
+    }
+  }
+
   // Ensure the groups.max_members CHECK allows up to 500. Production resilience:
   // prod runs with INIT_DB unset, so schema.sql is NOT synced on deploy, and the
   // legacy inline constraint (groups_max_members_check) still caps at 40. Because
@@ -215,6 +264,9 @@ export class Group {
 
   // Find group by identifier
   static async findByIdentifier(identifier, userId = null) {
+    // The query below joins on g.dues_collector_user_id; a missing column is a
+    // hard SQL error, not a soft undefined. No-op once latched.
+    await Group.ensureDuesSchema();
     const query = `
       SELECT g.*, 
              COUNT(gm.id) as member_count,
@@ -412,6 +464,8 @@ export class Group {
 
   // Get group members
   static async getMembers(groupId) {
+    // Selects gm.dues_paid_at explicitly. No-op once latched.
+    await Group.ensureDuesSchema();
     const query = `
       SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at,
              gm.dues_paid_at
@@ -527,6 +581,9 @@ export class Group {
       throw new Error('Only group admins can update group settings');
     }
 
+    // Self-heal the dues columns: update() writes them by name. No-op once latched.
+    await Group.ensureDuesSchema();
+
     // Self-heal the max_members constraint so an admin raising the limit past the
     // legacy 40 cap isn't rejected by a stale CHECK. No-op once latched.
     await Group.ensureMaxMembersConstraint();
@@ -601,6 +658,7 @@ export class Group {
    * one that was never marked -- keeps "unpaid" a single representable state.
    */
   static async setDuesPaid(groupId, targetUserId, paid, actingUserId) {
+    await Group.ensureDuesSchema();
     const roleCheck = await pool.query(
       'SELECT role FROM group_memberships WHERE group_id = $1 AND user_id = $2',
       [groupId, actingUserId]

@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { Group } from './Group.js';
 import crypto from 'crypto';
 
 export class GroupInvite {
@@ -56,6 +57,9 @@ export class GroupInvite {
   }
 
   static async getByToken(token) {
+    // Selects g.dues_enabled / g.dues_amount_cents / g.dues_payout_notes and
+    // joins on g.dues_collector_user_id by name, so the columns must exist.
+    await Group.ensureDuesSchema();
     const query = `
       SELECT gi.*, g.name, g.identifier, g.description, g.max_members, g.created_by,
              u_owner.name AS owner_name, u_owner.picture_url AS owner_picture_url,
