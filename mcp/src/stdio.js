@@ -112,10 +112,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Deliberately NOT guarded by an `import.meta.url === process.argv[1]` check.
+// npm installs bins as symlinks in node_modules/.bin, and import.meta.url
+// resolves symlinks while process.argv[1] does not -- so under npx that
+// comparison is always false and the server silently never starts. bin/cli.js
+// calls this explicitly instead, which cannot drift.
+export async function startStdioServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('confidence-picks MCP server ready on stdio');
+  return server;
 }
 
 export { server };
