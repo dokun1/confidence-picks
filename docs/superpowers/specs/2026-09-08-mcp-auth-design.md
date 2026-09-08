@@ -136,6 +136,22 @@ Vercel cold-start behavior, and the self-heal latch firing against the real
 production schema on first deploy. Both are risks the codebase already
 carries with the dues and knockout-only columns.
 
+## Finding: expiry must be evaluated by Postgres, not by Node
+
+L3 caught a bug the mocked layers could not. The `pg` driver parses
+`timestamp without time zone` as **local time**, so comparing `expires_at`
+against `Date.now()` shifts the deadline by the host's UTC offset -- on the
+UTC-5 development machine an expired token stayed valid for five more hours.
+It would have appeared to work on Vercel (UTC) and broken on a region change.
+
+Fixed at the root: the columns are `TIMESTAMPTZ`, and `findByPlaintext` asks
+Postgres to compute `is_revoked` and `is_expired` in the query rather than
+interpreting timestamps in JS. The SQL-side evaluation is correct regardless of
+column type, so it also protects any table created before this change.
+
+This is the argument for keeping L3 in the suite: no amount of pool-stubbing
+would have surfaced it.
+
 ## Safety properties for review
 
 1. `authenticateToken` untouched — web sessions cannot regress.

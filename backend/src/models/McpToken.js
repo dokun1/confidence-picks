@@ -27,10 +27,10 @@ export class McpToken {
           name VARCHAR(64) NOT NULL,
           token_hash CHAR(64) NOT NULL UNIQUE,
           scopes TEXT[] NOT NULL,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          last_used_at TIMESTAMP NULL,
-          expires_at TIMESTAMP NULL,
-          revoked_at TIMESTAMP NULL
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ NULL,
+          expires_at TIMESTAMPTZ NULL,
+          revoked_at TIMESTAMPTZ NULL
         )
       `);
       // Lookup is by hash on every authenticated MCP call, so it must be indexed.
@@ -93,15 +93,22 @@ export class McpToken {
   static async findByPlaintext(plaintext) {
     if (!this.isWellFormed(plaintext)) return null;
     await this.ensureSchema();
+    // Revocation and expiry are evaluated BY POSTGRES, not in JS. The pg driver
+    // parses `timestamp without time zone` as local time, so comparing such a
+    // value against Date.now() silently shifts the deadline by the server's UTC
+    // offset -- on a UTC-5 host an expired token stayed valid for five more
+    // hours. Letting the database compare its own clock removes that entirely,
+    // and holds even if this table predates the timestamptz columns above.
     const { rows } = await pool.query(
-      `SELECT id, user_id, name, scopes, created_at, last_used_at, expires_at, revoked_at
+      `SELECT id, user_id, name, scopes, created_at, last_used_at, expires_at, revoked_at,
+              (revoked_at IS NOT NULL) AS is_revoked,
+              (expires_at IS NOT NULL AND expires_at <= NOW()) AS is_expired
        FROM mcp_tokens WHERE token_hash = $1`,
       [this.hash(plaintext)]
     );
     if (rows.length === 0) return null;
     const row = rows[0];
-    if (row.revoked_at) return null;
-    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return null;
+    if (row.is_revoked || row.is_expired) return null;
     return { ...this._row(row), userId: row.user_id };
   }
 

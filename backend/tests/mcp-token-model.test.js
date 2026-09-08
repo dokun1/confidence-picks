@@ -58,11 +58,16 @@ describe('McpToken', () => {
   });
 
   describe('findByPlaintext fails closed', () => {
+    // Postgres now evaluates revocation and expiry (see McpToken.findByPlaintext
+    // -- comparing a `timestamp without time zone` against Date.now() shifted the
+    // deadline by the host's UTC offset), so the stub returns the flags the query
+    // computes rather than raw timestamps for the model to interpret.
     const row = (over = {}) => ({
       rows: [{
         id: 1, user_id: 7, name: 'laptop', scopes: ['picks:read'],
         created_at: new Date(), last_used_at: null,
         expires_at: new Date(Date.now() + 86400000), revoked_at: null,
+        is_revoked: false, is_expired: false,
         ...over
       }]
     });
@@ -75,13 +80,21 @@ describe('McpToken', () => {
     });
 
     test('returns null for a revoked token', async () => {
-      mock.method(pool, 'query', async () => row({ revoked_at: new Date() }));
+      mock.method(pool, 'query', async () => row({ revoked_at: new Date(), is_revoked: true }));
       assert.strictEqual(await McpToken.findByPlaintext('cp_live_' + 'a'.repeat(43)), null);
     });
 
     test('returns null for an expired token', async () => {
-      mock.method(pool, 'query', async () => row({ expires_at: new Date(Date.now() - 1000) }));
+      mock.method(pool, 'query', async () => row({ expires_at: new Date(Date.now() - 1000), is_expired: true }));
       assert.strictEqual(await McpToken.findByPlaintext('cp_live_' + 'a'.repeat(43)), null);
+    });
+
+    test('asks Postgres to evaluate revocation and expiry', async () => {
+      let sql;
+      mock.method(pool, 'query', async (q) => { sql = q; return row(); });
+      await McpToken.findByPlaintext('cp_live_' + 'a'.repeat(43));
+      assert.match(sql, /is_revoked/, 'revocation must be computed in SQL');
+      assert.match(sql, /expires_at <= NOW\(\)/, 'expiry must be compared by the database clock');
     });
 
     test('returns null when no row matches', async () => {

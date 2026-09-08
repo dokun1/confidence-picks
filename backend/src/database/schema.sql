@@ -592,10 +592,10 @@ CREATE TABLE IF NOT EXISTS mcp_tokens (
   name VARCHAR(64) NOT NULL,
   token_hash CHAR(64) NOT NULL UNIQUE,
   scopes TEXT[] NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  last_used_at TIMESTAMP NULL,
-  expires_at TIMESTAMP NULL,
-  revoked_at TIMESTAMP NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ NULL,
+  expires_at TIMESTAMPTZ NULL,
+  revoked_at TIMESTAMPTZ NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_tokens_hash ON mcp_tokens(token_hash);
