@@ -1,0 +1,17 @@
+{
+  "name": "@dokun/confidence-picks-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for confidence-picks: read groups and standings, make and modify NFL confidence picks.",
+  "type": "module",
+  "bin": { "confidence-picks-mcp": "./src/stdio.js" },
+  "main": "./src/stdio.js",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "node src/stdio.js"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "license": "MIT"
+}
