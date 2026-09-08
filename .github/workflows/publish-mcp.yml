@@ -14,22 +14,6 @@ name: Publish MCP package
 
 on:
   workflow_dispatch:
-    inputs:
-      skip_publish:
-        description: 'Skip publishing (use when the current version is already on the registry and you only want to deprecate)'
-        required: false
-        default: false
-        type: boolean
-      deprecate_version:
-        description: 'Optional: a version to deprecate after publishing (e.g. 0.1.0)'
-        required: false
-        type: string
-      deprecate_message:
-        description: 'Deprecation message'
-        required: false
-        default: 'Broken entrypoint: the npx invocation was a no-op. Use a later version.'
-        type: string
-
 permissions:
   contents: read
   id-token: write # required for OIDC; without it npm falls back to token auth and fails
@@ -65,13 +49,11 @@ jobs:
       - name: Test
         run: npm test
 
-      # Publishing an already-published version is a hard 403, which would abort
-      # the job before the deprecation step. Skipping keeps the workflow usable
-      # for a deprecate-only run.
+      # OIDC trusted publishing authenticates `npm publish` and nothing else: the
+      # token exchange happens inside the publish flow. Other package commands --
+      # `npm deprecate`, `npm dist-tag`, `npm access` -- run unauthenticated here
+      # and fail with a 404/permission error, so they deliberately do not live in
+      # this workflow. Run those locally with a credential, or from the npmjs.com
+      # UI where a passkey satisfies 2FA.
       - name: Publish
-        if: ${{ !inputs.skip_publish }}
         run: npm publish
-
-      - name: Deprecate a previous version
-        if: inputs.deprecate_version != ''
-        run: npm deprecate "confidence-picks-mcp@${{ inputs.deprecate_version }}" "${{ inputs.deprecate_message }}"
