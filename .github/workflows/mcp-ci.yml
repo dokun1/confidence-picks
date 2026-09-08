@@ -1,0 +1,43 @@
+# Tests for the mcp/ package.
+#
+# This exists because mcp/ had no CI at all: backend-tests filters on backend
+# paths and frontend-ci on frontend paths, so the package's tests never ran on
+# any pull request. That is how 0.1.0 shipped with an entrypoint that did nothing
+# under npx -- the packaged invocation path was never exercised in review.
+#
+# Unlike the publish workflow, this runs automatically, because a gate that only
+# fires at release time catches bugs after they are already someone else's
+# problem.
+name: MCP CI
+
+on:
+  pull_request:
+    paths:
+      - 'mcp/**'
+      - '.github/workflows/mcp-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No lockfile is committed (the repo gitignores them), so `npm ci` is not usable.
+      - name: Install dependencies
+        run: npm install
+
+      # Includes tests/bin.test.js, which spawns the packaged entrypoint through a
+      # symlink -- the case that reproduces the 0.1.0 npx failure.
+      - name: Test
+        run: npm test
