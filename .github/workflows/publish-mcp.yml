@@ -40,6 +40,18 @@ jobs:
       - name: Show toolchain
         run: node --version && npm --version
 
+      # Fail in seconds with a clear message rather than after install and tests
+      # with an opaque 403 from the registry. Forgetting the version bump is the
+      # most likely way this workflow gets dispatched in vain.
+      - name: Refuse to republish an existing version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "confidence-picks-mcp@${version}" version >/dev/null 2>&1; then
+            echo "::error::confidence-picks-mcp@${version} is already on the registry. Bump the version in mcp/package.json before dispatching."
+            exit 1
+          fi
+          echo "confidence-picks-mcp@${version} is not yet published — proceeding."
+
       # No lockfile is committed (the repo gitignores them), so `npm ci` is not usable.
       - name: Install dependencies
         run: npm install
