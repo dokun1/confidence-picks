@@ -15,6 +15,11 @@ name: Publish MCP package
 on:
   workflow_dispatch:
     inputs:
+      skip_publish:
+        description: 'Skip publishing (use when the current version is already on the registry and you only want to deprecate)'
+        required: false
+        default: false
+        type: boolean
       deprecate_version:
         description: 'Optional: a version to deprecate after publishing (e.g. 0.1.0)'
         required: false
@@ -60,7 +65,11 @@ jobs:
       - name: Test
         run: npm test
 
+      # Publishing an already-published version is a hard 403, which would abort
+      # the job before the deprecation step. Skipping keeps the workflow usable
+      # for a deprecate-only run.
       - name: Publish
+        if: ${{ !inputs.skip_publish }}
         run: npm publish
 
       - name: Deprecate a previous version
