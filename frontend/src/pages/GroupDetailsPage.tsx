@@ -371,6 +371,7 @@ export default function GroupDetailsPage() {
           <DuesBanner
             amountCents={group.duesAmountCents ?? null}
             collectorName={group.duesCollectorName ?? null}
+            paymentMethod={group.duesPaymentMethod ?? null}
             venmoHandle={group.duesVenmoHandle ?? null}
             cashappHandle={group.duesCashappHandle ?? null}
             instructions={group.duesInstructions ?? null}

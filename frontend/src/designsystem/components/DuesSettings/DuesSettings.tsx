@@ -6,7 +6,8 @@ import PaymentButton from '../PaymentButton';
 import Select from '../Select';
 import TextField from '../TextField';
 import Toggle from '../Toggle';
-import { buildVenmoLink, buildCashAppLink, formatCents } from '../../../lib/paymentLinks';
+import { buildPaymentLink, formatCents } from '../../../lib/paymentLinks';
+import type { DuesPaymentMethod } from '../../../lib/paymentLinks';
 
 export interface DuesMember {
   id: string;
@@ -17,6 +18,8 @@ export interface DuesMember {
 
 export interface DuesSettingsValues {
   duesEnabled: boolean;
+  /** The group's single payment method. Null until the admin picks one. */
+  duesPaymentMethod: DuesPaymentMethod | null;
   duesAmountCents: number | null;
   duesVenmoHandle: string | null;
   duesCashappHandle: string | null;
@@ -40,6 +43,12 @@ export interface DuesSettingsProps {
   /** Flip one member's paid flag. Rejects with an Error whose message is shown. */
   onToggleMemberPaid: (userId: string, paid: boolean) => Promise<void>;
 }
+
+const METHOD_OPTIONS = [
+  { value: 'venmo', label: 'Venmo' },
+  { value: 'cashapp', label: 'Cash App' },
+  { value: 'other', label: 'Other (describe it)' },
+];
 
 /** "$20.00" <-> 2000. Kept local: only this form speaks the dollar-string dialect. */
 function centsToInput(cents: number | null): string {
@@ -136,8 +145,16 @@ export default function DuesSettings({
   // must reflect what members can actually act on right now.
   const amountLabel = formatCents(values.duesAmountCents);
   const note = groupName ? `${groupName} dues` : 'Pool dues';
-  const venmoUrl = buildVenmoLink(values.duesVenmoHandle, values.duesAmountCents, note);
-  const cashAppUrl = buildCashAppLink(values.duesCashappHandle, values.duesAmountCents);
+  const payUrl = buildPaymentLink(
+    {
+      method: values.duesPaymentMethod,
+      venmoHandle: values.duesVenmoHandle,
+      cashappHandle: values.duesCashappHandle,
+      instructions: values.duesInstructions,
+    },
+    values.duesAmountCents,
+    note,
+  );
 
   const paidCount = members.filter((m) => m.duesPaidAt !== null).length;
 
@@ -191,38 +208,59 @@ export default function DuesSettings({
                 helperText="Payment links point at this member. It does not have to be you."
               />
 
-              <TextField
-                id="dues-venmo"
-                label="Venmo username (optional)"
-                value={draft.duesVenmoHandle ?? ''}
-                onChange={(v) => patch({ duesVenmoHandle: v || null })}
-                placeholder="dana-reyes"
-                size="md"
+              {/* One method per group: picking it swaps in the single field
+                  that method needs, so there is no way to half-configure two. */}
+              <Select
+                id="dues-method"
+                label="How do members pay?"
+                value={draft.duesPaymentMethod ?? ''}
+                onChange={(v) =>
+                  patch({ duesPaymentMethod: (v || null) as DuesPaymentMethod | null })
+                }
+                options={METHOD_OPTIONS}
+                placeholder="Select a payment method…"
               />
 
-              <TextField
-                id="dues-cashapp"
-                label="Cash App cashtag (optional)"
-                value={draft.duesCashappHandle ?? ''}
-                onChange={(v) => patch({ duesCashappHandle: v || null })}
-                placeholder="danareyes"
-                size="md"
-              />
+              {draft.duesPaymentMethod === 'venmo' && (
+                <TextField
+                  id="dues-venmo"
+                  label="Venmo username"
+                  value={draft.duesVenmoHandle ?? ''}
+                  onChange={(v) => patch({ duesVenmoHandle: v || null })}
+                  placeholder="dana-reyes"
+                  size="md"
+                />
+              )}
 
-              <TextField
-                id="dues-instructions"
-                label="Other payment instructions (optional)"
-                value={draft.duesInstructions ?? ''}
-                onChange={(v) => patch({ duesInstructions: v || null })}
-                placeholder="Zelle 555-0100, or cash at the Week 1 party."
-                multiline
-                rows={3}
-                size="md"
-              />
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                Use this if you collect some other way. It is shown to members alongside
-                any payment buttons.
-              </p>
+              {draft.duesPaymentMethod === 'cashapp' && (
+                <TextField
+                  id="dues-cashapp"
+                  label="Cash App cashtag"
+                  value={draft.duesCashappHandle ?? ''}
+                  onChange={(v) => patch({ duesCashappHandle: v || null })}
+                  placeholder="danareyes"
+                  size="md"
+                />
+              )}
+
+              {draft.duesPaymentMethod === 'other' && (
+                <>
+                  <TextField
+                    id="dues-instructions"
+                    label="Payment instructions"
+                    value={draft.duesInstructions ?? ''}
+                    onChange={(v) => patch({ duesInstructions: v || null })}
+                    placeholder="Zelle 555-0100, or cash at the Week 1 party."
+                    multiline
+                    rows={3}
+                    size="md"
+                  />
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Shown to members in place of a payment button. There is no link to
+                    tap, so say exactly what they should do.
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -251,20 +289,23 @@ export default function DuesSettings({
             {collectorName ? `, collected by ${collectorName}` : ''}.
           </p>
 
-          {(venmoUrl || cashAppUrl) && (
+          {payUrl && (
             <div className="flex flex-wrap gap-sm">
-              <PaymentButton provider="venmo" href={venmoUrl} amountLabel={amountLabel} />
-              <PaymentButton provider="cashapp" href={cashAppUrl} amountLabel={amountLabel} />
+              <PaymentButton
+                provider={values.duesPaymentMethod === 'cashapp' ? 'cashapp' : 'venmo'}
+                href={payUrl}
+                amountLabel={amountLabel}
+              />
             </div>
           )}
 
-          {values.duesInstructions && (
+          {values.duesPaymentMethod === 'other' && values.duesInstructions && (
             <p className="whitespace-pre-line rounded-base bg-secondary-50 p-sm text-sm text-[var(--color-text-secondary)] dark:bg-secondary-900/40">
               {values.duesInstructions}
             </p>
           )}
 
-          {!venmoUrl && !cashAppUrl && !values.duesInstructions && (
+          {!payUrl && !(values.duesPaymentMethod === 'other' && values.duesInstructions) && (
             <p className="text-sm text-[var(--color-text-secondary)]">
               The group admin has not set up a payment method yet.
             </p>

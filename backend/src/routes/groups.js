@@ -12,6 +12,10 @@ const router = express.Router();
 // lands the payer on a "user not found" page.
 const HANDLE_RE = /^[A-Za-z0-9_-]{1,50}$/;
 
+// A group collects dues one way. 'other' carries free-text instructions for
+// everything neither service covers (Zelle, cash, check).
+const DUES_METHODS = ['venmo', 'cashapp', 'other'];
+
 function normalizeHandle(raw) {
   if (raw === null || raw === undefined) return null;
   const trimmed = String(raw).trim().replace(/^[@$]/, '');
@@ -67,6 +71,33 @@ function validateDuesUpdates(updates) {
 
   if (Object.prototype.hasOwnProperty.call(updates, 'duesEnabled')) {
     updates.duesEnabled = Boolean(updates.duesEnabled);
+  }
+
+  // A group collects dues exactly one way. When the method is specified, the
+  // other two value columns are cleared here rather than merely ignored, so the
+  // database never holds a second method that the UI would not show but a later
+  // query might pick up.
+  if (Object.prototype.hasOwnProperty.call(updates, 'duesPaymentMethod')) {
+    const method = updates.duesPaymentMethod || null;
+    if (method !== null && !DUES_METHODS.includes(method)) {
+      return `Payment method must be one of: ${DUES_METHODS.join(', ')}`;
+    }
+    updates.duesPaymentMethod = method;
+
+    if (method === 'venmo') {
+      updates.duesCashappHandle = null;
+      updates.duesInstructions = null;
+    } else if (method === 'cashapp') {
+      updates.duesVenmoHandle = null;
+      updates.duesInstructions = null;
+    } else if (method === 'other') {
+      updates.duesVenmoHandle = null;
+      updates.duesCashappHandle = null;
+    } else {
+      updates.duesVenmoHandle = null;
+      updates.duesCashappHandle = null;
+      updates.duesInstructions = null;
+    }
   }
 
   return null;

@@ -4,6 +4,7 @@ import {
   formatCents,
   buildVenmoLink,
   buildCashAppLink,
+  buildPaymentLink,
   hasAnyPaymentMethod,
 } from './paymentLinks';
 
@@ -54,7 +55,7 @@ describe('buildVenmoLink', () => {
   it('builds the documented web deeplink with amount in dollars', () => {
     const url = buildVenmoLink('dana-smith', 2000, 'Fall dues');
     expect(url).toBe(
-      'https://venmo.com/dana-smith?txn=pay&amount=20.00&note=Fall+dues',
+      'https://venmo.com/dana-smith?txn=pay&amount=20.00&note=Fall%20dues',
     );
   });
 
@@ -62,9 +63,12 @@ describe('buildVenmoLink', () => {
     expect(buildVenmoLink('@dana-smith', 500, 'x')).toContain('venmo.com/dana-smith');
   });
 
-  it('encodes spaces in the note as + per the Venmo format', () => {
+  // Venmo's docs show `+` for spaces, but the iOS app renders `+` literally in
+  // the memo. %20 is what actually produces a clean note.
+  it('encodes spaces in the note as %20, never +', () => {
     const url = buildVenmoLink('dana', 100, 'Q3 pool dues');
-    expect(url).toContain('note=Q3+pool+dues');
+    expect(url).toContain('note=Q3%20pool%20dues');
+    expect(url).not.toContain('+');
   });
 
   it('omits the note parameter when no note is given', () => {
@@ -113,22 +117,50 @@ describe('buildCashAppLink', () => {
 });
 
 describe('hasAnyPaymentMethod', () => {
-  it('is true when a Venmo handle is set', () => {
-    expect(hasAnyPaymentMethod({ venmoHandle: 'dana' })).toBe(true);
+  it('is true when the chosen method has its value', () => {
+    expect(hasAnyPaymentMethod({ method: 'venmo', venmoHandle: 'dana' })).toBe(true);
+    expect(hasAnyPaymentMethod({ method: 'cashapp', cashappHandle: 'dana' })).toBe(true);
+    expect(hasAnyPaymentMethod({ method: 'other', instructions: 'Zelle 555-0100' })).toBe(true);
   });
 
-  it('is true when a Cash App handle is set', () => {
-    expect(hasAnyPaymentMethod({ cashappHandle: 'dana' })).toBe(true);
+  // A stale handle from a previously-selected method must not count: the group
+  // collects one way, and that way is whatever `method` says.
+  it('ignores values belonging to a method that is not selected', () => {
+    expect(hasAnyPaymentMethod({ method: 'cashapp', venmoHandle: 'dana' })).toBe(false);
+    expect(hasAnyPaymentMethod({ method: 'venmo', instructions: 'Zelle me' })).toBe(false);
   });
 
-  it('is true when only free-text instructions are set', () => {
-    expect(hasAnyPaymentMethod({ instructions: 'Zelle me at 555-0100' })).toBe(true);
+  it('is false when the method is chosen but its value is blank', () => {
+    expect(hasAnyPaymentMethod({ method: 'venmo', venmoHandle: '  ' })).toBe(false);
+    expect(hasAnyPaymentMethod({ method: 'other', instructions: '' })).toBe(false);
   });
 
-  it('is false when nothing is configured', () => {
+  it('is false when no method is chosen', () => {
     expect(hasAnyPaymentMethod({})).toBe(false);
-    expect(
-      hasAnyPaymentMethod({ venmoHandle: '  ', cashappHandle: null, instructions: '' }),
-    ).toBe(false);
+    expect(hasAnyPaymentMethod({ method: null, venmoHandle: 'dana' })).toBe(false);
+  });
+});
+
+describe('buildPaymentLink', () => {
+  it('returns the Venmo link when Venmo is the chosen method', () => {
+    const url = buildPaymentLink({ method: 'venmo', venmoHandle: 'dana' }, 2000, 'dues');
+    expect(url).toBe('https://venmo.com/dana?txn=pay&amount=20.00&note=dues');
+  });
+
+  it('returns the Cash App link when Cash App is the chosen method', () => {
+    const url = buildPaymentLink({ method: 'cashapp', cashappHandle: 'dana' }, 2000, 'dues');
+    expect(url).toBe('https://cash.app/$dana/20.00');
+  });
+
+  it('returns null for the free-text method, which has no URL', () => {
+    expect(buildPaymentLink({ method: 'other', instructions: 'Zelle me' }, 2000, 'x')).toBeNull();
+  });
+
+  it('ignores a handle that belongs to a non-selected method', () => {
+    expect(buildPaymentLink({ method: 'cashapp', venmoHandle: 'dana' }, 2000, 'x')).toBeNull();
+  });
+
+  it('returns null when no method is chosen', () => {
+    expect(buildPaymentLink({ venmoHandle: 'dana' }, 2000, 'x')).toBeNull();
   });
 });

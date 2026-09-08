@@ -26,6 +26,8 @@ export interface GroupDetail {
   // The three payment affordances are independent -- a group may use a Venmo
   // handle, a Cash App cashtag, free-text instructions, or any combination.
   duesEnabled?: boolean;
+  /** The group's single payment method: how members are told to pay. */
+  duesPaymentMethod?: 'venmo' | 'cashapp' | 'other' | null;
   duesAmountCents?: number | null;
   duesVenmoHandle?: string | null;
   duesCashappHandle?: string | null;
@@ -88,6 +90,7 @@ export function updateGroup(
       | 'isPublic'
       | 'maxMembers'
       | 'duesEnabled'
+      | 'duesPaymentMethod'
       | 'duesAmountCents'
       | 'duesVenmoHandle'
       | 'duesCashappHandle'

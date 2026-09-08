@@ -23,8 +23,13 @@
  * or an amount, so a caller can render nothing instead of an inert button.
  */
 
+/** How a group collects dues. Exactly one per group. */
+export type DuesPaymentMethod = 'venmo' | 'cashapp' | 'other';
+
 /** The fields an admin can configure for collecting dues. */
 export interface PaymentMethods {
+  /** Which of the three is live. Null means the admin has not chosen yet. */
+  method?: DuesPaymentMethod | null;
   venmoHandle?: string | null;
   cashappHandle?: string | null;
   instructions?: string | null;
@@ -76,9 +81,11 @@ export function buildVenmoLink(
 
   const params = [`txn=pay`, `amount=${centsToUrlAmount(amountCents)}`];
   if (note && note.trim().length > 0) {
-    // encodeURIComponent renders a space as %20; Venmo's documented format uses
-    // `+`. Both work, but `+` keeps the URL legible if a user inspects it.
-    params.push(`note=${encodeURIComponent(note.trim()).replace(/%20/g, '+')}`);
+    // Percent-encode spaces as %20, NOT `+`. Venmo's own docs show the `+`
+    // form, but the iOS app does not decode it -- a note sent as
+    // "Test+Group+1+dues" renders with the plus signs literally in the memo
+    // field. Verified against the app, 2026-09-07.
+    params.push(`note=${encodeURIComponent(note.trim())}`);
   }
 
   return `https://venmo.com/${encodeURIComponent(user)}?${params.join('&')}`;
@@ -99,13 +106,42 @@ export function buildCashAppLink(
 }
 
 /**
- * Whether the admin has configured any way at all to pay. Used to decide
- * whether the banner offers payment actions or only points at the settings tab.
+ * Whether the admin has finished configuring a way to pay: a method chosen AND
+ * the value that method needs. Used to decide whether the banner can offer a
+ * payment action or should only point at the settings tab.
  */
 export function hasAnyPaymentMethod(methods: PaymentMethods): boolean {
-  return Boolean(
-    normalizeHandle(methods.venmoHandle) ||
-      normalizeHandle(methods.cashappHandle) ||
-      (methods.instructions && methods.instructions.trim().length > 0),
-  );
+  switch (methods.method) {
+    case 'venmo':
+      return normalizeHandle(methods.venmoHandle) !== null;
+    case 'cashapp':
+      return normalizeHandle(methods.cashappHandle) !== null;
+    case 'other':
+      return Boolean(methods.instructions && methods.instructions.trim().length > 0);
+    default:
+      return false;
+  }
+}
+
+/**
+ * The single deeplink for a group's chosen method, or null when the method is
+ * 'other' (free-text instructions have no URL) or is not configured.
+ *
+ * Callers render at most one payment button; this is the one place that decides
+ * which, so the banner and the settings panel can never disagree.
+ */
+export function buildPaymentLink(
+  methods: PaymentMethods,
+  amountCents: number | null | undefined,
+  note?: string | null,
+): string | null {
+  switch (methods.method) {
+    case 'venmo':
+      return buildVenmoLink(methods.venmoHandle, amountCents, note);
+    case 'cashapp':
+      return buildCashAppLink(methods.cashappHandle, amountCents);
+    default:
+      // 'other' pays by instructions, which are prose, not a link.
+      return null;
+  }
 }

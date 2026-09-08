@@ -9,6 +9,7 @@ const CAMEL_TO_COLUMN = {
   maxMembers: 'max_members',
   avatarUrl: 'avatar_url',
   duesEnabled: 'dues_enabled',
+  duesPaymentMethod: 'dues_payment_method',
   duesAmountCents: 'dues_amount_cents',
   duesVenmoHandle: 'dues_venmo_handle',
   duesCashappHandle: 'dues_cashapp_handle',
@@ -41,6 +42,9 @@ export class Group {
     // The three payment affordances (venmo / cashapp / free-text instructions)
     // are independent and any combination may be set.
     this.duesEnabled = data.duesEnabled ?? false;
+    // Exactly one of 'venmo' | 'cashapp' | 'other' (or null when unset). The
+    // three value fields below are storage; this says which one is live.
+    this.duesPaymentMethod = data.duesPaymentMethod ?? null;
     this.duesAmountCents = data.duesAmountCents ?? null;
     this.duesVenmoHandle = data.duesVenmoHandle ?? null;
     this.duesCashappHandle = data.duesCashappHandle ?? null;
@@ -153,6 +157,7 @@ export class Group {
       userRole: row.user_role,
       poolType: row.pool_type,
       duesEnabled: row.dues_enabled,
+      duesPaymentMethod: row.dues_payment_method,
       duesAmountCents: row.dues_amount_cents,
       duesVenmoHandle: row.dues_venmo_handle,
       duesCashappHandle: row.dues_cashapp_handle,
@@ -426,7 +431,7 @@ export class Group {
       'name', 'description', 'is_public', 'max_members', 'avatar_url',
       // Dues settings. Guarded by the admin check above, so turning dues on and
       // naming a collector is admin-only for free.
-      'dues_enabled', 'dues_amount_cents', 'dues_venmo_handle',
+      'dues_enabled', 'dues_payment_method', 'dues_amount_cents', 'dues_venmo_handle',
       'dues_cashapp_handle', 'dues_instructions', 'dues_collector_user_id',
     ];
     const updateFields = [];

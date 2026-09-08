@@ -167,6 +167,7 @@ export default function SettingsTab(props: SettingsTabProps) {
         isAdmin={isOwner}
         values={{
           duesEnabled: group.duesEnabled ?? false,
+          duesPaymentMethod: group.duesPaymentMethod ?? null,
           duesAmountCents: group.duesAmountCents ?? null,
           duesVenmoHandle: group.duesVenmoHandle ?? null,
           duesCashappHandle: group.duesCashappHandle ?? null,

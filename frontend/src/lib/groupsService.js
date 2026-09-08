@@ -172,7 +172,7 @@ export async function updateGroup(identifier, updates) {
   // Only allow editable fields client-side: name, description, visibility, maxMembers (if supported)
   const allowed = [
     'name', 'description', 'isPublic', 'maxMembers',
-    'duesEnabled', 'duesAmountCents', 'duesVenmoHandle',
+    'duesEnabled', 'duesPaymentMethod', 'duesAmountCents', 'duesVenmoHandle',
     'duesCashappHandle', 'duesInstructions', 'duesCollectorUserId',
   ];
   const body = Object.fromEntries(Object.entries(updates || {}).filter(([k]) => allowed.includes(k)));

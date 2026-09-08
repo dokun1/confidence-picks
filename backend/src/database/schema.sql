@@ -473,3 +473,38 @@ BEGIN
       REFERENCES users(id) ON DELETE SET NULL;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Dues: exactly ONE payment method per group.
+--
+-- The first cut let an admin fill in Venmo, Cash App and free-text instructions
+-- independently, which produced a banner offering two buttons and a paragraph.
+-- A group collects dues one way; the method is now a single choice and the
+-- non-selected columns are cleared on save.
+--
+-- The three value columns are kept rather than collapsed into one generic
+-- column so each keeps its own validation (handle charset vs. 1000-char prose)
+-- and so an admin who switches Venmo -> Cash App -> Venmo is not retyping.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_payment_method'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_payment_method VARCHAR(20) NULL
+      CHECK (dues_payment_method IS NULL
+             OR dues_payment_method IN ('venmo', 'cashapp', 'other'));
+
+    -- Backfill any group configured before the column existed. Venmo wins over
+    -- Cash App wins over instructions purely for determinism; an admin who had
+    -- filled in several now sees the first one selected and can change it.
+    UPDATE groups
+    SET dues_payment_method = CASE
+      WHEN dues_venmo_handle IS NOT NULL THEN 'venmo'
+      WHEN dues_cashapp_handle IS NOT NULL THEN 'cashapp'
+      WHEN dues_instructions IS NOT NULL THEN 'other'
+      ELSE NULL
+    END
+    WHERE dues_enabled = true AND dues_payment_method IS NULL;
+  END IF;
+END $$;
