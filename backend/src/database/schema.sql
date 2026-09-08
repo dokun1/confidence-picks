@@ -576,3 +576,27 @@ BEGIN
     ALTER TABLE groups ADD COLUMN dues_payout_notes TEXT NULL;
   END IF;
 END $$;
+
+-- MCP personal access tokens.
+--
+-- Opaque bearer credentials (`cp_live_...`) that let a user connect Claude Code
+-- or Codex to their own identity without a browser. Only the SHA-256 hash is
+-- stored; the plaintext is shown once at mint time and is not recoverable.
+--
+-- Production runs with INIT_DB unset, so this file never syncs on deploy --
+-- McpToken.ensureSchema() creates the table on first use with the same
+-- static-latch self-heal pattern used by the dues and knockout_only columns.
+CREATE TABLE IF NOT EXISTS mcp_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(64) NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  scopes TEXT[] NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ NULL,
+  expires_at TIMESTAMPTZ NULL,
+  revoked_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_tokens_hash ON mcp_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id);

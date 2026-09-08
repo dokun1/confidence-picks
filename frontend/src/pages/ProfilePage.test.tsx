@@ -12,6 +12,15 @@ vi.mock('../lib/authService.js', () => ({
   },
 }));
 
+// The page now embeds McpTokensCard, which fetches on mount. Stub the service
+// rather than AuthService so this file keeps testing the profile, not the card
+// (McpTokensCard.test.tsx covers that surface).
+vi.mock('../lib/mcpTokenService', () => ({
+  listMcpTokens: vi.fn().mockResolvedValue([]),
+  createMcpToken: vi.fn(),
+  revokeMcpToken: vi.fn(),
+}));
+
 // Stub useAuth so ProfilePage renders without the full provider stack. The
 // hook is re-stubbed per test where the user shape matters.
 const setAuthUser = vi.fn();

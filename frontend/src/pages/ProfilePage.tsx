@@ -7,6 +7,7 @@ import Card from '../designsystem/components/Card';
 import TextField from '../designsystem/components/TextField';
 import InlineToast from '../designsystem/components/InlineToast';
 import type { ToastVariant } from '../designsystem/components/InlineToast';
+import McpTokensCard from '../components/McpTokensCard';
 
 interface ToastState {
   open: boolean;
@@ -171,6 +172,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </Card>
+
+      <McpTokensCard />
 
       <section className="flex justify-start">
         <Button variant="destructive" onClick={() => AuthService.logout()}>

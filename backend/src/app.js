@@ -11,6 +11,8 @@ import picksRoutes from './routes/picks.js';
 import worldCupPicksRoutes from './routes/worldCupPicks.js';
 import invitesRoutes from './routes/invites.js';
 import adminRoutes from './routes/admin.js';
+import mcpTokensRoutes from './routes/mcpTokens.js';
+import { mcpTokenExchange } from './middleware/mcpAuth.js';
 import { initDatabase } from './database/init.js';
 
 const app = express();
@@ -48,7 +50,13 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// MCP personal access tokens exchange themselves for a normal access JWT here,
+// before any router runs, so every route below stays completely unmodified.
+// A request without a `cp_live_` bearer passes straight through untouched.
+app.use('/api', mcpTokenExchange);
+
 // Routes
+app.use('/api/mcp', mcpTokensRoutes);
 app.use('/api', apiRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/groups', groupsRoutes);
