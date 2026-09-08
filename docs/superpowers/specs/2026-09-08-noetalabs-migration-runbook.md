@@ -17,10 +17,18 @@ to re-consent, and no Apple Sign In identifiers change.
 
 ## Prerequisites (David — account creation)
 
-1. Create the GitHub org `noetalabs` (free; public repos are unlimited).
-   Verified 2026-09-08: `noetalabs` does not currently exist on GitHub.
-2. Create the npm org `noetalabs` (free for public packages).
-   Verified 2026-09-08: the scope is unclaimed.
+Verified 2026-09-08: `noetalabs` exists neither on GitHub nor on npm, so both
+names are free.
+
+1. GitHub. Two shapes, and they transfer differently:
+   - **Organization** (`github.com/organizations/new`) — created from inside the
+     existing `dokun1` login, free for public repos, no new email or password.
+     Because you own both sides, the transfer completes immediately.
+   - **Separate user account** (`github.com/signup`) — cleaner identity
+     separation, but the transfer becomes a handshake: `dokun1` initiates and
+     the receiving account must log in and accept. Adds a third identity to
+     `gh auth` alongside `dokun1` and `mnmal-ai-two`.
+2. npm org `noetalabs` (free for public packages).
 
 ## Steps
 
@@ -30,7 +38,7 @@ The `dokun1` token currently lacks `workflow`, which blocks pushing any change
 under `.github/workflows/`.
 
 ```bash
-gh auth refresh -h github.com -s workflow,admin:org
+gh auth refresh -h github.com -s workflow,admin:org   # drop admin:org if noetalabs is a user account, not an org
 ```
 
 ### 2. Transfer the repository
@@ -41,6 +49,10 @@ gh api -X POST repos/dokun1/confidence-picks/transfer -f new_owner=noetalabs
 
 Issues, pull requests, stars and the commit history all move with it, and GitHub
 serves a redirect from the old URL so existing clones keep working.
+
+If `noetalabs` is a **user account** rather than an org, this call only *offers*
+the transfer: sign in as `noetalabs` and accept it before continuing. If it is an
+org you own, the transfer is immediate and there is nothing to accept.
 
 ### 3. Re-add the Actions secrets
 
