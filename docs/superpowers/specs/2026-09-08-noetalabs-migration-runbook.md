@@ -1,7 +1,14 @@
 # Migrating confidence-picks to noetalabs (GitHub + npm only)
 
-Scope decided 2026-09-08: **GitHub repo and npm scope only.** Vercel, the
-domain, Google OAuth and Apple Sign In all stay exactly where they are.
+> **Status: deferred 2026-09-08.** The repo is staying under `dokun1` for now.
+> Nothing in the codebase depends on the repo owner, so this can be picked up
+> unchanged whenever it is wanted. The npm decision was taken separately and
+> does not wait on it: the package publishes **unscoped** as
+> `confidence-picks-mcp`, which needs no org on either registry and survives a
+> future account move without a rename.
+
+Original scope: **GitHub repo and npm scope only.** Vercel, the domain, Google
+OAuth and Apple Sign In all stay exactly where they are.
 
 ## Why this is cheap
 
