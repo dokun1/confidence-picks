@@ -48,7 +48,7 @@ const members: GroupMember[] = [
     isOwner: true,
     joinedAt: '2026-01-01T00:00:00.000Z',
     // A picture URL makes the Avatar render as an <img> we can assert on by alt.
-    pictureUrl: 'https://example.com/alice.jpg',
+    pictureUrl: 'https://example.com/alice.jpg', duesPaidAt: null,
   },
   {
     id: 'm2',
@@ -56,7 +56,7 @@ const members: GroupMember[] = [
     email: 'bob@example.com',
     isOwner: false,
     joinedAt: '2026-02-15T00:00:00.000Z',
-    pictureUrl: null,
+    pictureUrl: null, duesPaidAt: null,
   },
 ];
 

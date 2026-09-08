@@ -1,6 +1,21 @@
 import pool from '../config/database.js';
 import crypto from 'crypto';
 
+// camelCase payload key -> groups column. Replaces the ternary chain that grew
+// unreadable once dues added six more fields. Keys absent here pass through
+// unchanged (they are already snake_case) and are still gated by allowedFields.
+const CAMEL_TO_COLUMN = {
+  isPublic: 'is_public',
+  maxMembers: 'max_members',
+  avatarUrl: 'avatar_url',
+  duesEnabled: 'dues_enabled',
+  duesAmountCents: 'dues_amount_cents',
+  duesVenmoHandle: 'dues_venmo_handle',
+  duesCashappHandle: 'dues_cashapp_handle',
+  duesInstructions: 'dues_instructions',
+  duesCollectorUserId: 'dues_collector_user_id',
+};
+
 export class Group {
   constructor(data) {
     this.id = data.id;
@@ -21,6 +36,19 @@ export class Group {
     // frontend's GroupDetailsPage can branch on group.poolType — without it
     // every WC group rendered the NFL PicksTab.
     this.poolType = data.poolType;
+    // Dues. `duesEnabled` gates every other field; when false the frontend
+    // renders no banner and no settings block. Amount is integer cents (USD).
+    // The three payment affordances (venmo / cashapp / free-text instructions)
+    // are independent and any combination may be set.
+    this.duesEnabled = data.duesEnabled ?? false;
+    this.duesAmountCents = data.duesAmountCents ?? null;
+    this.duesVenmoHandle = data.duesVenmoHandle ?? null;
+    this.duesCashappHandle = data.duesCashappHandle ?? null;
+    this.duesInstructions = data.duesInstructions ?? null;
+    this.duesCollectorUserId = data.duesCollectorUserId ?? null;
+    // Denormalised for display so the banner can say "you owe Dana" without a
+    // second round-trip to /members.
+    this.duesCollectorName = data.duesCollectorName ?? null;
   }
 
   // Create new group
@@ -91,13 +119,15 @@ export class Group {
              COUNT(gm.id) as member_count,
         u_owner.name as owner_name,
         u_owner.picture_url as owner_picture_url,
+        u_collector.name as dues_collector_name,
              ${userId ? 'user_gm.role as user_role' : 'NULL as user_role'}
       FROM groups g
       LEFT JOIN group_memberships gm ON g.id = gm.group_id
       LEFT JOIN users u_owner ON g.created_by = u_owner.id
+      LEFT JOIN users u_collector ON g.dues_collector_user_id = u_collector.id
       ${userId ? 'LEFT JOIN group_memberships user_gm ON g.id = user_gm.group_id AND user_gm.user_id = $2' : ''}
       WHERE g.identifier = $1
-      GROUP BY g.id, u_owner.name, u_owner.picture_url${userId ? ', user_gm.role' : ''}
+      GROUP BY g.id, u_owner.name, u_owner.picture_url, u_collector.name${userId ? ', user_gm.role' : ''}
     `;
     
     const values = userId ? [identifier, userId] : [identifier];
@@ -122,6 +152,13 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      duesEnabled: row.dues_enabled,
+      duesAmountCents: row.dues_amount_cents,
+      duesVenmoHandle: row.dues_venmo_handle,
+      duesCashappHandle: row.dues_cashapp_handle,
+      duesInstructions: row.dues_instructions,
+      duesCollectorUserId: row.dues_collector_user_id,
+      duesCollectorName: row.dues_collector_name,
     });
   }
 
@@ -271,7 +308,8 @@ export class Group {
   // Get group members
   static async getMembers(groupId) {
     const query = `
-      SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at
+      SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at,
+             gm.dues_paid_at
       FROM users u
       JOIN group_memberships gm ON u.id = gm.user_id
       WHERE gm.group_id = $1
@@ -384,15 +422,19 @@ export class Group {
       throw new Error('Only group admins can update group settings');
     }
     
-    const allowedFields = ['name', 'description', 'is_public', 'max_members', 'avatar_url'];
+    const allowedFields = [
+      'name', 'description', 'is_public', 'max_members', 'avatar_url',
+      // Dues settings. Guarded by the admin check above, so turning dues on and
+      // naming a collector is admin-only for free.
+      'dues_enabled', 'dues_amount_cents', 'dues_venmo_handle',
+      'dues_cashapp_handle', 'dues_instructions', 'dues_collector_user_id',
+    ];
     const updateFields = [];
     const values = [];
     let paramCount = 1;
     
     for (const [key, value] of Object.entries(updates)) {
-      const dbKey = key === 'isPublic' ? 'is_public' : 
-                   key === 'maxMembers' ? 'max_members' : 
-                   key === 'avatarUrl' ? 'avatar_url' : key;
+      const dbKey = CAMEL_TO_COLUMN[key] ?? key;
       
       if (allowedFields.includes(dbKey)) {
         updateFields.push(`${dbKey} = $${paramCount}`);
@@ -416,6 +458,39 @@ export class Group {
     `;
     
     const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  /**
+   * Mark a member paid or unpaid. Admin-only by design: no payment processor is
+   * involved, so an admin confirming receipt out of band IS the ledger. Returns
+   * the updated membership row.
+   *
+   * `paid=false` clears both columns so an unpaid row is indistinguishable from
+   * one that was never marked -- keeps "unpaid" a single representable state.
+   */
+  static async setDuesPaid(groupId, targetUserId, paid, actingUserId) {
+    const roleCheck = await pool.query(
+      'SELECT role FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+      [groupId, actingUserId]
+    );
+
+    if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
+      throw new Error('Only group admins can update dues status');
+    }
+
+    const result = await pool.query(
+      `UPDATE group_memberships
+       SET dues_paid_at = $1, dues_marked_by = $2
+       WHERE group_id = $3 AND user_id = $4
+       RETURNING user_id, dues_paid_at, dues_marked_by`,
+      [paid ? new Date() : null, paid ? actingUserId : null, groupId, targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('That user is not a member of this group');
+    }
+
     return result.rows[0];
   }
 

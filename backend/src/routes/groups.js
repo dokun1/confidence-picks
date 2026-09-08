@@ -5,6 +5,73 @@ import { GroupInvite } from '../models/GroupInvite.js';
 
 const router = express.Router();
 
+// Venmo usernames and Cash App cashtags are both [A-Za-z0-9_-] with a length
+// cap; users habitually paste them with the leading @ or $, so accept and strip
+// it rather than rejecting. Kept deliberately permissive -- we are building a
+// URL, not authenticating against either service, and a wrong handle simply
+// lands the payer on a "user not found" page.
+const HANDLE_RE = /^[A-Za-z0-9_-]{1,50}$/;
+
+function normalizeHandle(raw) {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = String(raw).trim().replace(/^[@$]/, '');
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Validate + normalise the dues fields on a PUT /groups/:identifier body.
+ * Mutates `updates` in place (stripping @/$ from handles, coercing blanks to
+ * NULL) and returns an error string, or null when the payload is acceptable.
+ *
+ * Deliberately does NOT require a payment method when dues are enabled: an
+ * admin may legitimately turn dues on, then fill in the handle afterwards, and
+ * blocking that makes the settings form hostile to fill out top-to-bottom.
+ */
+function validateDuesUpdates(updates) {
+  if (Object.prototype.hasOwnProperty.call(updates, 'duesAmountCents')) {
+    const raw = updates.duesAmountCents;
+    if (raw === null || raw === '') {
+      updates.duesAmountCents = null;
+    } else {
+      const cents = Number(raw);
+      if (!Number.isInteger(cents) || cents <= 0) {
+        return 'Dues amount must be a whole number of cents greater than zero';
+      }
+      // $10,000 ceiling: this is a rec-league pool, and a stray keystroke
+      // turning $20 into $200000 should not reach a payment deeplink.
+      if (cents > 1000000) {
+        return 'Dues amount must be $10,000 or less';
+      }
+      updates.duesAmountCents = cents;
+    }
+  }
+
+  for (const field of ['duesVenmoHandle', 'duesCashappHandle']) {
+    if (!Object.prototype.hasOwnProperty.call(updates, field)) continue;
+    const handle = normalizeHandle(updates[field]);
+    if (handle !== null && !HANDLE_RE.test(handle)) {
+      const label = field === 'duesVenmoHandle' ? 'Venmo username' : 'Cash App cashtag';
+      return `${label} may only contain letters, numbers, hyphens and underscores`;
+    }
+    updates[field] = handle;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'duesInstructions')) {
+    const raw = updates.duesInstructions;
+    const text = raw === null || raw === undefined ? null : String(raw).trim();
+    if (text && text.length > 1000) {
+      return 'Payment instructions must be 1000 characters or less';
+    }
+    updates.duesInstructions = text && text.length > 0 ? text : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'duesEnabled')) {
+    updates.duesEnabled = Boolean(updates.duesEnabled);
+  }
+
+  return null;
+}
+
 // Create a new group
 router.post('/', authenticateToken, async (req, res) => {
   try {
@@ -241,6 +308,40 @@ router.get('/:identifier/members', authenticateToken, async (req, res) => {
   }
 });
 
+// Mark a member paid / unpaid (admin only).
+// Manual by necessity: neither Venmo nor Cash App exposes a payment-confirmation
+// API to third parties, so an admin confirming receipt out of band is the only
+// possible source of truth.
+router.post('/:identifier/members/:userId/dues', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, userId } = req.params;
+    const { paid } = req.body;
+
+    if (typeof paid !== 'boolean') {
+      return res.status(400).json({ error: 'Body must include a boolean "paid" field' });
+    }
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    const membership = await Group.setDuesPaid(group.id, userId, paid, req.user.id);
+    res.json({
+      userId: membership.user_id,
+      duesPaidAt: membership.dues_paid_at,
+    });
+  } catch (error) {
+    if (error.message.includes('Only group admins')) {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.message.includes('not a member')) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get group messages
 router.get('/:identifier/messages', authenticateToken, async (req, res) => {
   try {
@@ -362,11 +463,29 @@ router.put('/:identifier', authenticateToken, async (req, res) => {
       delete updates.identifier;
     }
     
+    const duesError = validateDuesUpdates(updates);
+    if (duesError) {
+      return res.status(400).json({ error: duesError });
+    }
+
     const group = await Group.findByIdentifier(identifier, req.user.id);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
     
+    if (Object.prototype.hasOwnProperty.call(updates, 'duesCollectorUserId')) {
+      const collectorId = updates.duesCollectorUserId;
+      if (collectorId === null || collectorId === '') {
+        updates.duesCollectorUserId = null;
+      } else {
+        const members = await Group.getMembers(group.id);
+        if (!members.some((m) => String(m.id) === String(collectorId))) {
+          return res.status(400).json({ error: 'The dues collector must be a member of this group' });
+        }
+        updates.duesCollectorUserId = Number(collectorId);
+      }
+    }
+
   const updatedGroup = await Group.update(group.id, updates, req.user.id);
     res.json(updatedGroup);
   } catch (error) {

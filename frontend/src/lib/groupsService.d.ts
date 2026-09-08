@@ -22,6 +22,17 @@ export interface GroupDetail {
   userRole?: string;
   createdAt?: string;
   poolType?: PoolType;
+  // Dues. `duesEnabled` gates the rest; amounts are integer cents (USD).
+  // The three payment affordances are independent -- a group may use a Venmo
+  // handle, a Cash App cashtag, free-text instructions, or any combination.
+  duesEnabled?: boolean;
+  duesAmountCents?: number | null;
+  duesVenmoHandle?: string | null;
+  duesCashappHandle?: string | null;
+  duesInstructions?: string | null;
+  duesCollectorUserId?: number | null;
+  /** Denormalised collector display name, so the banner needs no extra fetch. */
+  duesCollectorName?: string | null;
 }
 
 export interface GroupMember {
@@ -31,6 +42,8 @@ export interface GroupMember {
   isOwner: boolean;
   joinedAt: string;
   pictureUrl: string | null;
+  /** ISO timestamp an admin marked this member paid; null means unpaid. */
+  duesPaidAt: string | null;
 }
 
 export interface GroupMessage {
@@ -67,6 +80,25 @@ export function leaveGroup(identifier: string): Promise<void>;
 export function joinGroup(identifier: string): Promise<void>;
 export function updateGroup(
   identifier: string,
-  updates: Partial<Pick<GroupDetail, 'name' | 'description' | 'isPublic' | 'maxMembers'>>,
+  updates: Partial<
+    Pick<
+      GroupDetail,
+      | 'name'
+      | 'description'
+      | 'isPublic'
+      | 'maxMembers'
+      | 'duesEnabled'
+      | 'duesAmountCents'
+      | 'duesVenmoHandle'
+      | 'duesCashappHandle'
+      | 'duesInstructions'
+      | 'duesCollectorUserId'
+    >
+  >,
 ): Promise<void>;
+export function setMemberDues(
+  identifier: string,
+  userId: string,
+  paid: boolean,
+): Promise<{ userId: string; duesPaidAt: string | null }>;
 export function deleteGroup(identifier: string): Promise<boolean>;

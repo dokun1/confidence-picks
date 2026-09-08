@@ -401,3 +401,75 @@ BEGIN
     RAISE NOTICE 'Created correct confidence unique index with group_id';
   END IF;
 END $$;
+-- ---------------------------------------------------------------------------
+-- Group dues (forward-only, idempotent).
+--
+-- An admin may turn dues on for a group, set an amount, and name a *collector*
+-- (any member -- often the treasurer rather than the admin). Members pay out of
+-- band via Venmo/Cash App deeplinks or free-text instructions; neither service
+-- exposes a payment-confirmation API, so `dues_paid_at` is set MANUALLY by an
+-- admin and is the single source of truth for who has paid.
+--
+-- All three payment affordances are independent and optional: a group may set a
+-- Venmo handle, a Cash App cashtag, free-text instructions, or any combination.
+-- Amounts are integer cents (USD) to avoid float rounding.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_enabled'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_enabled BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_amount_cents'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_amount_cents INTEGER NULL
+      CHECK (dues_amount_cents IS NULL OR dues_amount_cents > 0);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_venmo_handle'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_venmo_handle VARCHAR(64) NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_cashapp_handle'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_cashapp_handle VARCHAR(64) NULL;
+  END IF;
+  -- Free-text fallback for groups that collect by Zelle, cash, check, etc.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_instructions'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_instructions TEXT NULL;
+  END IF;
+  -- ON DELETE SET NULL: losing the collector must not delete the group.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_collector_user_id'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_collector_user_id INTEGER NULL
+      REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+
+  -- Per-member ledger. NULL = unpaid, which makes "unpaid by default" free for
+  -- every existing membership row and every future join.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'dues_paid_at'
+  ) THEN
+    ALTER TABLE group_memberships ADD COLUMN dues_paid_at TIMESTAMP NULL;
+  END IF;
+  -- Audit trail: which admin marked this member paid.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'dues_marked_by'
+  ) THEN
+    ALTER TABLE group_memberships ADD COLUMN dues_marked_by INTEGER NULL
+      REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+END $$;

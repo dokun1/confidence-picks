@@ -23,8 +23,8 @@ const mockGetPickSeasons = vi.mocked(getPickSeasons);
 const identifier = 'sunday-squad';
 
 const members: GroupMember[] = [
-  { id: 'm1', name: 'Alice', email: 'alice@example.com', isOwner: true, joinedAt: '2026-01-01', pictureUrl: null },
-  { id: 'm2', name: 'Bob', email: 'bob@example.com', isOwner: false, joinedAt: '2026-01-02', pictureUrl: null },
+  { id: 'm1', name: 'Alice', email: 'alice@example.com', isOwner: true, joinedAt: '2026-01-01', pictureUrl: null, duesPaidAt: null },
+  { id: 'm2', name: 'Bob', email: 'bob@example.com', isOwner: false, joinedAt: '2026-01-02', pictureUrl: null, duesPaidAt: null },
 ];
 
 const buf = { id: '1', name: 'Bills', abbreviation: 'BUF', logo: '' };

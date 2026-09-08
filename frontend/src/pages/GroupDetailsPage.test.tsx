@@ -121,7 +121,7 @@ const members: GroupMember[] = [
     email: 'alice@example.com',
     isOwner: true,
     joinedAt: '2026-01-01T00:00:00.000Z',
-    pictureUrl: null,
+    pictureUrl: null, duesPaidAt: null,
   },
 ];
 
@@ -383,7 +383,7 @@ describe('GroupDetailsPage', () => {
         {
           userId: 1,
           name: 'Alice',
-          pictureUrl: null,
+          pictureUrl: null, duesPaidAt: null,
           rank: 1,
           tied: false,
           points: 12,

@@ -59,13 +59,16 @@ export class GroupInvite {
     const query = `
       SELECT gi.*, g.name, g.identifier, g.description, g.max_members, g.created_by,
              u_owner.name AS owner_name, u_owner.picture_url AS owner_picture_url,
+             g.dues_enabled, g.dues_amount_cents,
+             u_collector.name AS dues_collector_name,
              COUNT(gm.id) as member_count
       FROM group_invitations gi
       JOIN groups g ON gi.group_id = g.id
       LEFT JOIN users u_owner ON g.created_by = u_owner.id
+      LEFT JOIN users u_collector ON g.dues_collector_user_id = u_collector.id
       LEFT JOIN group_memberships gm ON g.id = gm.group_id
       WHERE gi.token = $1
-      GROUP BY gi.id, g.id, u_owner.name, u_owner.picture_url
+      GROUP BY gi.id, g.id, u_owner.name, u_owner.picture_url, u_collector.name
     `;
     const result = await pool.query(query, [token]);
     if (result.rows.length === 0) return null;
