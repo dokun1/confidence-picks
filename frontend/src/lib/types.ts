@@ -96,6 +96,14 @@ export interface InviteGroup {
   maxMembers: number;
   ownerName: string;
   ownerPictureUrl: string;
+  // Shown BEFORE joining so an invitee learns the group costs money up front.
+  // Handles are intentionally absent: a holder of an invite link is not yet a
+  // member and has no business receiving a payment deeplink.
+  duesEnabled?: boolean;
+  duesAmountCents?: number | null;
+  duesCollectorName?: string | null;
+  /** What the winner gets — shown pre-join so the buy-in can be judged. */
+  duesPayoutNotes?: string | null;
 }
 
 export interface InviteDetails {

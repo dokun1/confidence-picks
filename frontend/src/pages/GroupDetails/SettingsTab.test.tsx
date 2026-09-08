@@ -8,6 +8,8 @@ import type { GroupDetail, GroupMember } from '../../lib/groupsService';
 vi.mock('../../lib/groupsService.js', () => ({
   deleteGroup: vi.fn(),
   leaveGroup: vi.fn(),
+  updateGroup: vi.fn(),
+  setMemberDues: vi.fn(),
 }));
 
 // Mock the invites service so invite-link creation is controllable per test.
@@ -23,12 +25,14 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-import { deleteGroup, leaveGroup } from '../../lib/groupsService.js';
+import { deleteGroup, leaveGroup, updateGroup, setMemberDues } from '../../lib/groupsService.js';
 import { createLinkInvite } from '../../lib/invitesService.js';
 
 const mockDeleteGroup = vi.mocked(deleteGroup);
 const mockLeaveGroup = vi.mocked(leaveGroup);
 const mockCreateLinkInvite = vi.mocked(createLinkInvite);
+const mockUpdateGroup = vi.mocked(updateGroup);
+const mockSetMemberDues = vi.mocked(setMemberDues);
 
 const identifier = 'sunday-squad';
 
@@ -48,7 +52,7 @@ const members: GroupMember[] = [
     isOwner: true,
     joinedAt: '2026-01-01T00:00:00.000Z',
     // A picture URL makes the Avatar render as an <img> we can assert on by alt.
-    pictureUrl: 'https://example.com/alice.jpg',
+    pictureUrl: 'https://example.com/alice.jpg', duesPaidAt: null,
   },
   {
     id: 'm2',
@@ -56,7 +60,7 @@ const members: GroupMember[] = [
     email: 'bob@example.com',
     isOwner: false,
     joinedAt: '2026-02-15T00:00:00.000Z',
-    pictureUrl: null,
+    pictureUrl: null, duesPaidAt: null,
   },
 ];
 
@@ -230,5 +234,84 @@ describe('SettingsTab member actions', () => {
     expect(mockLeaveGroup).toHaveBeenCalledWith(identifier);
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/groups'));
     expect(mockDeleteGroup).not.toHaveBeenCalled();
+  });
+
+  // SettingsTab owns the wiring between the DuesSettings panel and the service:
+  // the panel's behaviour is covered in its own suite, so these assert only the
+  // calls that cross the boundary and the refresh that follows them.
+  describe('dues', () => {
+    const duesGroup: GroupDetail = {
+      ...group,
+      duesEnabled: true,
+      duesPaymentMethod: 'venmo',
+      duesAmountCents: 2000,
+      duesVenmoHandle: 'dana-reyes',
+      duesCollectorName: 'Dana Reyes',
+    };
+
+    function renderDues(overrides: Partial<React.ComponentProps<typeof SettingsTab>> = {}) {
+      const onDuesChanged = vi.fn();
+      render(
+        <SettingsTab
+          group={duesGroup}
+          isOwner
+          identifier={identifier}
+          members={members}
+          onDuesChanged={onDuesChanged}
+          {...overrides}
+        />,
+      );
+      return { onDuesChanged };
+    }
+
+    it('renders the dues panel for a group that collects dues', () => {
+      renderDues();
+      expect(screen.getByText('Who has paid')).toBeInTheDocument();
+    });
+
+    it('hides the dues panel from members when dues are off', () => {
+      render(
+        <SettingsTab group={group} isOwner={false} identifier={identifier} members={members} />,
+      );
+      expect(screen.queryByText('Who has paid')).not.toBeInTheDocument();
+    });
+
+    it('saves the admin\'s settings through the service', async () => {
+      mockUpdateGroup.mockResolvedValue(undefined);
+      const { onDuesChanged } = renderDues();
+
+      fireEvent.click(screen.getByRole('button', { name: /Save dues/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateGroup).toHaveBeenCalledWith(
+          identifier,
+          expect.objectContaining({ duesEnabled: true, duesAmountCents: 2000 }),
+        ),
+      );
+      // The parent re-fetches so the banner reflects the change without a reload.
+      await waitFor(() => expect(onDuesChanged).toHaveBeenCalled());
+    });
+
+    it('marks a member paid through the service', async () => {
+      mockSetMemberDues.mockResolvedValue({ userId: members[0].id, duesPaidAt: 'now' });
+      const { onDuesChanged } = renderDues();
+
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`Mark ${members[0].name} paid`) }));
+
+      await waitFor(() =>
+        expect(mockSetMemberDues).toHaveBeenCalledWith(identifier, members[0].id, true),
+      );
+      await waitFor(() => expect(onDuesChanged).toHaveBeenCalled());
+    });
+
+    it('does not refresh when the save fails', async () => {
+      mockUpdateGroup.mockRejectedValue(new Error('Venmo username is invalid'));
+      const { onDuesChanged } = renderDues();
+
+      fireEvent.click(screen.getByRole('button', { name: /Save dues/i }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Venmo username is invalid');
+      expect(onDuesChanged).not.toHaveBeenCalled();
+    });
   });
 });

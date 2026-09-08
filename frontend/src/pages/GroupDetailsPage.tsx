@@ -11,6 +11,7 @@ import { countNeedsPick } from '../lib/wcNeedsPick';
 import type { SavedView } from '../lib/wcGamesView';
 import type { WorldCupMatch } from '../lib/types';
 import Banner from '../designsystem/components/Banner';
+import DuesBanner from '../designsystem/components/DuesBanner';
 import Button from '../designsystem/components/Button';
 import NotificationDot from '../designsystem/components/NotificationDot';
 import PageContainer from '../designsystem/components/PageContainer';
@@ -291,6 +292,28 @@ export default function GroupDetailsPage() {
       });
   }
 
+  // Re-fetch group + members after a dues change. Deliberately silent (no
+  // loading state): the user is looking at the settings tab, and swapping it for
+  // a spinner to reflect a toggle they just flipped reads as a glitch.
+  function refreshDues() {
+    if (!identifier) return;
+    Promise.all([getGroup(identifier), getMembers(identifier)])
+      .then(([g, m]) => {
+        setGroup(g);
+        setMembers(m);
+      })
+      .catch(() => {});
+  }
+
+  // Banner CTA: send the member to the settings tab, where the amount, the
+  // payment options and the who-has-paid list all live.
+  function goToDuesDetails() {
+    setActiveTab('settings');
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'settings');
+    setSearchParams(next, { replace: true });
+  }
+
   // Switch tabs; opening Chat lazy-loads its history, clears the unread dot, and
   // marks the chat read server-side (fire-and-forget — the local clear is what
   // the user sees, and a failed write just means the dot reappears next visit).
@@ -324,6 +347,13 @@ export default function GroupDetailsPage() {
 
   // getGroup returns userRole (NOT isOwner); admin is the owning role.
   const isOwner = group.userRole === 'admin';
+  // The dues banner is for the viewer's OWN unpaid status, so it reads the
+  // viewer's membership row rather than anything on the group payload.
+  const myMembership = members.find((m) => String(m.id) === String(user?.id));
+  const owesDues =
+    (group.duesEnabled ?? false) &&
+    myMembership !== undefined &&
+    myMembership.duesPaidAt === null;
   // World Cup pools render the tournament-shaped tab variants. Absent/NFL pools
   // keep the existing behavior untouched.
   const isWorldCup = group.poolType === 'world_cup_2026';
@@ -391,6 +421,22 @@ export default function GroupDetailsPage() {
             You have {needsPickCount} {needsPickCount === 1 ? 'pick' : 'picks'} available to make
             {nflPickWeek != null ? ` in Week ${nflPickWeek}` : ''}.
           </Banner>
+        )}
+
+        {/* Unpaid-dues notice — same slot and tone as the picks-due banner above.
+            Suppressed on the Settings tab, where the full dues panel (with the
+            same payment buttons) is already on screen. */}
+        {owesDues && activeTab !== 'settings' && (
+          <DuesBanner
+            amountCents={group.duesAmountCents ?? null}
+            collectorName={group.duesCollectorName ?? null}
+            paymentMethod={group.duesPaymentMethod ?? null}
+            venmoHandle={group.duesVenmoHandle ?? null}
+            cashappHandle={group.duesCashappHandle ?? null}
+            instructions={group.duesInstructions ?? null}
+            groupName={group.name}
+            onViewDetails={goToDuesDetails}
+          />
         )}
 
         {/* Tab Navigation */}
@@ -464,6 +510,8 @@ export default function GroupDetailsPage() {
             isOwner={isOwner}
             identifier={identifier}
             members={members}
+            currentUserId={user?.id === undefined ? undefined : String(user.id)}
+            onDuesChanged={refreshDues}
           />
         )}
     </PageContainer>

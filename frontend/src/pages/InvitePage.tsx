@@ -5,6 +5,8 @@ import { getInvite, acceptInvite } from '../lib/invitesService.js';
 import type { InviteDetails } from '../lib/types';
 import Avatar from '../designsystem/components/Avatar';
 import Button from '../designsystem/components/Button';
+import Banner from '../designsystem/components/Banner';
+import { formatCents } from '../lib/paymentLinks';
 
 // Ported from InvitePage.svelte (commit d6b2566^). Public invite-acceptance flow:
 // reads :token from the URL, fetches InviteDetails, and renders one of several
@@ -163,6 +165,28 @@ export default function InvitePage() {
                 <span>• {invite.invite.remainingUses} uses left</span>
               )}
             </div>
+
+            {/* Dues disclosure — shown before the join CTA so the cost of
+                membership is known at the moment of deciding, not after. */}
+            {invite.group.duesEnabled && (
+              <Banner variant="info">
+                <span className="block">
+                  {invite.group.duesAmountCents
+                    ? `This group collects ${formatCents(invite.group.duesAmountCents)} in dues per member`
+                    : 'This group collects dues from its members'}
+                  {invite.group.duesCollectorName
+                    ? `, paid to ${invite.group.duesCollectorName}.`
+                    : '.'}
+                </span>
+                {/* The buy-in is only half the decision; what it pays out is
+                    the other half, so both are disclosed before joining. */}
+                {invite.group.duesPayoutNotes && (
+                  <span className="mt-xs block whitespace-pre-line">
+                    {invite.group.duesPayoutNotes}
+                  </span>
+                )}
+              </Banner>
+            )}
 
             {invite.alreadyMember ? (
               <div className="space-y-sm">

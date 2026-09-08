@@ -447,3 +447,132 @@ BEGIN
     ALTER TABLE user_picks ADD COLUMN predicted_away_score INTEGER NULL;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Group dues (forward-only, idempotent).
+--
+-- An admin may turn dues on for a group, set an amount, and name a *collector*
+-- (any member -- often the treasurer rather than the admin). Members pay out of
+-- band via Venmo/Cash App deeplinks or free-text instructions; neither service
+-- exposes a payment-confirmation API, so `dues_paid_at` is set MANUALLY by an
+-- admin and is the single source of truth for who has paid.
+--
+-- All three payment affordances are independent and optional: a group may set a
+-- Venmo handle, a Cash App cashtag, free-text instructions, or any combination.
+-- Amounts are integer cents (USD) to avoid float rounding.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_enabled'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_enabled BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_amount_cents'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_amount_cents INTEGER NULL
+      CHECK (dues_amount_cents IS NULL OR dues_amount_cents > 0);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_venmo_handle'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_venmo_handle VARCHAR(64) NULL;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_cashapp_handle'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_cashapp_handle VARCHAR(64) NULL;
+  END IF;
+  -- Free-text fallback for groups that collect by Zelle, cash, check, etc.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_instructions'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_instructions TEXT NULL;
+  END IF;
+  -- ON DELETE SET NULL: losing the collector must not delete the group.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_collector_user_id'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_collector_user_id INTEGER NULL
+      REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+
+  -- Per-member ledger. NULL = unpaid, which makes "unpaid by default" free for
+  -- every existing membership row and every future join.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'dues_paid_at'
+  ) THEN
+    ALTER TABLE group_memberships ADD COLUMN dues_paid_at TIMESTAMP NULL;
+  END IF;
+  -- Audit trail: which admin marked this member paid.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'dues_marked_by'
+  ) THEN
+    ALTER TABLE group_memberships ADD COLUMN dues_marked_by INTEGER NULL
+      REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Dues: exactly ONE payment method per group.
+--
+-- The first cut let an admin fill in Venmo, Cash App and free-text instructions
+-- independently, which produced a banner offering two buttons and a paragraph.
+-- A group collects dues one way; the method is now a single choice and the
+-- non-selected columns are cleared on save.
+--
+-- The three value columns are kept rather than collapsed into one generic
+-- column so each keeps its own validation (handle charset vs. 1000-char prose)
+-- and so an admin who switches Venmo -> Cash App -> Venmo is not retyping.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_payment_method'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_payment_method VARCHAR(20) NULL
+      CHECK (dues_payment_method IS NULL
+             OR dues_payment_method IN ('venmo', 'cashapp', 'other'));
+
+    -- Backfill any group configured before the column existed. Venmo wins over
+    -- Cash App wins over instructions purely for determinism; an admin who had
+    -- filled in several now sees the first one selected and can change it.
+    UPDATE groups
+    SET dues_payment_method = CASE
+      WHEN dues_venmo_handle IS NOT NULL THEN 'venmo'
+      WHEN dues_cashapp_handle IS NOT NULL THEN 'cashapp'
+      WHEN dues_instructions IS NOT NULL THEN 'other'
+      ELSE NULL
+    END
+    WHERE dues_enabled = true AND dues_payment_method IS NULL;
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- Dues: what happens to the money at the end.
+--
+-- Orthogonal to dues_payment_method, which is about how money comes IN. This
+-- is about where it goes OUT: winner-takes-all, second place refunded and the
+-- winner takes the rest, a mid-season side pot, and so on. Free text because
+-- the rules groups actually invent do not fit an enum, and getting them wrong
+-- is worse than not modelling them.
+--
+-- Shown on the invite preview as well as in settings: what you stand to win is
+-- part of deciding whether to pay to join.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_payout_notes'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_payout_notes TEXT NULL;
+  END IF;
+END $$;

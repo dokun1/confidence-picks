@@ -2,6 +2,7 @@ import express from 'express';
 import { Group } from '../models/Group.js';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 import { GroupInvite } from '../models/GroupInvite.js';
+import { validateDuesUpdates } from '../utils/duesValidation.js';
 
 const router = express.Router();
 
@@ -258,6 +259,40 @@ router.get('/:identifier/members', authenticateToken, async (req, res) => {
   }
 });
 
+// Mark a member paid / unpaid (admin only).
+// Manual by necessity: neither Venmo nor Cash App exposes a payment-confirmation
+// API to third parties, so an admin confirming receipt out of band is the only
+// possible source of truth.
+router.post('/:identifier/members/:userId/dues', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, userId } = req.params;
+    const { paid } = req.body;
+
+    if (typeof paid !== 'boolean') {
+      return res.status(400).json({ error: 'Body must include a boolean "paid" field' });
+    }
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    const membership = await Group.setDuesPaid(group.id, userId, paid, req.user.id);
+    res.json({
+      userId: membership.user_id,
+      duesPaidAt: membership.dues_paid_at,
+    });
+  } catch (error) {
+    if (error.message.includes('Only group admins')) {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.message.includes('not a member')) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get group messages
 router.get('/:identifier/messages', authenticateToken, async (req, res) => {
   try {
@@ -379,11 +414,29 @@ router.put('/:identifier', authenticateToken, async (req, res) => {
       delete updates.identifier;
     }
     
+    const duesError = validateDuesUpdates(updates);
+    if (duesError) {
+      return res.status(400).json({ error: duesError });
+    }
+
     const group = await Group.findByIdentifier(identifier, req.user.id);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
     
+    if (Object.prototype.hasOwnProperty.call(updates, 'duesCollectorUserId')) {
+      const collectorId = updates.duesCollectorUserId;
+      if (collectorId === null || collectorId === '') {
+        updates.duesCollectorUserId = null;
+      } else {
+        const members = await Group.getMembers(group.id);
+        if (!members.some((m) => String(m.id) === String(collectorId))) {
+          return res.status(400).json({ error: 'The dues collector must be a member of this group' });
+        }
+        updates.duesCollectorUserId = Number(collectorId);
+      }
+    }
+
   const updatedGroup = await Group.update(group.id, updates, req.user.id);
     res.json(updatedGroup);
   } catch (error) {

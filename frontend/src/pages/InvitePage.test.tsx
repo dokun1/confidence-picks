@@ -152,4 +152,68 @@ describe('InvitePage', () => {
     );
     expect(mockAcceptInvite).not.toHaveBeenCalled();
   });
+
+  // The buy-in and what it pays out are both disclosed BEFORE joining: an
+  // invitee shown only the cost is seeing one side of the trade.
+  describe('dues disclosure', () => {
+    function duesInvite(groupOverrides = {}) {
+      const base = validInvite();
+      return {
+        ...base,
+        group: {
+          ...base.group,
+          duesEnabled: true,
+          duesAmountCents: 2000,
+          duesCollectorName: 'Dana Reyes',
+          ...groupOverrides,
+        },
+      };
+    }
+
+    it('states the amount and who collects it', async () => {
+      mockGetInvite.mockResolvedValue(duesInvite());
+      renderPage();
+      expect(
+        await screen.findByText(/collects \$20\.00 in dues per member, paid to Dana Reyes/),
+      ).toBeInTheDocument();
+    });
+
+    it('states what the winner gets', async () => {
+      mockGetInvite.mockResolvedValue(
+        duesInvite({ duesPayoutNotes: 'Winner takes all. Second place gets their buy-in back.' }),
+      );
+      renderPage();
+      expect(
+        await screen.findByText('Winner takes all. Second place gets their buy-in back.'),
+      ).toBeInTheDocument();
+    });
+
+    it('still discloses dues when the amount is not set yet', async () => {
+      mockGetInvite.mockResolvedValue(duesInvite({ duesAmountCents: null }));
+      renderPage();
+      expect(await screen.findByText(/collects dues from its members/)).toBeInTheDocument();
+    });
+
+    it('omits the collector clause when nobody is named', async () => {
+      mockGetInvite.mockResolvedValue(duesInvite({ duesCollectorName: null }));
+      renderPage();
+      expect(await screen.findByText(/collects \$20\.00 in dues per member\./)).toBeInTheDocument();
+    });
+
+    it('says nothing about dues for a group that does not collect them', async () => {
+      mockGetInvite.mockResolvedValue(validInvite());
+      renderPage();
+      await screen.findByText(/Join Cool Group/);
+      expect(screen.queryByText(/dues/i)).not.toBeInTheDocument();
+    });
+
+    // Someone holding an invite link is not yet a member and has no business
+    // being handed a payment deeplink.
+    it('offers no payment button before joining', async () => {
+      mockGetInvite.mockResolvedValue(duesInvite());
+      renderPage();
+      await screen.findByText(/collects \$20\.00/);
+      expect(screen.queryByRole('link', { name: /Venmo|Cash App/i })).not.toBeInTheDocument();
+    });
+  });
 });

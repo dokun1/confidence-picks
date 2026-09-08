@@ -6,7 +6,9 @@ import Card from '../../designsystem/components/Card';
 import EmptyState from '../../designsystem/components/EmptyState';
 import { ConfirmDeleteModal } from '../../designsystem/components/Modal';
 import { createLinkInvite } from '../../lib/invitesService.js';
-import { deleteGroup, leaveGroup } from '../../lib/groupsService.js';
+import { deleteGroup, leaveGroup, updateGroup, setMemberDues } from '../../lib/groupsService.js';
+import DuesSettings from '../../designsystem/components/DuesSettings';
+import type { DuesSettingsValues } from '../../designsystem/components/DuesSettings';
 import type { GroupDetail, GroupMember } from '../../lib/groupsService';
 
 export interface SettingsTabProps {
@@ -18,6 +20,10 @@ export interface SettingsTabProps {
   identifier: string;
   /** Current members, shown in the settings roster. */
   members: GroupMember[];
+  /** The viewer's user id, so the dues roster can mark their own row. */
+  currentUserId?: string;
+  /** Re-fetch group + members after a dues change so both views stay in sync. */
+  onDuesChanged?: () => void;
 }
 
 /**
@@ -27,7 +33,7 @@ export interface SettingsTabProps {
  * sub-tasks can slot in without restructuring.
  */
 export default function SettingsTab(props: SettingsTabProps) {
-  const { members, identifier, isOwner } = props;
+  const { members, identifier, isOwner, group, currentUserId, onDuesChanged } = props;
   const navigate = useNavigate();
 
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
@@ -100,6 +106,18 @@ export default function SettingsTab(props: SettingsTabProps) {
     }
   }
 
+  // Persist the admin's dues configuration, then let the parent re-fetch so the
+  // banner on the group page reflects the new state without a manual reload.
+  async function handleSaveDues(values: DuesSettingsValues) {
+    await updateGroup(identifier, values);
+    onDuesChanged?.();
+  }
+
+  async function handleToggleMemberPaid(userId: string, paid: boolean) {
+    await setMemberDues(identifier, userId, paid);
+    onDuesChanged?.();
+  }
+
   const confirmCopy =
     confirmAction === 'delete'
       ? {
@@ -142,6 +160,33 @@ export default function SettingsTab(props: SettingsTabProps) {
           </div>
         )}
       </section>
+
+      {/* Dues — configuration (admins) and the who-has-paid ledger (everyone).
+          Renders nothing for members when the group does not collect dues. */}
+      <DuesSettings
+        isAdmin={isOwner}
+        values={{
+          duesEnabled: group.duesEnabled ?? false,
+          duesPaymentMethod: group.duesPaymentMethod ?? null,
+          duesAmountCents: group.duesAmountCents ?? null,
+          duesVenmoHandle: group.duesVenmoHandle ?? null,
+          duesCashappHandle: group.duesCashappHandle ?? null,
+          duesInstructions: group.duesInstructions ?? null,
+          duesPayoutNotes: group.duesPayoutNotes ?? null,
+          duesCollectorUserId: group.duesCollectorUserId ?? null,
+        }}
+        collectorName={group.duesCollectorName ?? null}
+        members={members.map(m => ({
+          id: m.id,
+          name: m.name,
+          pictureUrl: m.pictureUrl,
+          duesPaidAt: m.duesPaidAt,
+        }))}
+        currentUserId={currentUserId}
+        groupName={group.name}
+        onSave={handleSaveDues}
+        onToggleMemberPaid={handleToggleMemberPaid}
+      />
 
       {/* Invite link */}
       <Card as='section'>

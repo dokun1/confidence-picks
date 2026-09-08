@@ -114,7 +114,9 @@ export async function getMembers(identifier) {
     email: m.email,
     isOwner: m.role === 'admin',
     joinedAt: m.joined_at,
-    pictureUrl: m.picture_url
+    pictureUrl: m.picture_url,
+    // NULL from the API means "never marked paid" -> unpaid.
+    duesPaidAt: m.dues_paid_at ?? null
   }));
 }
 
@@ -180,7 +182,11 @@ export async function joinGroup(identifier) {
 
 export async function updateGroup(identifier, updates) {
   // Only allow editable fields client-side: name, description, visibility, maxMembers (if supported)
-  const allowed = ['name', 'description', 'isPublic', 'maxMembers'];
+  const allowed = [
+    'name', 'description', 'isPublic', 'maxMembers',
+    'duesEnabled', 'duesPaymentMethod', 'duesAmountCents', 'duesVenmoHandle',
+    'duesCashappHandle', 'duesInstructions', 'duesPayoutNotes', 'duesCollectorUserId',
+  ];
   const body = Object.fromEntries(Object.entries(updates || {}).filter(([k]) => allowed.includes(k)));
   if (Object.keys(body).length === 0) {
     throw new Error('No changes to save');
@@ -214,4 +220,26 @@ export async function deleteGroup(identifier) {
   if (res.status === 403) throw new Error('Not authorized to delete this group');
   if (!res.ok && res.status !== 204) throw new Error('Failed to delete group');
   return true;
+}
+
+/**
+ * Mark a member paid or unpaid. Admin-only server-side.
+ *
+ * No payment processor is involved: neither Venmo nor Cash App will tell a
+ * third-party site that a payment happened, so an admin confirming receipt out
+ * of band is the only possible source of truth for this flag.
+ */
+export async function setMemberDues(identifier, userId, paid) {
+  const res = await authFetch(`${apiBase()}/${identifier}/members/${userId}/dues`, {
+    method: 'POST',
+    body: JSON.stringify({ paid })
+  });
+  if (res.status === 404) throw new Error('Group or member not found');
+  if (res.status === 403) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Only group admins can update dues status');
+  }
+  if (!res.ok) throw new Error('Failed to update dues status');
+  const data = await res.json();
+  return { userId: data.userId, duesPaidAt: data.duesPaidAt ?? null };
 }

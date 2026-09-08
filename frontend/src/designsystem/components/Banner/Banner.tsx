@@ -21,6 +21,12 @@ export interface BannerProps {
   children: React.ReactNode;
   /** Optional trailing call-to-action rendered as a tappable link. */
   action?: BannerAction;
+  /**
+   * Optional trailing slot for richer controls than `action` can express --
+   * e.g. branded payment buttons that carry their own logo and color. Rendered
+   * before `action`, so a banner can offer both ("[Venmo] [Cash App] Details").
+   */
+  actions?: React.ReactNode;
 }
 
 // Subtle, persistent inline-alert palette (border + tinted surface), matching
@@ -46,7 +52,7 @@ const VARIANT_ICON: Record<BannerVariant, React.ComponentType<{ className?: stri
  * positioned popover), a Banner stays put in the document flow and is meant to
  * span its container — e.g. a "you have picks to make" notice above a tab bar.
  */
-export default function Banner({ variant = 'info', children, action }: BannerProps) {
+export default function Banner({ variant = 'info', children, action, actions }: BannerProps) {
   const Icon = VARIANT_ICON[variant];
   return (
     <div
@@ -55,6 +61,9 @@ export default function Banner({ variant = 'info', children, action }: BannerPro
     >
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
       <span className="flex-1">{children}</span>
+      {actions && (
+        <div className="flex flex-wrap items-center gap-xs self-start sm:self-auto">{actions}</div>
+      )}
       {action && (
         <button
           type="button"

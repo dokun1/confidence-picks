@@ -27,7 +27,17 @@ router.get('/:token', optionalAuth, async (req, res) => {
         memberCount: parseInt(row.member_count || 0),
         maxMembers: row.max_members,
         ownerName: row.owner_name,
-        ownerPictureUrl: row.owner_picture_url
+        ownerPictureUrl: row.owner_picture_url,
+        // Surfaced pre-join so an invitee learns the group costs money BEFORE
+        // accepting, not after. Handles are deliberately NOT included: someone
+        // holding an invite link is not yet a member and has no reason to be
+        // handed a payment deeplink.
+        duesEnabled: Boolean(row.dues_enabled),
+        duesAmountCents: row.dues_amount_cents ?? null,
+        duesCollectorName: row.dues_collector_name ?? null,
+        // What the winner gets is part of deciding whether the buy-in is worth
+        // it, so it is disclosed pre-join alongside the amount.
+        duesPayoutNotes: row.dues_payout_notes ?? null
       },
       invite: {
         token: row.token,

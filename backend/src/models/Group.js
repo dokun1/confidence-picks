@@ -1,6 +1,23 @@
 import pool from '../config/database.js';
 import crypto from 'crypto';
 
+// camelCase payload key -> groups column. Replaces the ternary chain that grew
+// unreadable once dues added six more fields. Keys absent here pass through
+// unchanged (they are already snake_case) and are still gated by allowedFields.
+const CAMEL_TO_COLUMN = {
+  isPublic: 'is_public',
+  maxMembers: 'max_members',
+  avatarUrl: 'avatar_url',
+  duesEnabled: 'dues_enabled',
+  duesPaymentMethod: 'dues_payment_method',
+  duesAmountCents: 'dues_amount_cents',
+  duesVenmoHandle: 'dues_venmo_handle',
+  duesCashappHandle: 'dues_cashapp_handle',
+  duesInstructions: 'dues_instructions',
+  duesPayoutNotes: 'dues_payout_notes',
+  duesCollectorUserId: 'dues_collector_user_id',
+};
+
 export class Group {
   // Self-heal latch for the knockout_only column (see ensureKnockoutOnlyColumn).
   // Once the column is confirmed present in this process, every later create()
@@ -31,6 +48,25 @@ export class Group {
     // frontend's GroupDetailsPage can branch on group.poolType — without it
     // every WC group rendered the NFL PicksTab.
     this.poolType = data.poolType;
+    // Dues. `duesEnabled` gates every other field; when false the frontend
+    // renders no banner and no settings block. Amount is integer cents (USD).
+    // The three payment affordances (venmo / cashapp / free-text instructions)
+    // are independent and any combination may be set.
+    this.duesEnabled = data.duesEnabled ?? false;
+    // Exactly one of 'venmo' | 'cashapp' | 'other' (or null when unset). The
+    // three value fields below are storage; this says which one is live.
+    this.duesPaymentMethod = data.duesPaymentMethod ?? null;
+    this.duesAmountCents = data.duesAmountCents ?? null;
+    this.duesVenmoHandle = data.duesVenmoHandle ?? null;
+    this.duesCashappHandle = data.duesCashappHandle ?? null;
+    this.duesInstructions = data.duesInstructions ?? null;
+    // How the pot is disbursed (winner-takes-all, second place refunded, ...).
+    // Independent of duesPaymentMethod: that is money in, this is money out.
+    this.duesPayoutNotes = data.duesPayoutNotes ?? null;
+    this.duesCollectorUserId = data.duesCollectorUserId ?? null;
+    // Denormalised for display so the banner can say "you owe Dana" without a
+    // second round-trip to /members.
+    this.duesCollectorName = data.duesCollectorName ?? null;
     // World Cup 2026 sub-setting: when true, members may only pick knockout-stage
     // games (no group stage). Defaults to false so NFL pools and ordinary WC pools
     // are unaffected. The WC picks routes read this to reject group-stage picks.
@@ -67,6 +103,55 @@ export class Group {
       // Do NOT latch on failure — a transient error must let the next create retry
       // rather than permanently believing the column is present.
       console.warn('[groups] Failed to ensure knockout_only column (may already exist):', e.message);
+    }
+  }
+
+  // Ensure every dues column exists. Production resilience: prod runs with
+  // INIT_DB unset, so schema.sql is NOT synced on deploy -- mirror the
+  // ensureKnockoutOnlyColumn / ensureMaxMembersConstraint self-heal.
+  //
+  // This one gates READS, not just writes, which the others do not. The dues
+  // queries name their columns explicitly -- findByIdentifier joins on
+  // g.dues_collector_user_id, getMembers selects gm.dues_paid_at, and the invite
+  // preview selects g.dues_enabled -- and Postgres errors on a missing column in
+  // a JOIN or select list rather than yielding undefined. Without this,
+  // findByIdentifier alone would 500 EVERY group route on the first deploy.
+  //
+  // Idempotent and concurrency-safe: ADD COLUMN IF NOT EXISTS throughout, one
+  // indexed catalog lookup that early-returns once latched.
+  static async ensureDuesSchema() {
+    if (this._duesSchemaEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'groups' AND column_name = 'dues_enabled'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing dues columns – adding');
+        await pool.query(`
+          ALTER TABLE groups
+            ADD COLUMN IF NOT EXISTS dues_enabled BOOLEAN NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS dues_payment_method VARCHAR(20) NULL,
+            ADD COLUMN IF NOT EXISTS dues_amount_cents INTEGER NULL,
+            ADD COLUMN IF NOT EXISTS dues_venmo_handle VARCHAR(64) NULL,
+            ADD COLUMN IF NOT EXISTS dues_cashapp_handle VARCHAR(64) NULL,
+            ADD COLUMN IF NOT EXISTS dues_instructions TEXT NULL,
+            ADD COLUMN IF NOT EXISTS dues_payout_notes TEXT NULL,
+            ADD COLUMN IF NOT EXISTS dues_collector_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
+        `);
+        await pool.query(`
+          ALTER TABLE group_memberships
+            ADD COLUMN IF NOT EXISTS dues_paid_at TIMESTAMP NULL,
+            ADD COLUMN IF NOT EXISTS dues_marked_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL
+        `);
+        console.log('[groups] dues columns added');
+      }
+      // Latch only after a confirmed present/added column, so the next call
+      // settles into the zero-query fast path.
+      this._duesSchemaEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next call retry
+      // rather than permanently believing the columns are present.
+      console.warn('[groups] Failed to ensure dues columns (may already exist):', e.message);
     }
   }
 
@@ -179,18 +264,23 @@ export class Group {
 
   // Find group by identifier
   static async findByIdentifier(identifier, userId = null) {
+    // The query below joins on g.dues_collector_user_id; a missing column is a
+    // hard SQL error, not a soft undefined. No-op once latched.
+    await Group.ensureDuesSchema();
     const query = `
       SELECT g.*, 
              COUNT(gm.id) as member_count,
         u_owner.name as owner_name,
         u_owner.picture_url as owner_picture_url,
+        u_collector.name as dues_collector_name,
              ${userId ? 'user_gm.role as user_role' : 'NULL as user_role'}
       FROM groups g
       LEFT JOIN group_memberships gm ON g.id = gm.group_id
       LEFT JOIN users u_owner ON g.created_by = u_owner.id
+      LEFT JOIN users u_collector ON g.dues_collector_user_id = u_collector.id
       ${userId ? 'LEFT JOIN group_memberships user_gm ON g.id = user_gm.group_id AND user_gm.user_id = $2' : ''}
       WHERE g.identifier = $1
-      GROUP BY g.id, u_owner.name, u_owner.picture_url${userId ? ', user_gm.role' : ''}
+      GROUP BY g.id, u_owner.name, u_owner.picture_url, u_collector.name${userId ? ', user_gm.role' : ''}
     `;
     
     const values = userId ? [identifier, userId] : [identifier];
@@ -215,6 +305,15 @@ export class Group {
       memberCount: parseInt(row.member_count),
       userRole: row.user_role,
       poolType: row.pool_type,
+      duesEnabled: row.dues_enabled,
+      duesPaymentMethod: row.dues_payment_method,
+      duesAmountCents: row.dues_amount_cents,
+      duesVenmoHandle: row.dues_venmo_handle,
+      duesCashappHandle: row.dues_cashapp_handle,
+      duesInstructions: row.dues_instructions,
+      duesPayoutNotes: row.dues_payout_notes,
+      duesCollectorUserId: row.dues_collector_user_id,
+      duesCollectorName: row.dues_collector_name,
       knockoutOnly: row.knockout_only,
     });
   }
@@ -365,8 +464,11 @@ export class Group {
 
   // Get group members
   static async getMembers(groupId) {
+    // Selects gm.dues_paid_at explicitly. No-op once latched.
+    await Group.ensureDuesSchema();
     const query = `
-      SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at
+      SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at,
+             gm.dues_paid_at
       FROM users u
       JOIN group_memberships gm ON u.id = gm.user_id
       WHERE gm.group_id = $1
@@ -479,6 +581,9 @@ export class Group {
       throw new Error('Only group admins can update group settings');
     }
 
+    // Self-heal the dues columns: update() writes them by name. No-op once latched.
+    await Group.ensureDuesSchema();
+
     // Self-heal the max_members constraint so an admin raising the limit past the
     // legacy 40 cap isn't rejected by a stale CHECK. No-op once latched.
     await Group.ensureMaxMembersConstraint();
@@ -504,15 +609,20 @@ export class Group {
       }
     }
 
-    const allowedFields = ['name', 'description', 'is_public', 'max_members', 'avatar_url'];
+    const allowedFields = [
+      'name', 'description', 'is_public', 'max_members', 'avatar_url',
+      // Dues settings. Guarded by the admin check above, so turning dues on and
+      // naming a collector is admin-only for free.
+      'dues_enabled', 'dues_payment_method', 'dues_amount_cents', 'dues_venmo_handle',
+      'dues_cashapp_handle', 'dues_instructions', 'dues_payout_notes',
+      'dues_collector_user_id',
+    ];
     const updateFields = [];
     const values = [];
     let paramCount = 1;
     
     for (const [key, value] of Object.entries(updates)) {
-      const dbKey = key === 'isPublic' ? 'is_public' : 
-                   key === 'maxMembers' ? 'max_members' : 
-                   key === 'avatarUrl' ? 'avatar_url' : key;
+      const dbKey = CAMEL_TO_COLUMN[key] ?? key;
       
       if (allowedFields.includes(dbKey)) {
         updateFields.push(`${dbKey} = $${paramCount}`);
@@ -536,6 +646,40 @@ export class Group {
     `;
     
     const result = await pool.query(query, values);
+    return result.rows[0];
+  }
+
+  /**
+   * Mark a member paid or unpaid. Admin-only by design: no payment processor is
+   * involved, so an admin confirming receipt out of band IS the ledger. Returns
+   * the updated membership row.
+   *
+   * `paid=false` clears both columns so an unpaid row is indistinguishable from
+   * one that was never marked -- keeps "unpaid" a single representable state.
+   */
+  static async setDuesPaid(groupId, targetUserId, paid, actingUserId) {
+    await Group.ensureDuesSchema();
+    const roleCheck = await pool.query(
+      'SELECT role FROM group_memberships WHERE group_id = $1 AND user_id = $2',
+      [groupId, actingUserId]
+    );
+
+    if (roleCheck.rows.length === 0 || roleCheck.rows[0].role !== 'admin') {
+      throw new Error('Only group admins can update dues status');
+    }
+
+    const result = await pool.query(
+      `UPDATE group_memberships
+       SET dues_paid_at = $1, dues_marked_by = $2
+       WHERE group_id = $3 AND user_id = $4
+       RETURNING user_id, dues_paid_at, dues_marked_by`,
+      [paid ? new Date() : null, paid ? actingUserId : null, groupId, targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('That user is not a member of this group');
+    }
+
     return result.rows[0];
   }
 
