@@ -1,0 +1,68 @@
+# Publishes confidence-picks-mcp to npm via trusted publishing (OIDC).
+#
+# No tokens and no 2FA codes are involved: GitHub mints a short-lived, workflow-
+# scoped OIDC token that npm verifies against the trusted publisher configured on
+# the package. Nothing long-lived exists to leak or rotate.
+#
+# Manual dispatch only, matching the convention in this repo -- publishing should
+# be a deliberate act, not a side effect of merging.
+#
+# The filename must stay `publish-mcp.yml`: npm's trusted publisher config pins
+# the exact workflow file that is allowed to publish. Renaming it breaks publishing
+# until the npm side is updated to match.
+name: Publish MCP package
+
+on:
+  workflow_dispatch:
+    inputs:
+      deprecate_version:
+        description: 'Optional: a version to deprecate after publishing (e.g. 0.1.0)'
+        required: false
+        type: string
+      deprecate_message:
+        description: 'Deprecation message'
+        required: false
+        default: 'Broken entrypoint: the npx invocation was a no-op. Use a later version.'
+        type: string
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC; without it npm falls back to token auth and fails
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trusted publishing needs Node >= 22.14.0 and npm >= 11.5.1. Node 22 ships
+      # an older npm, so the CLI is upgraded explicitly rather than assumed.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm to a trusted-publishing-capable version
+        run: npm install -g npm@latest
+
+      - name: Show toolchain
+        run: node --version && npm --version
+
+      # No lockfile is committed (the repo gitignores them), so `npm ci` is not usable.
+      - name: Install dependencies
+        run: npm install
+
+      # The package has no other CI, so this is the only gate that runs its tests --
+      # including the symlink regression test that covers the packaged bin entrypoint.
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        run: npm publish
+
+      - name: Deprecate a previous version
+        if: inputs.deprecate_version != ''
+        run: npm deprecate "confidence-picks-mcp@${{ inputs.deprecate_version }}" "${{ inputs.deprecate_message }}"
