@@ -1,4 +1,4 @@
-# @dokun/confidence-picks-mcp
+# @noetalabs/confidence-picks-mcp
 
 MCP server for [confidence-picks](https://www.confidence-picks.com). Lets Claude
 Code or Codex read your pools and standings and make NFL confidence picks on
@@ -14,12 +14,12 @@ your behalf.
 # Claude Code
 claude mcp add confidence-picks \
   --env CONFIDENCE_PICKS_TOKEN=cp_live_... \
-  -- npx -y @dokun/confidence-picks-mcp
+  -- npx -y @noetalabs/confidence-picks-mcp
 
 # Codex CLI
 codex mcp add confidence-picks \
   --env CONFIDENCE_PICKS_TOKEN=cp_live_... \
-  -- npx -y @dokun/confidence-picks-mcp
+  -- npx -y @noetalabs/confidence-picks-mcp
 ```
 
 ## Tools

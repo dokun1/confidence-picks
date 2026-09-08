@@ -141,12 +141,12 @@ export default function McpTokensCard() {
               <pre className="whitespace-pre-wrap mt-xs">{`# Claude Code
 claude mcp add confidence-picks \\
   --env CONFIDENCE_PICKS_TOKEN=<your token> \\
-  -- npx -y @dokun/confidence-picks-mcp
+  -- npx -y @noetalabs/confidence-picks-mcp
 
 # Codex CLI
 codex mcp add confidence-picks \\
   --env CONFIDENCE_PICKS_TOKEN=<your token> \\
-  -- npx -y @dokun/confidence-picks-mcp`}</pre>
+  -- npx -y @noetalabs/confidence-picks-mcp`}</pre>
             </details>
           </div>
         )}
