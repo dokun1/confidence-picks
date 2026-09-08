@@ -330,12 +330,17 @@ export default function DuesSettings({
                       <span className="ml-xxs text-[var(--color-text-secondary)]">(you)</span>
                     )}
                   </span>
+                  {/* Unpaid is the state that needs action, so it carries the
+                      destructive tone and the heavier weight; Paid is the
+                      resolved state and stays quiet. The word itself still
+                      carries the meaning, so the colour is reinforcement rather
+                      than the only signal. */}
                   <span
                     className={[
-                      'inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-medium',
+                      'inline-flex items-center rounded-pill border px-2.5 py-0.5 text-xs',
                       paid
-                        ? 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-200'
-                        : 'bg-secondary-100 text-secondary-700 dark:bg-secondary-800 dark:text-secondary-300',
+                        ? 'border-transparent bg-success-100 text-success-800 font-medium dark:bg-success-900/30 dark:text-success-200'
+                        : 'border-error-300 bg-error-100 text-error-800 font-semibold dark:border-error-700 dark:bg-error-900/40 dark:text-error-200',
                     ].join(' ')}
                   >
                     {paid ? 'Paid' : 'Unpaid'}

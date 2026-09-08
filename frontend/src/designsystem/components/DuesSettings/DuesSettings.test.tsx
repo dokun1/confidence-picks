@@ -188,6 +188,23 @@ describe('DuesSettings', () => {
       expect(screen.getByText('Unpaid')).toBeInTheDocument();
     });
 
+    // Unpaid is the row an admin has to act on, so it must be scannable at a
+    // glance rather than sitting in the same neutral grey as Paid.
+    it('gives the unpaid badge a destructive tone that paid does not have', () => {
+      setup();
+      const unpaid = screen.getByText('Unpaid');
+      const paid = screen.getByText('Paid');
+      expect(unpaid.className).toMatch(/bg-error-/);
+      expect(paid.className).not.toMatch(/bg-error-/);
+    });
+
+    // The word carries the meaning, so a viewer who cannot distinguish the
+    // colours still reads the state.
+    it('states the status in text, not colour alone', () => {
+      setup();
+      expect(screen.getByText('Unpaid')).toHaveTextContent('Unpaid');
+    });
+
     it('summarises how many have paid', () => {
       setup();
       expect(screen.getByText('1 of 2 paid')).toBeInTheDocument();
