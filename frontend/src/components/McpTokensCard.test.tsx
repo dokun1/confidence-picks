@@ -128,6 +128,54 @@ describe('McpTokensCard', () => {
     expect(screen.getByText('My laptop')).toBeInTheDocument();
   });
 
+  // The connect command is not a secret -- only the token is. Before this, the
+  // instructions lived inside the one-time panel and vanished on Done, leaving
+  // anyone who returned later with no way to find them.
+  it('shows the connect instructions without having to create a token', async () => {
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    expect(screen.getByText('How to connect')).toBeInTheDocument();
+    expect(screen.getByText(/npx -y confidence-picks-mcp/)).toBeInTheDocument();
+    expect(screen.getByText(/<your token>/)).toBeInTheDocument();
+  });
+
+  it('covers both Claude Code and Codex', async () => {
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    const block = screen.getByText(/npx -y confidence-picks-mcp/).textContent ?? '';
+    expect(block).toMatch(/claude mcp add/);
+    expect(block).toMatch(/codex mcp add/);
+  });
+
+  it('substitutes the real token into the commands right after minting', async () => {
+    vi.mocked(createMcpToken).mockResolvedValue({
+      token: token({ id: 7, name: 'CLI' }),
+      plaintext: 'cp_live_realone',
+    });
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    fireEvent.change(screen.getByPlaceholderText('My laptop'), { target: { value: 'CLI' } });
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+    const block = await screen.findByText(/CONFIDENCE_PICKS_TOKEN=cp_live_realone/);
+    expect(block).toBeInTheDocument();
+  });
+
+  it('keeps the instructions after the one-time token panel is dismissed', async () => {
+    vi.mocked(createMcpToken).mockResolvedValue({
+      token: token({ id: 8, name: 'X' }),
+      plaintext: 'cp_live_vanishes',
+    });
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    fireEvent.change(screen.getByPlaceholderText('My laptop'), { target: { value: 'X' } });
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^done$/i }));
+    // The secret goes; the instructions stay.
+    await waitFor(() => expect(screen.queryByTestId('fresh-token')).not.toBeInTheDocument());
+    expect(screen.getByText('How to connect')).toBeInTheDocument();
+    expect(screen.getByText(/<your token>/)).toBeInTheDocument();
+  });
+
   it('tells the user the token can never delete or leave a group', async () => {
     render(<McpTokensCard />);
     expect(screen.getByText(/never delete a group, leave one/i)).toBeInTheDocument();

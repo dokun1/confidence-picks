@@ -34,6 +34,7 @@ export default function McpTokensCard() {
   const [freshToken, setFreshToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showHow, setShowHow] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +75,7 @@ export default function McpTokensCard() {
     try {
       const { token, plaintext } = await createMcpToken(trimmed, scopes);
       setFreshToken(plaintext);
+      setShowHow(true);
       setTokens((prev) => [token, ...prev]);
       setName('');
       setScopes(DEFAULT_SCOPES);
@@ -136,20 +138,34 @@ export default function McpTokensCard() {
                 Done
               </Button>
             </div>
-            <details className="text-xs text-content-muted">
-              <summary className="cursor-pointer">Setup instructions</summary>
-              <pre className="whitespace-pre-wrap mt-xs">{`# Claude Code
+          </div>
+        )}
+
+        {/* Always available: the connect command is not secret, and a user who
+            returns after minting had no other way to find it. Opens itself once
+            a token has just been created, with that token already substituted. */}
+        <details
+          className="text-sm text-content-muted"
+          open={showHow}
+          onToggle={(e) => setShowHow((e.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary className="cursor-pointer text-content">How to connect</summary>
+          <div className="mt-xs flex flex-col gap-xs">
+            <p>
+              Run one of these in your terminal. Tokens are shown only once, so if you
+              no longer have yours, create a new one above and revoke the old.
+            </p>
+            <pre className="whitespace-pre-wrap text-xs bg-surface p-xs rounded overflow-x-auto">{`# Claude Code
 claude mcp add confidence-picks \\
-  --env CONFIDENCE_PICKS_TOKEN=<your token> \\
+  --env CONFIDENCE_PICKS_TOKEN=${freshToken ?? '<your token>'} \\
   -- npx -y confidence-picks-mcp
 
 # Codex CLI
 codex mcp add confidence-picks \\
-  --env CONFIDENCE_PICKS_TOKEN=<your token> \\
+  --env CONFIDENCE_PICKS_TOKEN=${freshToken ?? '<your token>'} \\
   -- npx -y confidence-picks-mcp`}</pre>
-            </details>
           </div>
-        )}
+        </details>
 
         <div className="flex flex-col gap-xs">
           <TextField
