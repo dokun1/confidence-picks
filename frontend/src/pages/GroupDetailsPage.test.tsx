@@ -136,6 +136,33 @@ const messages: GroupMessage[] = [
   },
 ];
 
+// The dues banner reads the viewer's own membership row, and the AuthContext
+// mock above signs in as user id 1 -- so the fixture member must share that id.
+const duesGroup: GroupDetail = {
+  ...memberGroup,
+  duesEnabled: true,
+  duesPaymentMethod: 'venmo',
+  duesAmountCents: 2000,
+  duesVenmoHandle: 'dana-reyes',
+  duesCollectorName: 'Dana Reyes',
+};
+
+const selfUnpaid: GroupMember[] = [
+  {
+    id: '1',
+    name: 'Tester',
+    email: 'tester@example.com',
+    isOwner: false,
+    joinedAt: '2026-01-01T00:00:00.000Z',
+    pictureUrl: null,
+    duesPaidAt: null,
+  },
+];
+
+const selfPaid: GroupMember[] = [
+  { ...selfUnpaid[0], duesPaidAt: '2026-09-01T00:00:00.000Z' },
+];
+
 function renderPage(query = '?group=sunday-squad') {
   return render(
     <MemoryRouter initialEntries={[`/group-details${query}`]}>
@@ -574,6 +601,77 @@ describe('GroupDetailsPage', () => {
 
       expect(await screen.findByText('Welcome!')).toBeInTheDocument();
       expect(mockMarkMessagesRead).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dues banner', () => {
+    beforeEach(() => {
+      mockGetMessages.mockResolvedValue(messages);
+    });
+
+    it('warns an unpaid member what they owe and to whom', async () => {
+      mockGetGroup.mockResolvedValue(duesGroup);
+      mockGetMembers.mockResolvedValue(selfUnpaid);
+
+      renderPage();
+
+      expect(await screen.findByText(/You owe \$20\.00 in dues to Dana Reyes/)).toBeInTheDocument();
+    });
+
+    it('offers the payment deeplink for the configured method', async () => {
+      mockGetGroup.mockResolvedValue(duesGroup);
+      mockGetMembers.mockResolvedValue(selfUnpaid);
+
+      renderPage();
+
+      const link = await screen.findByRole('link', { name: /Venmo/i });
+      expect(link).toHaveAttribute('href', expect.stringContaining('venmo.com/dana-reyes'));
+    });
+
+    it('stays hidden once the viewer has paid', async () => {
+      mockGetGroup.mockResolvedValue(duesGroup);
+      mockGetMembers.mockResolvedValue(selfPaid);
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: duesGroup.name });
+      expect(screen.queryByText(/You owe/)).not.toBeInTheDocument();
+    });
+
+    it('stays hidden when the group does not collect dues', async () => {
+      mockGetGroup.mockResolvedValue(memberGroup);
+      mockGetMembers.mockResolvedValue(selfUnpaid);
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: memberGroup.name });
+      expect(screen.queryByText(/You owe/)).not.toBeInTheDocument();
+    });
+
+    // Dues are on but the admin has not said how much yet. Nagging someone for
+    // an unspecified sum is worse than staying quiet.
+    it('stays hidden when no amount has been set', async () => {
+      mockGetGroup.mockResolvedValue({ ...duesGroup, duesAmountCents: null });
+      mockGetMembers.mockResolvedValue(selfUnpaid);
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: duesGroup.name });
+      expect(screen.queryByText(/You owe/)).not.toBeInTheDocument();
+    });
+
+    it('sends the member to the settings tab for details', async () => {
+      mockGetGroup.mockResolvedValue(duesGroup);
+      mockGetMembers.mockResolvedValue(selfUnpaid);
+
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Details' }));
+
+      // The banner is suppressed on Settings, where the full dues panel with the
+      // same payment button is already on screen.
+      expect(await screen.findByText('Who has paid')).toBeInTheDocument();
+      expect(screen.queryByText(/You owe/)).not.toBeInTheDocument();
     });
   });
 });
