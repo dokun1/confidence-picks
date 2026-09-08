@@ -508,3 +508,24 @@ BEGIN
     WHERE dues_enabled = true AND dues_payment_method IS NULL;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Dues: what happens to the money at the end.
+--
+-- Orthogonal to dues_payment_method, which is about how money comes IN. This
+-- is about where it goes OUT: winner-takes-all, second place refunded and the
+-- winner takes the rest, a mid-season side pot, and so on. Free text because
+-- the rules groups actually invent do not fit an enum, and getting them wrong
+-- is worse than not modelling them.
+--
+-- Shown on the invite preview as well as in settings: what you stand to win is
+-- part of deciding whether to pay to join.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'groups' AND column_name = 'dues_payout_notes'
+  ) THEN
+    ALTER TABLE groups ADD COLUMN dues_payout_notes TEXT NULL;
+  END IF;
+END $$;

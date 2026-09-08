@@ -69,6 +69,18 @@ function validateDuesUpdates(updates) {
     updates.duesInstructions = text && text.length > 0 ? text : null;
   }
 
+  // Payout notes survive a method change: how the pot is split has nothing to
+  // do with how it was collected, so this is NOT cleared alongside the
+  // method-specific fields below.
+  if (Object.prototype.hasOwnProperty.call(updates, 'duesPayoutNotes')) {
+    const raw = updates.duesPayoutNotes;
+    const text = raw === null || raw === undefined ? null : String(raw).trim();
+    if (text && text.length > 1000) {
+      return 'Payout notes must be 1000 characters or less';
+    }
+    updates.duesPayoutNotes = text && text.length > 0 ? text : null;
+  }
+
   if (Object.prototype.hasOwnProperty.call(updates, 'duesEnabled')) {
     updates.duesEnabled = Boolean(updates.duesEnabled);
   }

@@ -93,6 +93,8 @@ export interface InviteGroup {
   duesEnabled?: boolean;
   duesAmountCents?: number | null;
   duesCollectorName?: string | null;
+  /** What the winner gets — shown pre-join so the buy-in can be judged. */
+  duesPayoutNotes?: string | null;
 }
 
 export interface InviteDetails {

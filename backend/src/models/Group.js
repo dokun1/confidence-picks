@@ -14,6 +14,7 @@ const CAMEL_TO_COLUMN = {
   duesVenmoHandle: 'dues_venmo_handle',
   duesCashappHandle: 'dues_cashapp_handle',
   duesInstructions: 'dues_instructions',
+  duesPayoutNotes: 'dues_payout_notes',
   duesCollectorUserId: 'dues_collector_user_id',
 };
 
@@ -49,6 +50,9 @@ export class Group {
     this.duesVenmoHandle = data.duesVenmoHandle ?? null;
     this.duesCashappHandle = data.duesCashappHandle ?? null;
     this.duesInstructions = data.duesInstructions ?? null;
+    // How the pot is disbursed (winner-takes-all, second place refunded, ...).
+    // Independent of duesPaymentMethod: that is money in, this is money out.
+    this.duesPayoutNotes = data.duesPayoutNotes ?? null;
     this.duesCollectorUserId = data.duesCollectorUserId ?? null;
     // Denormalised for display so the banner can say "you owe Dana" without a
     // second round-trip to /members.
@@ -162,6 +166,7 @@ export class Group {
       duesVenmoHandle: row.dues_venmo_handle,
       duesCashappHandle: row.dues_cashapp_handle,
       duesInstructions: row.dues_instructions,
+      duesPayoutNotes: row.dues_payout_notes,
       duesCollectorUserId: row.dues_collector_user_id,
       duesCollectorName: row.dues_collector_name,
     });
@@ -432,7 +437,8 @@ export class Group {
       // Dues settings. Guarded by the admin check above, so turning dues on and
       // naming a collector is admin-only for free.
       'dues_enabled', 'dues_payment_method', 'dues_amount_cents', 'dues_venmo_handle',
-      'dues_cashapp_handle', 'dues_instructions', 'dues_collector_user_id',
+      'dues_cashapp_handle', 'dues_instructions', 'dues_payout_notes',
+      'dues_collector_user_id',
     ];
     const updateFields = [];
     const values = [];

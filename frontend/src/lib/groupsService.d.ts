@@ -32,6 +32,8 @@ export interface GroupDetail {
   duesVenmoHandle?: string | null;
   duesCashappHandle?: string | null;
   duesInstructions?: string | null;
+  /** How the pot is disbursed. Free text; independent of the payment method. */
+  duesPayoutNotes?: string | null;
   duesCollectorUserId?: number | null;
   /** Denormalised collector display name, so the banner needs no extra fetch. */
   duesCollectorName?: string | null;
@@ -95,6 +97,7 @@ export function updateGroup(
       | 'duesVenmoHandle'
       | 'duesCashappHandle'
       | 'duesInstructions'
+      | 'duesPayoutNotes'
       | 'duesCollectorUserId'
     >
   >,

@@ -59,7 +59,7 @@ export class GroupInvite {
     const query = `
       SELECT gi.*, g.name, g.identifier, g.description, g.max_members, g.created_by,
              u_owner.name AS owner_name, u_owner.picture_url AS owner_picture_url,
-             g.dues_enabled, g.dues_amount_cents,
+             g.dues_enabled, g.dues_amount_cents, g.dues_payout_notes,
              u_collector.name AS dues_collector_name,
              COUNT(gm.id) as member_count
       FROM group_invitations gi

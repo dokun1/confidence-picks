@@ -172,6 +172,7 @@ export default function SettingsTab(props: SettingsTabProps) {
           duesVenmoHandle: group.duesVenmoHandle ?? null,
           duesCashappHandle: group.duesCashappHandle ?? null,
           duesInstructions: group.duesInstructions ?? null,
+          duesPayoutNotes: group.duesPayoutNotes ?? null,
           duesCollectorUserId: group.duesCollectorUserId ?? null,
         }}
         collectorName={group.duesCollectorName ?? null}

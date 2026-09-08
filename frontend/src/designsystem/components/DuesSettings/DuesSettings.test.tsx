@@ -16,6 +16,7 @@ const ON: DuesSettingsValues = {
   duesVenmoHandle: 'dana-reyes',
   duesCashappHandle: null,
   duesInstructions: null,
+  duesPayoutNotes: 'Winner takes all. Second place gets their buy-in back.',
   duesCollectorUserId: 1,
 };
 
@@ -26,6 +27,7 @@ const OFF: DuesSettingsValues = {
   duesVenmoHandle: null,
   duesCashappHandle: null,
   duesInstructions: null,
+  duesPayoutNotes: null,
   duesCollectorUserId: null,
 };
 
@@ -178,6 +180,50 @@ describe('DuesSettings', () => {
       );
       await userEvent.click(screen.getByRole('button', { name: /Save dues/i }));
       expect(await screen.findByRole('alert')).toHaveTextContent('Venmo username is invalid');
+    });
+  });
+
+  // Payout is a different question from collection: it applies whether members
+  // paid by Venmo, Cash App or cash, so it is never cleared by a method change.
+  describe('payout notes', () => {
+    it('shows the payout terms to members', () => {
+      setup({ isAdmin: false });
+      expect(screen.getByText('What the winner gets')).toBeInTheDocument();
+      expect(
+        screen.getByText('Winner takes all. Second place gets their buy-in back.'),
+      ).toBeInTheDocument();
+    });
+
+    it('offers admins a field to describe the payout', () => {
+      setup();
+      expect(screen.getByLabelText('What does the winner get? (optional)')).toBeInTheDocument();
+    });
+
+    it('stays available regardless of which payment method is selected', async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByLabelText('How do members pay?'), 'cashapp');
+      expect(screen.getByLabelText('What does the winner get? (optional)')).toBeInTheDocument();
+      await userEvent.selectOptions(screen.getByLabelText('How do members pay?'), 'other');
+      expect(screen.getByLabelText('What does the winner get? (optional)')).toBeInTheDocument();
+    });
+
+    it('saves what the admin typed', async () => {
+      const { onSave } = setup({ values: { ...ON, duesPayoutNotes: null } });
+      await userEvent.type(
+        screen.getByLabelText('What does the winner get? (optional)'),
+        'Top two split 70/30.',
+      );
+      await userEvent.click(screen.getByRole('button', { name: /Save dues/i }));
+      await waitFor(() =>
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({ duesPayoutNotes: 'Top two split 70/30.' }),
+        ),
+      );
+    });
+
+    it('omits the section entirely when no payout terms are set', () => {
+      setup({ isAdmin: false, values: { ...ON, duesPayoutNotes: null } });
+      expect(screen.queryByText('What the winner gets')).not.toBeInTheDocument();
     });
   });
 

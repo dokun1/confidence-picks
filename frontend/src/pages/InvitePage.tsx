@@ -170,12 +170,21 @@ export default function InvitePage() {
                 membership is known at the moment of deciding, not after. */}
             {invite.group.duesEnabled && (
               <Banner variant="info">
-                {invite.group.duesAmountCents
-                  ? `This group collects ${formatCents(invite.group.duesAmountCents)} in dues per member`
-                  : 'This group collects dues from its members'}
-                {invite.group.duesCollectorName
-                  ? `, paid to ${invite.group.duesCollectorName}.`
-                  : '.'}
+                <span className="block">
+                  {invite.group.duesAmountCents
+                    ? `This group collects ${formatCents(invite.group.duesAmountCents)} in dues per member`
+                    : 'This group collects dues from its members'}
+                  {invite.group.duesCollectorName
+                    ? `, paid to ${invite.group.duesCollectorName}.`
+                    : '.'}
+                </span>
+                {/* The buy-in is only half the decision; what it pays out is
+                    the other half, so both are disclosed before joining. */}
+                {invite.group.duesPayoutNotes && (
+                  <span className="mt-xs block whitespace-pre-line">
+                    {invite.group.duesPayoutNotes}
+                  </span>
+                )}
               </Banner>
             )}
 

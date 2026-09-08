@@ -173,7 +173,7 @@ export async function updateGroup(identifier, updates) {
   const allowed = [
     'name', 'description', 'isPublic', 'maxMembers',
     'duesEnabled', 'duesPaymentMethod', 'duesAmountCents', 'duesVenmoHandle',
-    'duesCashappHandle', 'duesInstructions', 'duesCollectorUserId',
+    'duesCashappHandle', 'duesInstructions', 'duesPayoutNotes', 'duesCollectorUserId',
   ];
   const body = Object.fromEntries(Object.entries(updates || {}).filter(([k]) => allowed.includes(k)));
   if (Object.keys(body).length === 0) {

@@ -34,7 +34,10 @@ router.get('/:token', optionalAuth, async (req, res) => {
         // handed a payment deeplink.
         duesEnabled: Boolean(row.dues_enabled),
         duesAmountCents: row.dues_amount_cents ?? null,
-        duesCollectorName: row.dues_collector_name ?? null
+        duesCollectorName: row.dues_collector_name ?? null,
+        // What the winner gets is part of deciding whether the buy-in is worth
+        // it, so it is disclosed pre-join alongside the amount.
+        duesPayoutNotes: row.dues_payout_notes ?? null
       },
       invite: {
         token: row.token,

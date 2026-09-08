@@ -24,6 +24,8 @@ export interface DuesSettingsValues {
   duesVenmoHandle: string | null;
   duesCashappHandle: string | null;
   duesInstructions: string | null;
+  /** How the pot is disbursed. Independent of the payment method. */
+  duesPayoutNotes: string | null;
   duesCollectorUserId: number | null;
 }
 
@@ -261,6 +263,24 @@ export default function DuesSettings({
                   </p>
                 </>
               )}
+
+              {/* Sits outside the method-specific fields above: how the pot is
+                  split is the same question whether members paid by Venmo,
+                  Cash App or cash in an envelope. */}
+              <TextField
+                id="dues-payout"
+                label="What does the winner get? (optional)"
+                value={draft.duesPayoutNotes ?? ''}
+                onChange={(v) => patch({ duesPayoutNotes: v || null })}
+                placeholder="Winner takes all. Second place gets their buy-in back."
+                multiline
+                rows={3}
+                size="md"
+              />
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Shown in settings and on the invite page, so people know what they are
+                playing for before they pay.
+              </p>
             </div>
           )}
 
@@ -310,6 +330,17 @@ export default function DuesSettings({
               The group admin has not set up a payment method yet.
             </p>
           )}
+        </div>
+      )}
+
+      {values.duesEnabled && values.duesPayoutNotes && (
+        <div className="space-y-sm border-t border-secondary-200 pt-md dark:border-secondary-700">
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+            What the winner gets
+          </h3>
+          <p className="whitespace-pre-line rounded-base bg-secondary-50 p-sm text-sm text-[var(--color-text-secondary)] dark:bg-secondary-900/40">
+            {values.duesPayoutNotes}
+          </p>
         </div>
       )}
 
