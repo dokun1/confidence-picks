@@ -172,9 +172,11 @@ describe('PicksTab', () => {
     // FINAL game row with a revealed, graded pick (BUF, 5 points for Alice).
     expect(screen.getByText('BUF @ NE')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
-    // SCHEDULED game withholds picks until kickoff.
+    // SCHEDULED game withholds the selection but reports submission status.
     expect(screen.getByText('NE @ BUF')).toBeInTheDocument();
-    expect(screen.getAllByText('Hidden').length).toBeGreaterThan(0);
+    expect(
+      screen.queryAllByText('Picked').length + screen.queryAllByText('Not picked').length,
+    ).toBeGreaterThan(0);
   });
 
   it('re-runs the fetch when the GroupPicks Refresh action is invoked', async () => {

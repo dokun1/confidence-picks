@@ -200,18 +200,70 @@ describe('GroupPicks', () => {
       return within(row as HTMLElement).getAllByRole('cell');
     }
 
-    it("renders the 'Hidden' placeholder for every member in a SCHEDULED game", () => {
+    it("reports 'Picked' without revealing the selection in a SCHEDULED game", () => {
       render(<GroupPicks games={GAMES} picks={PICKS} members={MEMBERS} />);
-      // SCHEDULED game: picks are withheld until kickoff for all three members,
-      // even though each of them has a complete pick in the fixtures.
+      // All three have complete picks in the fixtures, so all three read as
+      // submitted -- but the choice itself stays hidden until kickoff.
       const cells = cellsForGameRow('KC @ BUF');
       const [aliceCell] = cells;
-      expect(within(aliceCell).getByText('Hidden')).toBeInTheDocument();
-      // Withheld regardless of the underlying data — Alice's KC pick is not shown.
+      expect(within(aliceCell).getByText('Picked')).toBeInTheDocument();
+      // The whole point: Alice picked KC, and that must not be visible.
       expect(within(aliceCell).queryByText('KC')).not.toBeInTheDocument();
+      expect(within(aliceCell).queryByText('3')).not.toBeInTheDocument();
 
-      const hidden = MEMBERS.map((_, i) => within(cells[i]).getByText('Hidden'));
-      expect(hidden).toHaveLength(MEMBERS.length);
+      const picked = MEMBERS.map((_, i) => within(cells[i]).getByText('Picked'));
+      expect(picked).toHaveLength(MEMBERS.length);
+    });
+
+    it("reports 'Not picked' for a member with no pick on a SCHEDULED game", () => {
+      // Carol has no entry for the scheduled game at all.
+      const withoutCarol: MemberPicks[] = PICKS.map((mp) =>
+        mp.memberId === CAROL.id
+          ? { ...mp, picks: mp.picks.filter((p) => p.gameId !== SCHEDULED_GAME.id) }
+          : mp
+      );
+      render(<GroupPicks games={GAMES} picks={withoutCarol} members={MEMBERS} />);
+      const cells = cellsForGameRow('KC @ BUF');
+      expect(within(cells[MEMBERS.indexOf(CAROL)]).getByText('Not picked')).toBeInTheDocument();
+      expect(within(cells[MEMBERS.indexOf(ALICE)]).getByText('Picked')).toBeInTheDocument();
+    });
+
+    it("treats a redacted server entry as 'Picked'", () => {
+      // What the API actually sends for another member pre-kickoff: submission
+      // confirmed, selection stripped. Without honouring `submitted` this would
+      // wrongly read as "Not picked".
+      const redacted: MemberPicks[] = [
+        {
+          memberId: ALICE.id,
+          picks: [makePick({ gameId: SCHEDULED_GAME.id, submitted: true })],
+        },
+      ];
+      render(<GroupPicks games={[SCHEDULED_GAME]} picks={redacted} members={[ALICE]} />);
+      expect(screen.getByText('Picked')).toBeInTheDocument();
+      expect(screen.queryByText('Not picked')).not.toBeInTheDocument();
+    });
+
+    it("treats an incomplete pick as 'Not picked'", () => {
+      // A team chosen but no confidence is not a submitted pick, and the server
+      // would not mark it submitted either.
+      const partial: MemberPicks[] = [
+        {
+          memberId: ALICE.id,
+          picks: [makePick({ gameId: SCHEDULED_GAME.id, pickedTeamId: CHIEFS.id })],
+        },
+      ];
+      render(<GroupPicks games={[SCHEDULED_GAME]} picks={partial} members={[ALICE]} />);
+      expect(screen.getByText('Not picked')).toBeInTheDocument();
+    });
+
+    it('uses success and destructive tones for the two states', () => {
+      const mixed: MemberPicks[] = [
+        { memberId: ALICE.id, picks: [makePick({ gameId: SCHEDULED_GAME.id, submitted: true })] },
+        { memberId: BOB.id, picks: [] },
+      ];
+      render(<GroupPicks games={[SCHEDULED_GAME]} picks={mixed} members={[ALICE, BOB]} />);
+      expect(screen.getByText('Picked').className).toMatch(/text-success-700/);
+      expect(screen.getByText('Not picked').className).toMatch(/text-error-700/);
     });
 
     it("renders 'No pick' for a started game where the member has no complete pick", () => {
@@ -318,10 +370,11 @@ describe('GroupPicks', () => {
       expect(screen.getAllByText('Alice Johnson')).toHaveLength(GAMES.length);
     });
 
-    it('withholds picks until kickoff in the card layout', () => {
+    it('shows submission status without the selection in the card layout', () => {
       render(<GroupPicks games={[SCHEDULED_GAME]} picks={PICKS} members={MEMBERS} />);
-      // One "Hidden" placeholder per member for the still-scheduled game.
-      expect(screen.getAllByText('Hidden')).toHaveLength(MEMBERS.length);
+      // renderCell is shared by both layouts, so the card view gets this too.
+      expect(screen.getAllByText('Picked')).toHaveLength(MEMBERS.length);
+      expect(screen.queryByText('KC')).not.toBeInTheDocument();
     });
 
     it('shows graded results and the per-game correct/graded aggregate', () => {
