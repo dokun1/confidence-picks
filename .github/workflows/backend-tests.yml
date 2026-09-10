@@ -3,7 +3,13 @@ name: Backend Tests
 on:
   pull_request:
     branches: [ main ]
-    paths: [ 'backend/**' ]
+    paths:
+      - 'backend/**'
+      # Include this file so a change to the workflow is validated by the
+      # workflow. Without it, editing CI never runs CI, and a broken pipeline
+      # merges green -- which is exactly how the six-test subset below went
+      # unnoticed for thirteen months.
+      - '.github/workflows/backend-tests.yml'
 
 jobs:
   test:
