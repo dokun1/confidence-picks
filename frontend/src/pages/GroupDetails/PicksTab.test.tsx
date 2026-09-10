@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PicksTab from './PicksTab';
@@ -53,7 +53,16 @@ function arrayResponse(): GetPicksResponse {
   return {
     games,
     picks: [
-      { memberId: 'm1', picks: [{ gameId: 1, pickedTeamId: '1', confidence: 5, won: true, points: 5 }] },
+      {
+        memberId: 'm1',
+        picks: [
+          { gameId: 1, pickedTeamId: '1', confidence: 5, won: true, points: 5 },
+          // What the server actually sends for a pre-kickoff pick: submission
+          // confirmed, selection redacted.
+          { gameId: 2, pickedTeamId: null, confidence: null, won: null, points: null, submitted: true },
+        ],
+      },
+      // m2 has nothing on the scheduled game — reads as "Not picked".
       { memberId: 'm2', picks: [{ gameId: 1, pickedTeamId: '2', confidence: 3, won: false, points: -3 }] },
     ],
   };
@@ -172,9 +181,16 @@ describe('PicksTab', () => {
     // FINAL game row with a revealed, graded pick (BUF, 5 points for Alice).
     expect(screen.getByText('BUF @ NE')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
-    // SCHEDULED game withholds picks until kickoff.
+    // SCHEDULED game withholds the selection but reports submission status.
+    // Asserted per-member rather than as a loose count: a permissive assertion
+    // here previously hid toPickData dropping the `submitted` flag, which made
+    // every other member render as "Not picked".
     expect(screen.getByText('NE @ BUF')).toBeInTheDocument();
-    expect(screen.getAllByText('Hidden').length).toBeGreaterThan(0);
+    const scheduledRow = screen.getByText('NE @ BUF').closest('tr') as HTMLElement;
+    const scheduledCells = within(scheduledRow).getAllByRole('cell');
+    // Alice has a redacted submitted entry for it; Bob has none.
+    expect(within(scheduledCells[0]).getByText('Picked')).toBeInTheDocument();
+    expect(within(scheduledCells[1]).getByText('Not picked')).toBeInTheDocument();
   });
 
   it('re-runs the fetch when the GroupPicks Refresh action is invoked', async () => {

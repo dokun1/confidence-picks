@@ -86,6 +86,13 @@ export interface PickData {
   confidence: number | null;
   won: boolean | null;
   points: number | null;
+  /**
+   * Whether this member has submitted a pick for the game. Before kickoff the
+   * server withholds the selection itself, sending a redacted entry with this
+   * flag set — so the picks matrix can show picked / not picked without ever
+   * receiving the choice.
+   */
+  submitted?: boolean;
 }
 
 export interface InviteGroup {

@@ -21,11 +21,13 @@ export interface GroupPicksProps {
 /**
  * Visibility states for a single member/game cell.
  *
- * Mirrors the owner-vs-member visibility rules from the Svelte source (presentational
- * layer only): a member's pick is withheld from other viewers until the game starts,
- * so SCHEDULED games always render a placeholder regardless of the underlying data.
+ * Mirrors the owner-vs-member visibility rules: a member's SELECTION is withheld
+ * from other viewers until the game starts. Whether they have picked at all is not
+ * secret, so a SCHEDULED game reports picked / notpicked rather than an
+ * undifferentiated placeholder — the server sends a redacted entry carrying only
+ * `submitted` for other members' pre-kickoff picks.
  */
-type CellState = 'withheld' | 'nopick' | 'revealed' | 'result';
+type CellState = 'picked' | 'notpicked' | 'nopick' | 'revealed' | 'result';
 
 /** True once a game has kicked off (in progress or final) — picks are no longer hidden. */
 function hasStarted(game: GameData): boolean {
@@ -37,9 +39,19 @@ function isComplete(pick: PickData | undefined): pick is PickData {
   return !!pick && pick.pickedTeamId != null && pick.confidence != null;
 }
 
+/**
+ * Has this member submitted, regardless of whether we can see the selection?
+ * Pre-kickoff entries for other members are redacted down to `submitted`, so the
+ * completeness check alone would read every one of them as "not picked".
+ */
+function hasSubmitted(pick: PickData | undefined): boolean {
+  return pick?.submitted === true || isComplete(pick);
+}
+
 function cellState(game: GameData, pick: PickData | undefined): CellState {
-  // Withheld until kickoff so members cannot copy each other's picks.
-  if (!hasStarted(game)) return 'withheld';
+  // The selection stays hidden until kickoff so members cannot copy each other,
+  // but submission status is shown so you can see who still owes picks.
+  if (!hasStarted(game)) return hasSubmitted(pick) ? 'picked' : 'notpicked';
   if (!isComplete(pick)) return 'nopick';
   if (game.status === 'FINAL') return 'result';
   return 'revealed';
@@ -60,6 +72,13 @@ const RESULT_CLASSES: Record<Outcome, string> = {
   lost: 'bg-error-100 text-error-700 dark:bg-error-900 dark:text-error-300',
   neutral: 'bg-secondary-100 text-secondary-700 dark:bg-secondary-800 dark:text-secondary-300',
 };
+
+// Pre-kickoff submission status. `error` is this design system's destructive
+// tone — Button's destructive variant is built on the same scale.
+const STATUS_CLASSES = {
+  picked: 'text-sm font-medium text-success-700 dark:text-success-300',
+  notpicked: 'text-sm font-medium text-error-700 dark:text-error-300',
+} as const;
 
 function outcomeOf(pick: PickData): Outcome {
   if (pick.won === true) return 'won';
@@ -264,8 +283,19 @@ export default function GroupPicks({ games, picks, members, onRefresh }: GroupPi
 
 /** Render a single matrix cell for the given visibility state. */
 function renderCell(game: GameData, pick: PickData | undefined, state: CellState) {
-  if (state === 'withheld') {
-    return <span className={PLACEHOLDER} title="Hidden until kickoff">Hidden</span>;
+  if (state === 'picked') {
+    return (
+      <span className={STATUS_CLASSES.picked} title="Picked — hidden until kickoff">
+        Picked
+      </span>
+    );
+  }
+  if (state === 'notpicked') {
+    return (
+      <span className={STATUS_CLASSES.notpicked} title="No pick submitted yet">
+        Not picked
+      </span>
+    );
   }
   if (state === 'nopick') {
     return <span className={PLACEHOLDER}>No pick</span>;

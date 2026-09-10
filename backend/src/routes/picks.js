@@ -261,7 +261,25 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
     for (const p of groupPicks) {
       const gameJson = gameJsonById.get(p.gameId);
       if (!gameJson) continue;
-      if (p.userId !== req.user.id && PRE_STATUSES.has(gameJson.status)) continue;
+      if (p.userId !== req.user.id && PRE_STATUSES.has(gameJson.status)) {
+        // The SELECTION stays withheld until kickoff so members cannot copy each
+        // other. Whether someone has picked at all is not secret, though, and the
+        // matrix needs it to distinguish "picked" from "not picked" instead of
+        // showing an undifferentiated "Hidden" for both. Emit a redacted marker:
+        // no team, no confidence, nothing that reveals the choice.
+        if (p.pickedTeamId != null && p.confidence != null) {
+          if (!memberPicksMap.has(p.userId)) memberPicksMap.set(p.userId, []);
+          memberPicksMap.get(p.userId).push({
+            gameId: p.gameId,
+            pickedTeamId: null,
+            confidence: null,
+            won: null,
+            points: null,
+            submitted: true
+          });
+        }
+        continue;
+      }
       gradeAgainstFinal(gameJson, p);
       if (!memberPicksMap.has(p.userId)) memberPicksMap.set(p.userId, []);
       memberPicksMap.get(p.userId).push({
@@ -269,7 +287,8 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
         pickedTeamId: p.pickedTeamId,
         confidence: p.confidence,
         won: p.won,
-        points: p.points
+        points: p.points,
+        submitted: p.pickedTeamId != null && p.confidence != null
       });
     }
     const memberPicks = [...memberPicksMap.entries()].map(([memberId, memberPickList]) => ({

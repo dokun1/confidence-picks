@@ -50,6 +50,10 @@ function toPickData(p: PickData): PickData {
     confidence: p.confidence ?? null,
     won: p.won ?? null,
     points: p.points ?? null,
+    // Carried through deliberately: pre-kickoff entries for other members are
+    // redacted down to this flag, so dropping it here makes every one of them
+    // render as "Not picked".
+    submitted: p.submitted ?? false,
   };
 }
 

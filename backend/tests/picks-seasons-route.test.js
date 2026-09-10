@@ -156,15 +156,22 @@ describe('NFL picks router — old-season history endpoints', () => {
       const mine = byMember.get('1');
       assert.strictEqual(mine.length, 2);
 
-      // The other member's SCHEDULED pick is withheld; only the FINAL game shows.
+      // The other member's SCHEDULED pick is redacted rather than dropped: the
+      // matrix needs to know they submitted, but the selection itself is still
+      // withheld. Their FINAL pick comes through in full.
       const theirs = byMember.get('2');
-      assert.strictEqual(theirs.length, 1);
-      assert.strictEqual(theirs[0].gameId, 101);
+      assert.strictEqual(theirs.length, 2);
 
+      const theirScheduled = theirs.find((p) => p.gameId === 102);
+      assert.strictEqual(theirScheduled.submitted, true);
+      assert.strictEqual(theirScheduled.pickedTeamId, null, 'selection stays withheld');
+      assert.strictEqual(theirScheduled.confidence, null, 'confidence stays withheld');
+
+      const theirFinal = theirs.find((p) => p.gameId === 101);
       // Their ungraded FINAL pick was graded in memory: BUF (team 2) won 24-20,
       // they picked NE (team 1) at confidence 7 -> lost 7 points.
-      assert.strictEqual(theirs[0].won, false);
-      assert.strictEqual(theirs[0].points, -7);
+      assert.strictEqual(theirFinal.won, false);
+      assert.strictEqual(theirFinal.points, -7);
     });
 
     test('serves an old season when requested explicitly', async () => {
