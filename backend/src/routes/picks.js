@@ -5,6 +5,7 @@ import { GameService } from '../services/GameService.js';
 import { UserPick } from '../models/UserPick.js';
 import pool from '../config/database.js';
 import { getCurrentNFLSeason } from '../utils/nflSeasonUtils.js';
+import { isPickLocked, PRE_STATUSES } from '../utils/pickLock.js';
 
 const router = express.Router();
 
@@ -31,9 +32,15 @@ async function computeClosestWeek(seasonYear, seasonType) {
   return rows[rows.length - 1].week; // all final -> last week (could be 0)
 }
 
-// Pre-game statuses: games in these states are editable and other members'
-// picks on them stay hidden (legacy/alternate spellings included, e.g. NOT_STARTED).
-const PRE_STATUSES = new Set(['SCHEDULED','NOT_STARTED','PRE','PREGAME']);
+// Whether a submitted pick matches the saved row exactly. Clients re-send the
+// whole week, including games that have kicked off; with no saved row, only an
+// empty pick counts as unchanged.
+function isUnchangedPick(p, saved) {
+  if (!saved) return p.pickedTeamId == null && p.confidence == null;
+  const sameTeam = String(p.pickedTeamId ?? '') === String(saved.pickedTeamId ?? '');
+  const sameConfidence = p.confidence == null ? saved.confidence == null : Number(p.confidence) === Number(saved.confidence);
+  return sameTeam && sameConfidence;
+}
 
 function deriveGamePickMeta(gameJson, pick) {
   const status = gameJson.status;
@@ -385,15 +392,27 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     // Normalise clearedGameIds (optional array of numbers)
     const cleared = Array.isArray(clearedGameIds) ? clearedGameIds.map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n)) : [];
 
+    // Load existing picks up front: clients re-send the whole week, so a pick on a
+    // started game is accepted only as an unchanged copy of what's already saved.
+  const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+  console.log('[picks][POST] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+    const existingByGame = new Map(existingPicks.map(ep => [ep.gameId, ep]));
+    const now = Date.now();
+
     // Validate picks
     const totalGames = games.length;
     const seenConf = new Set();
+    const lockedUnchanged = new Set();
   for (const p of picks) {
       const game = gameById.get(p.gameId);
       if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       if (cleared.includes(p.gameId)) continue; // if also cleared, skip (clear wins)
-      const status = game.status;
-      if (status !== 'SCHEDULED') return res.status(409).json({ error: 'Game locked', gameId: p.gameId });
+      if (isPickLocked(game, now)) {
+        // An unchanged re-send is a no-op, not an edit: skip it rather than sink
+        // the picks on games that are still open. Its confidence stays counted below.
+        if (!isUnchangedPick(p, existingByGame.get(p.gameId))) return res.status(409).json({ error: 'Game locked', gameId: p.gameId });
+        lockedUnchanged.add(p.gameId);
+      }
       if (p.confidence != null) {
         if (p.confidence < 1 || p.confidence > totalGames) return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId });
         if (seenConf.has(p.confidence)) return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence });
@@ -414,12 +433,8 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     for (const gid of cleared) {
       const game = gameById.get(gid);
       if (!game) return res.status(400).json({ error: 'Invalid clearedGameId', gameId: gid });
-      if (game.status !== 'SCHEDULED') return res.status(409).json({ error: 'Game locked', gameId: gid });
+      if (isPickLocked(game, now)) return res.status(409).json({ error: 'Game locked', gameId: gid });
     }
-
-    // Load existing picks for this user/week to detect implicit overrides
-  const existingPicks = await UserPick.findForUserWeek({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
-  console.log('[picks][POST] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
 
     // Detect confidence overrides: if payload assigns confidence X to game A but some other existing game B already
     // has confidence X (and B is not explicitly updated or cleared), we must clear that confidence first (retain winner).
@@ -431,7 +446,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
       if (conflict && !payloadGameIds.has(conflict.gameId) && !cleared.includes(conflict.gameId)) {
         const conflictGame = gameById.get(conflict.gameId);
         if (!conflictGame) continue; // safety
-        if (conflictGame.status !== 'SCHEDULED') {
+        if (isPickLocked(conflictGame, now)) {
           return res.status(409).json({ error: 'Confidence locked by started game', confidence: p.confidence, gameId: conflict.gameId });
         }
         implicitConfidenceClears.add(conflict.gameId);
@@ -457,7 +472,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
 
     // Filter out any picks that were also cleared to avoid re-upserting them
   // Filter out any picks that were explicitly cleared (implicit clears keep winner so payload may still include other picks)
-  const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
+  const effectivePicks = picks.filter(p => !cleared.includes(p.gameId) && !lockedUnchanged.has(p.gameId));
   if (effectivePicks.length > 0) {
   await UserPick.bulkUpsert({ userId: req.user.id, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, picks: effectivePicks });
     }
@@ -513,7 +528,8 @@ router.post('/:identifier/picks/clear', authenticateToken, async (req, res) => {
     const group = await ensureMembership(identifier, req.user.id);
 
     const games = await GameService.getGamesForWeek(season, seasonType, week, false);
-    const unlockedIds = games.filter(g => g.status === 'SCHEDULED').map(g => g.id);
+    const now = Date.now();
+    const unlockedIds = games.filter(g => !isPickLocked(g, now)).map(g => g.id);
     await UserPick.clearPending({ userId: req.user.id, groupId: group.id, season, seasonType, week, gameIds: unlockedIds });
     res.json({ cleared: unlockedIds.length });
   } catch (e) {
@@ -816,11 +832,18 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
 
     const cleared = Array.isArray(clearedGameIds) ? clearedGameIds.map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n)) : [];
 
-    // Validate picks (owner can override locked games - no status check needed)
-    // Security: This is safe because:
-    // 1. Owner status is verified at line 624 (group.userRole !== 'admin' check)
-    // 2. Target user membership is verified at lines 628-633
-    // 3. This is an intentional feature for owners to fix submission issues
+    // Load the target's existing picks up front; the self-target lock compares against them.
+    const existingPicks = await UserPick.findForUserWeek({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
+    console.log('[picks][POST user] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
+    const existingByGame = new Map(existingPicks.map(ep => [ep.gameId, ep]));
+
+    // Validate picks. The override skips the kickoff lock so an owner can fix other
+    // members' submission issues (owner role and target membership are verified
+    // above). Pointed at the owner's own id it would be a late-pick loophole, so
+    // there the member lock rules apply.
+    const selfTarget = targetUserId === Number(req.user.id);
+    const now = Date.now();
+    const lockedUnchanged = new Set();
     const totalGames = games.length;
     const seenConf = new Set();
     for (const p of picks) {
@@ -828,7 +851,10 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
       if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
       if (cleared.includes(p.gameId)) continue;
       
-      // Skip game status check for owner override - they can edit locked games
+      if (selfTarget && isPickLocked(game, now)) {
+        if (!isUnchangedPick(p, existingByGame.get(p.gameId))) return res.status(409).json({ error: 'Game locked', gameId: p.gameId });
+        lockedUnchanged.add(p.gameId);
+      }
       
       if (p.confidence != null) {
         if (p.confidence < 1 || p.confidence > totalGames) return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId });
@@ -846,17 +872,12 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
     }
     console.log('[picks][POST user] validation complete');
 
-    // Validate cleared game IDs (owner can clear locked games)
-    // Security: Same authorization as above - owner role verified, intentional feature
+    // Validate cleared game IDs (owner can clear other members' locked games, not their own)
     for (const gid of cleared) {
       const game = gameById.get(gid);
       if (!game) return res.status(400).json({ error: 'Invalid clearedGameId', gameId: gid });
-      // Skip status check - owner can clear any game
+      if (selfTarget && isPickLocked(game, now)) return res.status(409).json({ error: 'Game locked', gameId: gid });
     }
-
-    // Load existing picks for target user
-    const existingPicks = await UserPick.findForUserWeek({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek });
-    console.log('[picks][POST user] existing picks', existingPicks.map(p=>({ gameId:p.gameId, conf:p.confidence, team:p.pickedTeamId })));
 
     // Detect confidence overrides
     const payloadGameIds = new Set(picks.map(p => p.gameId));
@@ -865,7 +886,11 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
       if (p.confidence == null) continue;
       const conflict = existingPicks.find(ep => ep.confidence === p.confidence && ep.gameId !== p.gameId);
       if (conflict && !payloadGameIds.has(conflict.gameId) && !cleared.includes(conflict.gameId)) {
-        // Owner can override even locked games
+        // Owner can reclaim from other members' locked games, not their own
+        const conflictGame = gameById.get(conflict.gameId);
+        if (selfTarget && conflictGame && isPickLocked(conflictGame, now)) {
+          return res.status(409).json({ error: 'Confidence locked by started game', confidence: p.confidence, gameId: conflict.gameId });
+        }
         implicitConfidenceClears.add(conflict.gameId);
       }
     }
@@ -887,7 +912,7 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
     }
     console.log('[picks][POST user] performed clears', { explicit: cleared, implicit:[...implicitConfidenceClears] });
 
-    const effectivePicks = picks.filter(p => !cleared.includes(p.gameId));
+    const effectivePicks = picks.filter(p => !cleared.includes(p.gameId) && !lockedUnchanged.has(p.gameId));
     if (effectivePicks.length > 0) {
       await UserPick.bulkUpsert({ userId: targetUserId, groupId: group.id, season, seasonType: fetchSeasonType, week: fetchWeek, picks: effectivePicks });
     }

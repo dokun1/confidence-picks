@@ -255,4 +255,36 @@ describe('GamesPage', () => {
       }),
     );
   });
+
+  it('does not resend saved picks on games that have already started', async () => {
+    // Regression: the hydrated draft carries picks on finished games, and the
+    // server rejected the whole submit ("Game locked") because of them -- so a
+    // member couldn't pick Thursday's game after Wednesday's opener finished.
+    const payload = gamesPayload();
+    payload.games[0].status = 'FINAL';
+    vi.stubGlobal('fetch', mockFetchOk(payload));
+    mockGetMyPicks.mockResolvedValue({
+      picks: [{ gameId: 10, pickedTeamId: 1, confidence: 2 }],
+    });
+    mockSavePicks.mockResolvedValue({ games: [] });
+
+    renderPage();
+    await screen.findByText('Chiefs');
+
+    const row11 = screen.getByTestId('game-row-11');
+    fireEvent.click(within(row11).getByRole('radio', { name: 'Pick Chiefs to win' }));
+    fireEvent.click(within(row11).getByRole('button', { name: /Confidence for KC at DEN/ }));
+    fireEvent.click(within(row11).getByRole('option', { name: '1' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Picks' }));
+    await waitFor(() =>
+      expect(mockSavePicks).toHaveBeenCalledWith('sunday-squad', {
+        season: 2025,
+        seasonType: 2,
+        week: 1,
+        picks: [{ gameId: 11, pickedTeamId: 3, confidence: 1 }],
+        clearedGameIds: [],
+      }),
+    );
+  });
 });

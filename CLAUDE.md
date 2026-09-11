@@ -304,6 +304,53 @@ needed the fix.
 knockouts — frontend `outcomeOf` and backend `deriveActualResult` are the two
 seams, and they must agree.
 
+## SEV: "Game locked" on a game that hadn't kicked off (2026-09)
+
+**Symptom:** NFL Week 1, 2026. Members couldn't save a pick on Thursday's SF@LAR
+six minutes before kickoff; the editor toasted "Game locked". 13 users across 5
+groups were blocked from editing *any* Week 1 pick once the Wednesday opener
+started.
+
+**Root cause:** the lock was per-*submit*, not per-game. `GamesPage` hydrates the
+draft from saved picks (since `44fd60a`, 2026-06) and submits the whole draft, so
+the payload always carried the finished opener's pick. The POST validator rejected
+the entire batch with `409 Game locked` on the first non-SCHEDULED game before
+writing anything. The MCP client's `mergeWeek` also re-sends the whole week.
+
+A second, opposite bug: the lock keyed off ESPN `status`, which lags the real
+kickoff by minutes, so picks were accepted *after* kickoff (1–2 min in one group).
+
+**Fix:**
+- `backend/src/utils/pickLock.js` — `isPickLocked(game, now)`: open until the
+  **scheduled kickoff instant** (`now >= gameDate` locks), or earlier if ESPN
+  already reports the game started. Postponed games stay open. Every lock site in
+  `routes/picks.js` (new pick, explicit clear, confidence reclaim, clear-all) uses
+  it. `PRE_STATUSES` moved there too.
+- POST skips an **unchanged** re-send of a saved pick on a locked game
+  (`isUnchangedPick`) instead of rejecting; its confidence still counts toward the
+  duplicate check. A *changed* pick on a locked game is still `409`.
+- `GamesPage` leaves picks on IN_PROGRESS/FINAL games out of the submit body. It
+  deliberately never checks kickoff time — the server owns time, and a fast device
+  clock must never lock a game early.
+
+**Not changed:** `deriveGamePickMeta` and the line-~264 redaction of others' picks
+still key off status (neither can lock early; the NFL editor doesn't read `meta`).
+The owner override (`POST /:group/picks/user/:userId`, API-only — no UI calls
+`saveUserPicks`) still skips the lock for *other* members so owners can fix
+submission issues, but when an owner targets their **own** id it applies the
+member rules (lock at kickoff, unchanged re-sends skipped, no clearing/reclaiming
+a started game) — otherwise it was a curl loophole for late picks. MCP tokens
+can't reach it (`mcpAuth.js` denies unlisted routes).
+
+**Timezone dependency:** `games.game_date` is `timestamp without time zone` holding
+UTC; node-pg parses it in the *process* timezone. Vercel runs TZ=UTC so kickoff is
+exact in prod; a local backend in CDT locks ~5h late. Don't run the API with a
+non-UTC `TZ`.
+
+**Test seams:** `tests/pick-lock-util.test.js` pins the boundary to the
+millisecond; `tests/picks-lock.test.js` covers the route. Route fixtures must keep
+confidences ≤ the mocked slate size or `Confidence out of range` (400) fires first.
+
 ## Commands
 
 ```bash
