@@ -209,6 +209,19 @@ export default function GamesPage() {
     [draft],
   );
 
+  // Games ESPN already reports under way. Their picks are locked, so the submit
+  // leaves them out. Kickoff time is deliberately not checked here: the server
+  // owns that, and a fast device clock must never lock a game early.
+  const startedGameIds = useMemo(
+    () =>
+      new Set(
+        pageState.games
+          .filter((g) => g.status === 'IN_PROGRESS' || g.status === 'FINAL')
+          .map((g) => g.id),
+      ),
+    [pageState.games],
+  );
+
   const hasIncomplete = useMemo(
     () =>
       Object.values(draft).some(
@@ -277,7 +290,7 @@ export default function GamesPage() {
       season: year,
       seasonType,
       week,
-      picks: completePicks,
+      picks: completePicks.filter((p) => !startedGameIds.has(p.gameId)),
       clearedGameIds: [],
     };
 
