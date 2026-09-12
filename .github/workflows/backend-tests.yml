@@ -3,7 +3,13 @@ name: Backend Tests
 on:
   pull_request:
     branches: [ main ]
-    paths: [ 'backend/**' ]
+    paths:
+      - 'backend/**'
+      # Include this file so a change to the workflow is validated by the
+      # workflow. Without it, editing CI never runs CI, and a broken pipeline
+      # merges green -- which is exactly how the six-test subset below went
+      # unnoticed for thirteen months.
+      - '.github/workflows/backend-tests.yml'
 
 jobs:
   test:
@@ -64,28 +70,18 @@ jobs:
       env:
         NODE_ENV: test
     
-    - name: Run structure tests
+    # The whole suite, not a hand-picked subset.
+    #
+    # This previously ran only test:structure and test:db -- about 6 of 481 tests
+    # -- because routes and server were "temporarily" disabled in Aug 2025 for CI
+    # environment issues (ef93aac). Both pass now, and running every file costs
+    # roughly the same wall clock as the two that were kept: ~31s locally against
+    # the same Postgres 15 service and the same NODE_ENV=test wiring.
+    #
+    # The subset was the real problem. A green check on 1% of the suite reads as
+    # "the backend is fine" while covering almost none of it.
+    - name: Run backend tests
       working-directory: ./backend
-      run: timeout 60 pnpm run test:structure
+      run: timeout 600 pnpm test
       env:
         NODE_ENV: test
-    
-    - name: Run database tests
-      working-directory: ./backend
-      run: timeout 180 pnpm run test:db
-      env:
-        NODE_ENV: test
-    
-    # Temporarily disabled - TODO: Fix CI environment issues
-    # - name: Run API routes tests
-    #   working-directory: ./backend
-    #   run: timeout 300 pnpm run test:routes
-    #   env:
-    #     NODE_ENV: test
-    
-    # Temporarily disabled - TODO: Fix CI environment issues
-    # - name: Run server tests
-    #   working-directory: ./backend
-    #   run: timeout 300 pnpm run test:server
-    #   env:
-    #     NODE_ENV: test
