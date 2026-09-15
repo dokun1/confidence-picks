@@ -129,7 +129,9 @@ describe('PicksTab', () => {
 
   // The matrix is read-only; GamesPage is the editor and is unreachable without
   // a ?groupId, so this link is the tab's only route into making a pick.
-  it('offers a Make picks link carrying the group identifier', async () => {
+  // The link also carries the week the tab is showing, so the editor opens on
+  // the slate the member was just looking at rather than re-resolving it.
+  it('offers a Make picks link carrying the group identifier and the shown week', async () => {
     render(
       <MemoryRouter>
         <PicksTab identifier={identifier} members={members} />
@@ -138,7 +140,7 @@ describe('PicksTab', () => {
     await screen.findByText('BUF @ NE');
 
     const link = screen.getByRole('link', { name: 'Make picks' });
-    expect(link).toHaveAttribute('href', `/games?groupId=${identifier}`);
+    expect(link).toHaveAttribute('href', `/games?groupId=${identifier}&week=2`);
   });
 
   it('refetches picks when the week selector changes', async () => {

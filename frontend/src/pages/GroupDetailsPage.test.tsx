@@ -304,18 +304,20 @@ describe('GroupDetailsPage', () => {
     mockGetMessages.mockResolvedValue(messages);
     mockGetPickSeasons.mockResolvedValue({ seasons: [2025] });
     mockGetScoreboard.mockResolvedValue({ season: 2025, seasonType: 2, weeks: [], users: [] });
-    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 2 });
     // 16 games on the slate, 4 already picked -> 12 owed.
     mockGetPicks.mockResolvedValue({ games: [], totalGames: 16, pickedCount: 4 });
 
     renderPage();
     await screen.findByRole('heading', { name: memberGroup.name });
 
-    const banner = await screen.findByText(/12 picks available to make in Week 1/);
+    const banner = await screen.findByText(/12 picks available to make in Week 2/);
     expect(banner).toBeInTheDocument();
 
+    // The CTA must land on the same week the banner counted — it used to drop
+    // the week and open the editor on week 1, whose games were already final.
     fireEvent.click(screen.getByRole('button', { name: 'Make your picks' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/games?groupId=sunday-squad');
+    expect(mockNavigate).toHaveBeenCalledWith('/games?groupId=sunday-squad&week=2');
   });
 
   it('hides the NFL banner once every game is picked', async () => {
