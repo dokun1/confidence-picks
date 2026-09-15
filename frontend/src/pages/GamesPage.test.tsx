@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import GamesPage from './GamesPage';
 
@@ -8,13 +8,18 @@ vi.mock('../lib/nflSeasonUtils.js', () => ({ getCurrentNFLSeason: vi.fn(() => 20
 vi.mock('../lib/authService.js', () => ({
   default: { getApiBaseUrl: () => 'http://test' },
 }));
-vi.mock('../lib/picksService.js', () => ({ savePicks: vi.fn(), getMyPicks: vi.fn() }));
+vi.mock('../lib/picksService.js', () => ({
+  savePicks: vi.fn(),
+  getMyPicks: vi.fn(),
+  getClosestWeek: vi.fn(),
+}));
 vi.mock('../lib/groupsService.js', () => ({ getMyGroups: vi.fn() }));
 
-import { savePicks, getMyPicks } from '../lib/picksService.js';
+import { savePicks, getMyPicks, getClosestWeek } from '../lib/picksService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 const mockSavePicks = vi.mocked(savePicks);
 const mockGetMyPicks = vi.mocked(getMyPicks);
+const mockGetClosestWeek = vi.mocked(getClosestWeek);
 const mockGetMyGroups = vi.mocked(getMyGroups);
 
 const buf = { id: '1', name: 'Bills', abbreviation: 'BUF', logo: '' };
@@ -41,10 +46,16 @@ function mockFetchOk(payload: unknown) {
   return vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
 }
 
+/** Exposes the live query string so URL-writing behaviour is assertable. */
+function LocationProbe() {
+  return <span data-testid="location-search">{useLocation().search}</span>;
+}
+
 function renderPage(route = '/games?groupId=sunday-squad') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <GamesPage />
+      <LocationProbe />
     </MemoryRouter>,
   );
 }
@@ -60,13 +71,98 @@ describe('GamesPage', () => {
     ] as any);
     // Default: no previously-saved picks. The hydration test below re-mocks.
     mockGetMyPicks.mockResolvedValue({ picks: [] });
+    // Default: the backend resolves week 1 as the closest week, so the existing
+    // expectations below (which all assert week 1) keep their meaning. The
+    // initial-week describe block re-mocks this.
+    mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 1 });
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('fetches the current-season week 1 regular-season games on mount', async () => {
+  it('fetches the current-season regular-season games on mount', async () => {
     renderPage();
     await screen.findByText('Bills');
     expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false');
+  });
+
+  // The editor used to open on a hardcoded `useState(1)`, so in week 2+ the
+  // "Make picks" CTA landed on a week whose games had all already kicked off.
+  // It now resolves the same closest-week the group's needs-pick banner uses.
+  describe('initial week', () => {
+    it('opens on the backend closest week when the URL names none', async () => {
+      mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 2 });
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/2?force=false'),
+      );
+      expect(mockGetClosestWeek).toHaveBeenCalledWith('sunday-squad', 2025, 2);
+      expect((await screen.findByLabelText('Week')) as HTMLSelectElement).toHaveValue('2');
+    });
+
+    it('never fetches the stale week 1 slate on the way to the closest week', async () => {
+      mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 2 });
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/2?force=false'),
+      );
+      expect(fetch).not.toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false');
+    });
+
+    it('honors an explicit ?week= without asking the backend', async () => {
+      renderPage('/games?groupId=sunday-squad&week=5');
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/5?force=false'),
+      );
+      expect(mockGetClosestWeek).not.toHaveBeenCalled();
+    });
+
+    it('falls back to week 1 when the closest-week lookup fails', async () => {
+      mockGetClosestWeek.mockRejectedValue(new Error('boom'));
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false'),
+      );
+    });
+
+    // computeClosestWeek returns 0 when a season has no games rows at all, but
+    // the selector only offers weeks 1-18.
+    it('clamps a week 0 result up to week 1', async () => {
+      mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 0 });
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false'),
+      );
+    });
+
+    // Without a group there is no membership-gated closest-week endpoint to ask.
+    it('opens on week 1 without asking the backend when no group is in the URL', async () => {
+      renderPage('/games');
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith('http://test/api/games/2025/2/1?force=false'),
+      );
+      expect(mockGetClosestWeek).not.toHaveBeenCalled();
+    });
+
+    it('records a manually chosen week in the URL so a refresh stays put', async () => {
+      mockGetClosestWeek.mockResolvedValue({ season: 2025, seasonType: 2, week: 2 });
+      renderPage();
+      await screen.findByText('Bills');
+
+      fireEvent.change(await screen.findByLabelText('Week'), { target: { value: '7' } });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location-search')).toHaveTextContent('week=7'),
+      );
+    });
   });
 
   // GamesPage is a separate route from the group, so without this link the only

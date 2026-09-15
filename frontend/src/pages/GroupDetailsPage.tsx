@@ -340,9 +340,12 @@ export default function GroupDetailsPage() {
   }
 
   // NFL banner CTA: GamesPage is a separate route and needs the group on the
-  // query string to know where to save.
+  // query string to know where to save. The week goes along too, so the editor
+  // opens on the same slate this banner just counted rather than re-resolving
+  // it (or, as it used to, defaulting to a long-finished week 1).
   function goToNflPicks() {
-    navigate(`/games?groupId=${encodeURIComponent(identifier ?? '')}`);
+    const week = nflPickWeek != null ? `&week=${nflPickWeek}` : '';
+    navigate(`/games?groupId=${encodeURIComponent(identifier ?? '')}${week}`);
   }
 
   // getGroup returns userRole (NOT isOwner); admin is the owning role.

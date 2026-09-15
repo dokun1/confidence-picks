@@ -351,6 +351,49 @@ non-UTC `TZ`.
 millisecond; `tests/picks-lock.test.js` covers the route. Route fixtures must keep
 confidences ≤ the mocked slate size or `Confidence out of range` (400) fires first.
 
+## Fix: NFL pick editor always opened on Week 1 (2026-09)
+
+**Symptom:** Week 2, 2026. "Make picks" on an NFL group opened `GamesPage` on
+Week 1 — a slate whose 16 games were all FINAL. The group's own banner correctly
+said "N picks available to make in Week 2" and the button it rendered went to
+Week 1.
+
+**Root cause:** `GamesPage.tsx` initialized `const [week, setWeek] = useState(1)`
+— a literal. `year` was derived (`getCurrentNFLSeason()`) and `seasonType` pinned
+to 2, but week was never resolved from anything: no date math, no backend call,
+no URL param, no storage. Only the dropdown and an out-of-range clamp ever wrote
+to it. The codebase already had the answer in two places and the editor used
+neither: `PicksTab` resolves via `getClosestWeek`, and `GroupDetailsPage` fetched
+the very same value into `nflPickWeek` for its banner, then dropped it when
+navigating.
+
+**Fix:** `?week=` is the source of truth, with backend resolution as the default.
+- `GamesPage` seeds `week` from `?week=` (`parseWeekParam`, 1-18 or null), else
+  calls `getClosestWeek(groupId, year, seasonType)` on mount. `week` is
+  `number | null`; **null means unresolved and both fetch effects wait on it**
+  rather than firing at a placeholder — so the stale Week 1 slate is never
+  requested on the way to the right week.
+- Fallbacks all land on 1: lookup rejects, backend answers week 0 (it can, for a
+  season with no games rows), or there is no `groupId` (the closest-week endpoint
+  is membership-gated, so the standalone `/games` view can't ask).
+- Picking a week writes it to the URL (`chooseWeek`, `replace: true`) so a
+  refresh stays put. A *resolved* week is deliberately NOT written back, so a
+  bookmarked `/games?groupId=X` always reopens on the current week.
+- Both entry points now pass the week they already know: `PicksTab`'s link and
+  `GroupDetailsPage.goToNflPicks()` (from `nflPickWeek`).
+
+**Note:** `computeClosestWeek` (`backend/src/routes/picks.js:22`) is DB-driven,
+not date-driven — *first week holding any non-FINAL game*. It depends on next
+week's games being ingested; with no rows for a season it returns 0. It is also
+why an in-progress week correctly stays selected rather than advancing.
+
+**Test seams:** `GamesPage.test.tsx` must now include `getClosestWeek` in its
+`picksService.js` mock (as `PicksTab.test.tsx` already did) or the page throws at
+mount — the same both-mocks trap as the auth work above. Its `beforeEach` mocks
+the closest week to 1 so the pre-existing week-1 URL assertions keep their
+meaning. A `LocationProbe` in `renderPage` exposes the query string for the
+URL-writing assertion.
+
 ## Commands
 
 ```bash
@@ -358,4 +401,9 @@ confidences ≤ the mocked slate size or `Confidence out of range` (400) fires f
 pnpm install
 pnpm exec vitest run --no-coverage   # unit tests
 pnpm build                           # production build (no separate typecheck step)
+pnpm exec tsc --noEmit               # real typecheck; `pnpm build` does NOT type-check
 ```
+
+Note: `tsc --noEmit` reports two **pre-existing** errors in `AuthContext` for
+`getCachedUser` / `isAccessTokenValid` (JS service, no declarations). Ignore
+those two; treat anything else as yours.

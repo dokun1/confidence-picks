@@ -223,7 +223,7 @@ export default function PicksTab({ identifier, members }: PicksTabProps) {
             on GamesPage, which is only reachable with a ?groupId. Without this
             link the pick flow had no in-app entry point at all for NFL pools. */}
         <Link
-          to={`/games?groupId=${encodeURIComponent(identifier)}`}
+          to={`/games?groupId=${encodeURIComponent(identifier)}${week != null ? `&week=${week}` : ''}`}
           className='ml-auto inline-flex items-center rounded bg-primary-600 px-md py-xs text-sm font-medium text-neutral-0 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500'
         >
           Make picks

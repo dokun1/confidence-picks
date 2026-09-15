@@ -10,7 +10,7 @@ import type { ToastVariant } from '../designsystem/components/InlineToast/Inline
 import GamePickRow, { type DraftPick, type PickGame } from '../components/GamePickRow';
 import AuthService from '../lib/authService.js';
 import { getCurrentNFLSeason } from '../lib/nflSeasonUtils.js';
-import { savePicks, getMyPicks } from '../lib/picksService.js';
+import { savePicks, getMyPicks, getClosestWeek } from '../lib/picksService.js';
 import { getMyGroups } from '../lib/groupsService.js';
 import SaveTargetsDropdown, { type SaveTarget } from '../components/SaveTargetsDropdown';
 
@@ -50,14 +50,26 @@ function yearOptions(currentSeason: number): number[] {
   return [currentSeason - 2, currentSeason - 1, currentSeason];
 }
 
+/** Parse a `?week=` value, ignoring anything outside the 1-18 the selector offers. */
+function parseWeekParam(raw: string | null): number | null {
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 18 ? n : null;
+}
+
 export default function GamesPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const groupId = searchParams.get('groupId');
 
   const currentSeason = useMemo(() => getCurrentNFLSeason(), []);
   const [year, setYear] = useState(currentSeason);
   const [seasonType, setSeasonType] = useState(2);
-  const [week, setWeek] = useState(1);
+  // `null` means "not resolved yet" — the fetches below wait rather than firing
+  // against a placeholder week. Seeded from `?week=` so a refresh or a shared
+  // link reopens the same week; otherwise resolved from the backend on mount.
+  const [week, setWeek] = useState<number | null>(() =>
+    parseWeekParam(searchParams.get('week')),
+  );
 
   const [pageState, setPageState] = useState<PageState>({ loading: false, error: '', games: [] });
   const [draft, setDraft] = useState<DraftMap>({});
@@ -66,14 +78,56 @@ export default function GamesPage() {
 
   const totalWeeks = SEASON_TYPE_META[seasonType]?.weeks ?? 18;
 
+  // Resolve the week to open on when the URL didn't name one. The backend's
+  // closest-week rule (first week still holding a non-FINAL game) is the same
+  // one the group's needs-pick banner counts against, so the editor lands on the
+  // week the banner is nagging about instead of a season-opening week whose
+  // games are all long finished.
+  useEffect(() => {
+    if (week != null) return;
+    // The closest-week endpoint is membership-gated, so without a group there is
+    // nothing to ask; the standalone games view just opens on week 1.
+    if (!groupId) {
+      setWeek(1);
+      return;
+    }
+    let cancelled = false;
+    getClosestWeek(groupId, year, seasonType)
+      .then((resp) => {
+        if (cancelled) return;
+        const closest = resp?.week;
+        // computeClosestWeek can answer 0 for a season with no games rows yet.
+        setWeek(typeof closest === 'number' && closest >= 1 ? closest : 1);
+      })
+      .catch(() => {
+        // Non-fatal: fall back to week 1 rather than stranding the page.
+        if (!cancelled) setWeek(1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [week, groupId, year, seasonType]);
+
   // Switching from a longer season type to a shorter one can leave `week` out of
   // range; clamp it back to week 1 just as the Svelte reactive block did.
   useEffect(() => {
-    if (week > totalWeeks) setWeek(1);
+    if (week != null && week > totalWeeks) setWeek(1);
   }, [totalWeeks, week]);
+
+  /** Select a week and record it in the URL so a refresh reopens it. */
+  const chooseWeek = useCallback(
+    (next: number) => {
+      setWeek(next);
+      const params = new URLSearchParams(searchParams);
+      params.set('week', String(next));
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   const fetchGames = useCallback(
     async (force = false) => {
+      if (week == null) return;
       setPageState((s) => ({ ...s, loading: true, error: '' }));
       try {
         const base = AuthService.getApiBaseUrl();
@@ -106,7 +160,7 @@ export default function GamesPage() {
   // fetchGames so a transient picks-endpoint failure can't block the games
   // list — the draft just stays empty in that case.
   useEffect(() => {
-    if (!groupId) {
+    if (!groupId || week == null) {
       setDraft({});
       return;
     }
@@ -270,7 +324,9 @@ export default function GamesPage() {
   }, [groupId]);
 
   async function submit() {
-    if (!groupId) return;
+    // Defensive: canSubmit already gates on both (an unresolved week renders no
+    // games, so there is nothing to submit), but the body below needs a week.
+    if (!groupId || week == null) return;
     // Client-side guard: each confidence value must be used at most once. The UI
     // already prevents duplicates, so this is a defensive check (server enforces too).
     const seen = new Set<number>();
@@ -413,8 +469,9 @@ export default function GamesPage() {
           <span className="font-medium text-content-muted">Week</span>
           <select
             aria-label="Week"
-            value={week}
-            onChange={(e) => setWeek(Number(e.target.value))}
+            value={week ?? ''}
+            disabled={week == null}
+            onChange={(e) => chooseWeek(Number(e.target.value))}
             className="rounded-base border border-border bg-neutral-0 px-sm py-xs dark:bg-secondary-800"
           >
             {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((w) => (
