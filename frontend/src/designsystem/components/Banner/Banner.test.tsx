@@ -28,4 +28,33 @@ describe('Banner', () => {
     render(<Banner>just info</Banner>);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('renders no dismiss control by default', () => {
+    render(<Banner>heads up</Banner>);
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
+  });
+
+  it('calls onDismiss when the dismiss control is clicked', () => {
+    const onDismiss = vi.fn();
+    render(<Banner onDismiss={onDismiss}>heads up</Banner>);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hide itself on dismiss — the parent owns visibility', () => {
+    render(<Banner onDismiss={vi.fn()}>heads up</Banner>);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.getByText('heads up')).toBeInTheDocument();
+  });
+
+  it('keeps the action alongside the dismiss control', () => {
+    const onClick = vi.fn();
+    render(
+      <Banner action={{ label: 'Open settings', onClick }} onDismiss={vi.fn()}>
+        heads up
+      </Banner>,
+    );
+    expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+  });
 });

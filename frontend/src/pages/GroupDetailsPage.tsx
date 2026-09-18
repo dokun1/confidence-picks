@@ -49,6 +49,28 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'settings', label: 'Settings' },
 ];
 
+// One-time announcement for the email settings feature, not per group: the
+// feature ships once, so seeing it in any group is seeing it. Guarded like
+// ScoreBonusTooltip -- storage can be disabled or throw, and the correct
+// fallback is simply to show the banner.
+const EMAIL_ANNOUNCE_KEY = 'email-prefs-announcement-seen';
+
+function readAnnounceSeen(): boolean {
+  try {
+    return localStorage.getItem(EMAIL_ANNOUNCE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setAnnounceSeen() {
+  try {
+    localStorage.setItem(EMAIL_ANNOUNCE_KEY, '1');
+  } catch {
+    // Storage unavailable — the banner re-shows next mount. Acceptable.
+  }
+}
+
 // Shared not-found UI. Rendered both when the `group` query param is absent and
 // when the mount fetch rejects, so the user always sees a single recoverable
 // error with a route back to the groups list.
@@ -90,6 +112,9 @@ export default function GroupDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  // Read synchronously in the initialiser so a dismissed banner never flashes
+  // on the way to being hidden.
+  const [announceDismissed, setAnnounceDismissed] = useState<boolean>(() => readAnnounceSeen());
   // Which saved view the Picks tab opens on; set by the banner CTA / a deeplink.
   const [picksInitialView, setPicksInitialView] = useState<SavedView | undefined>(
     viewParam === 'needs-pick' ? 'needs-pick' : undefined,
@@ -314,6 +339,24 @@ export default function GroupDetailsPage() {
     setSearchParams(next, { replace: true });
   }
 
+  // Announcement CTA: the preferences live in the settings tab, so switch to it
+  // and scroll the panel into view.
+  function goToEmailPrefs() {
+    setActiveTab('settings');
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'settings');
+    setSearchParams(next, { replace: true });
+    // The panel mounts with the tab, so defer the scroll a frame.
+    requestAnimationFrame(() => {
+      document.getElementById('email-prefs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  function dismissAnnouncement() {
+    setAnnounceSeen();
+    setAnnounceDismissed(true);
+  }
+
   // Switch tabs; opening Chat lazy-loads its history, clears the unread dot, and
   // marks the chat read server-side (fire-and-forget — the local clear is what
   // the user sees, and a failed write just means the dot reappears next visit).
@@ -360,6 +403,12 @@ export default function GroupDetailsPage() {
   // World Cup pools render the tournament-shaped tab variants. Absent/NFL pools
   // keep the existing behavior untouched.
   const isWorldCup = group.poolType === 'world_cup_2026';
+
+  // Announce only to people who have not already chosen. Once either preference
+  // is on, the member knows the feature exists and the banner is just noise.
+  const hasChosenEmailPrefs = Boolean(group.emailReminders || group.emailSummaries);
+  const showEmailAnnouncement =
+    !isWorldCup && !announceDismissed && !hasChosenEmailPrefs && activeTab !== 'settings';
 
   return (
     <PageContainer width="wide" className="space-y-lg">
@@ -423,6 +472,20 @@ export default function GroupDetailsPage() {
           <Banner variant="warning" action={{ label: 'Make your picks', onClick: goToNflPicks }}>
             You have {needsPickCount} {needsPickCount === 1 ? 'pick' : 'picks'} available to make
             {nflPickWeek != null ? ` in Week ${nflPickWeek}` : ''}.
+          </Banner>
+        )}
+
+        {/* Email settings announcement — one-time, dismissible, and only while
+            the member has chosen neither preference. Suppressed on Settings,
+            where the panel it points at is already on screen. */}
+        {showEmailAnnouncement && (
+          <Banner
+            variant="info"
+            action={{ label: 'Email settings', onClick: goToEmailPrefs }}
+            onDismiss={dismissAnnouncement}
+          >
+            New: you can now choose email settings for this group — pick reminders before
+            kickoff and a weekly recap.
           </Banner>
         )}
 

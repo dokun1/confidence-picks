@@ -10,6 +10,9 @@ vi.mock('../../lib/groupsService.js', () => ({
   leaveGroup: vi.fn(),
   updateGroup: vi.fn(),
   setMemberDues: vi.fn(),
+  // vi.mock factories replace the WHOLE module, so an omitted export throws at
+  // mount rather than falling through to the real one.
+  setEmailPrefs: vi.fn().mockResolvedValue({ emailReminders: false, emailSummaries: false }),
 }));
 
 // Mock the invites service so invite-link creation is controllable per test.

@@ -6,6 +6,7 @@ import { UserPick } from '../models/UserPick.js';
 import pool from '../config/database.js';
 import { getCurrentNFLSeason } from '../utils/nflSeasonUtils.js';
 import { isPickLocked, PRE_STATUSES } from '../utils/pickLock.js';
+import { buildScoreboard } from '../services/NflScoreboardService.js';
 
 const router = express.Router();
 
@@ -18,8 +19,12 @@ async function ensureMembership(groupIdentifier, userId) {
 
 function normalizeGame(g) { return typeof g.toJSON === 'function' ? g.toJSON() : g; }
 
-// Determine closest upcoming week (first with any non-final game)
-async function computeClosestWeek(seasonYear, seasonType) {
+// Determine closest upcoming week (first with any non-final game).
+//
+// Exported so the email jobs resolve the same week the app does. DB-driven, not
+// date-driven, so it depends on the week's games having been ingested; a season
+// with no rows returns 0.
+export async function computeClosestWeek(seasonYear, seasonType) {
   const { rows } = await pool.query(`SELECT week, MIN(status) as any_status
     FROM games WHERE season=$1 AND season_type=$2 GROUP BY week ORDER BY week`, [seasonYear, seasonType]);
   if (rows.length === 0) return 0; // allow week 0
@@ -546,57 +551,10 @@ router.get('/:identifier/scoreboard', authenticateToken, async (req, res) => {
     const season = parseInt(req.query.season) || getCurrentNFLSeason();
     const seasonType = parseInt(req.query.seasonType) || 2;
     const group = await ensureMembership(identifier, req.user.id);
-
-    const { rows: users } = await pool.query(`SELECT u.id, u.name, u.picture_url FROM group_memberships gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1`, [group.id]);
-
-    // Gather picks with computed points (points may be null; compute on fly if game final)
-    const { rows: pickRows } = await pool.query(`
-      SELECT p.*, g.status, g.home_team, g.away_team, g.home_score, g.away_score
-      FROM user_picks p
-      JOIN games g ON g.id = p.game_id
-      WHERE p.group_id=$1 AND p.season=$2 AND p.season_type=$3
-    `, [group.id, season, seasonType]);
-
-    // Compute points if not stored but game final
-    for (const r of pickRows) {
-      if (r.status !== 'FINAL' || r.confidence_level == null || !r.picked_team_id) continue;
-
-      const home = typeof r.home_team === 'string' ? JSON.parse(r.home_team) : r.home_team;
-      const away = typeof r.away_team === 'string' ? JSON.parse(r.away_team) : r.away_team;
-
-      let winnerTeamId = null;
-      if (r.home_score > r.away_score) {
-        winnerTeamId = home.id;
-      } else if (r.away_score > r.home_score) {
-        winnerTeamId = away.id;
-      }
-
-      if (winnerTeamId === null) {
-        r.points = 0;
-        r.won = null;
-      } else if (r.points == null) {
-        // Use correct scoring: +confidence for wins, -confidence for losses
-        const didWin = String(winnerTeamId) === String(r.picked_team_id);
-        r.points = didWin ? r.confidence_level : -r.confidence_level;
-        r.won = didWin;
-      }
-    }
-
-    const weeksSet = new Set(pickRows.map(r => r.week));
-    const weeks = [...weeksSet].sort((a,b)=>a-b);
-
-    const userMap = new Map(users.map(u => [u.id, { userId: u.id, name: u.name, pictureUrl: u.picture_url, weekly: [], totalPoints: 0 }]));
-    for (const w of weeks) {
-      for (const u of users) {
-        const picks = pickRows.filter(r => r.user_id === u.id && r.week === w);
-        const points = picks.reduce((sum, p) => sum + (p.points || 0), 0);
-        userMap.get(u.id).weekly.push({ week: w, points });
-        userMap.get(u.id).totalPoints += points;
-      }
-    }
-
-    const result = [...userMap.values()].sort((a,b)=>b.totalPoints - a.totalPoints);
-    res.json({ season, seasonType, weeks, users: result });
+    // Standings live in NflScoreboardService so the weekly summary email can
+    // compute them too. This route is a thin caller over the same code.
+    const board = await buildScoreboard(group.id, season, seasonType);
+    res.json(board);
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });

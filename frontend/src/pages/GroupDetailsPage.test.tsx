@@ -180,6 +180,10 @@ describe('GroupDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearWorldCupCache();
+    // jsdom persists localStorage across cases in a file, so the email
+    // announcement's "seen" flag written by one test would leak into the next
+    // and silently suppress the banner others assert on.
+    localStorage.clear();
     // Hold the picks fetch open so the picks tab stays in its loading state for
     // the tab-switching assertions (this suite covers navigation, not picks data).
     mockGetClosestWeek.mockReturnValue(new Promise(() => {}));
@@ -750,6 +754,83 @@ describe('GroupDetailsPage', () => {
       // same payment button is already on screen.
       expect(await screen.findByText('Who has paid')).toBeInTheDocument();
       expect(screen.queryByText(/You owe/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('email settings announcement', () => {
+    beforeEach(() => {
+      mockGetMembers.mockResolvedValue(members);
+      mockGetMessages.mockResolvedValue(messages);
+    });
+
+    it('offers the announcement on an NFL group with neither preference set', async () => {
+      mockGetGroup.mockResolvedValue({
+        ...memberGroup,
+        emailReminders: false,
+        emailSummaries: false,
+      });
+
+      renderPage();
+
+      expect(await screen.findByText(/choose email settings/i)).toBeInTheDocument();
+    });
+
+    it('deeplinks to the settings tab, where the panel lives', async () => {
+      mockGetGroup.mockResolvedValue({
+        ...memberGroup,
+        emailReminders: false,
+        emailSummaries: false,
+      });
+
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Email settings' }));
+
+      expect(await screen.findByRole('switch', { name: /pick reminders/i })).toBeInTheDocument();
+    });
+
+    it('stays dismissed across remounts', async () => {
+      mockGetGroup.mockResolvedValue({
+        ...memberGroup,
+        emailReminders: false,
+        emailSummaries: false,
+      });
+
+      const { unmount } = renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+      expect(screen.queryByText(/choose email settings/i)).not.toBeInTheDocument();
+
+      unmount();
+      renderPage();
+      await screen.findByRole('heading', { name: memberGroup.name });
+      expect(screen.queryByText(/choose email settings/i)).not.toBeInTheDocument();
+    });
+
+    it('does not nag a member who already turned one on', async () => {
+      mockGetGroup.mockResolvedValue({
+        ...memberGroup,
+        emailReminders: true,
+        emailSummaries: false,
+      });
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: memberGroup.name });
+      expect(screen.queryByText(/choose email settings/i)).not.toBeInTheDocument();
+    });
+
+    it('is hidden for World Cup pools, which send no email', async () => {
+      mockGetGroup.mockResolvedValue({
+        ...worldCupGroup,
+        emailReminders: false,
+        emailSummaries: false,
+      });
+      mockGetWorldCupLeaderboard.mockResolvedValue({ leaderboard: [] });
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: worldCupGroup.name });
+      expect(screen.queryByText(/choose email settings/i)).not.toBeInTheDocument();
     });
   });
 });

@@ -243,3 +243,34 @@ export async function setMemberDues(identifier, userId, paid) {
   const data = await res.json();
   return { userId: data.userId, duesPaidAt: data.duesPaidAt ?? null };
 }
+
+/**
+ * Set the calling member's own email preferences for one group. Member-scoped:
+ * the server always uses the authenticated caller, never a body field.
+ */
+export async function setEmailPrefs(identifier, prefs) {
+  const res = await authFetch(`${apiBase()}/${identifier}/email-prefs`, {
+    method: 'POST',
+    body: JSON.stringify(prefs)
+  });
+  if (res.status === 404) throw new Error('Group not found');
+  if (res.status === 403) throw new Error('Must be a group member to set email preferences');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to save email preferences');
+  }
+  return res.json();
+}
+
+/** Global email kill switch for the signed-in user. Overrides every group. */
+export async function setEmailPause(paused) {
+  const res = await authFetch(`${AuthService.getApiBaseUrl()}/auth/me/email-pause`, {
+    method: 'POST',
+    body: JSON.stringify({ paused })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to update email settings');
+  }
+  return res.json();
+}

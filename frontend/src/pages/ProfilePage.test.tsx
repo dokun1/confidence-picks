@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ProfilePage from './ProfilePage';
+import { setEmailPause } from '../lib/groupsService.js';
 
 // Mock AuthService so the test never touches the network or window.location.
 // authService.js exports `default AuthService`, so the mock matches the
@@ -19,6 +20,11 @@ vi.mock('../lib/mcpTokenService', () => ({
   listMcpTokens: vi.fn().mockResolvedValue([]),
   createMcpToken: vi.fn(),
   revokeMcpToken: vi.fn(),
+}));
+
+// The page now carries the global email pause switch.
+vi.mock('../lib/groupsService.js', () => ({
+  setEmailPause: vi.fn().mockResolvedValue({ emailPausedAt: null }),
 }));
 
 // Stub useAuth so ProfilePage renders without the full provider stack. The
@@ -137,5 +143,38 @@ describe('ProfilePage', () => {
     render(<ProfilePage />);
     fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
     expect(vi.mocked(AuthService.logout)).toHaveBeenCalledTimes(1);
+  });
+
+  describe('global email pause', () => {
+    it('starts unpaused', () => {
+      render(<ProfilePage />);
+      expect(screen.getByRole('switch', { name: /pause all email/i })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+    });
+
+    it('pauses all email when switched on', async () => {
+      render(<ProfilePage />);
+      fireEvent.click(screen.getByRole('switch', { name: /pause all email/i }));
+      await waitFor(() => expect(vi.mocked(setEmailPause)).toHaveBeenCalledWith(true));
+      expect(screen.getByRole('switch', { name: /pause all email/i })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+
+    it('snaps back and explains when the write fails', async () => {
+      vi.mocked(setEmailPause).mockRejectedValueOnce(new Error('Network down'));
+      render(<ProfilePage />);
+
+      fireEvent.click(screen.getByRole('switch', { name: /pause all email/i }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Network down');
+      expect(screen.getByRole('switch', { name: /pause all email/i })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+    });
   });
 });

@@ -29,6 +29,10 @@ export class Group {
   // ensureMaxMembersConstraint). Same warm-instance fast path as above.
   static _maxMembersConstraintEnsured = false;
 
+  // Self-heal latch for the opt-in email preference columns (see
+  // ensureEmailPrefsSchema). Same warm-instance fast path as above.
+  static _emailPrefsSchemaEnsured = false;
+
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -71,6 +75,10 @@ export class Group {
     // games (no group stage). Defaults to false so NFL pools and ordinary WC pools
     // are unaffected. The WC picks routes read this to reject group-stage picks.
     this.knockoutOnly = data.knockoutOnly ?? false;
+    // The viewing member's own opt-ins. Default false so a non-member, or a row
+    // predating the columns, reads as "not subscribed" rather than undefined.
+    this.emailReminders = data.emailReminders ?? false;
+    this.emailSummaries = data.emailSummaries ?? false;
   }
 
   // Ensure the groups.knockout_only column exists. Production resilience: prod
@@ -153,6 +161,78 @@ export class Group {
       // rather than permanently believing the columns are present.
       console.warn('[groups] Failed to ensure dues columns (may already exist):', e.message);
     }
+  }
+
+  // Self-heal the opt-in email preference columns. Prod runs with INIT_DB unset,
+  // so schema.sql is NOT synced on deploy -- mirror ensureDuesSchema.
+  //
+  // Like the dues columns, these gate READS as well as writes: findByIdentifier
+  // names user_gm.email_reminders in its select list, and Postgres errors on a
+  // missing column rather than yielding undefined. Without this, the first
+  // deploy would 500 every group route.
+  static async ensureEmailPrefsSchema() {
+    if (this._emailPrefsSchemaEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'group_memberships' AND column_name = 'email_reminders'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing email preference columns – adding');
+        await pool.query(`
+          ALTER TABLE group_memberships
+            ADD COLUMN IF NOT EXISTS email_reminders BOOLEAN NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS email_summaries BOOLEAN NOT NULL DEFAULT false
+        `);
+        await pool.query(`
+          ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS email_paused_at TIMESTAMP NULL
+        `);
+        console.log('[groups] email preference columns added');
+      }
+      // Latch only after a confirmed present/added column, so the next call
+      // settles into the zero-query fast path.
+      this._emailPrefsSchemaEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next call retry
+      // rather than permanently believing the columns are present.
+      console.warn('[groups] Failed to ensure email preference columns (may already exist):', e.message);
+    }
+  }
+
+  /**
+   * Set the CALLING member's own email preferences.
+   *
+   * Member-scoped, not admin-gated: every member owns their own inbox, so there
+   * is deliberately no role check here and no path for an admin to subscribe
+   * someone else. Omitted fields are left alone; `false` is a real value.
+   */
+  static async setEmailPrefs(groupId, userId, prefs) {
+    const sets = [];
+    const values = [];
+    if (typeof prefs.emailReminders === 'boolean') {
+      values.push(prefs.emailReminders);
+      sets.push(`email_reminders = $${values.length}`);
+    }
+    if (typeof prefs.emailSummaries === 'boolean') {
+      values.push(prefs.emailSummaries);
+      sets.push(`email_summaries = $${values.length}`);
+    }
+    if (sets.length === 0) throw new Error('No valid fields to update');
+
+    await Group.ensureEmailPrefsSchema();
+
+    values.push(groupId, userId);
+    const { rows } = await pool.query(
+      `UPDATE group_memberships SET ${sets.join(', ')}
+       WHERE group_id = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING email_reminders, email_summaries`,
+      values
+    );
+    if (rows.length === 0) throw new Error('User is not a member of this group');
+    return {
+      emailReminders: rows[0].email_reminders,
+      emailSummaries: rows[0].email_summaries,
+    };
   }
 
   // Ensure the groups.max_members CHECK allows up to 500. Production resilience:
@@ -264,23 +344,27 @@ export class Group {
 
   // Find group by identifier
   static async findByIdentifier(identifier, userId = null) {
-    // The query below joins on g.dues_collector_user_id; a missing column is a
-    // hard SQL error, not a soft undefined. No-op once latched.
+    // The query below joins on g.dues_collector_user_id and selects
+    // user_gm.email_reminders; a missing column is a hard SQL error, not a soft
+    // undefined. Both no-op once latched.
     await Group.ensureDuesSchema();
+    await Group.ensureEmailPrefsSchema();
     const query = `
       SELECT g.*, 
              COUNT(gm.id) as member_count,
         u_owner.name as owner_name,
         u_owner.picture_url as owner_picture_url,
         u_collector.name as dues_collector_name,
-             ${userId ? 'user_gm.role as user_role' : 'NULL as user_role'}
+             ${userId ? 'user_gm.role as user_role' : 'NULL as user_role'},
+             ${userId ? 'user_gm.email_reminders as user_email_reminders' : 'false as user_email_reminders'},
+             ${userId ? 'user_gm.email_summaries as user_email_summaries' : 'false as user_email_summaries'}
       FROM groups g
       LEFT JOIN group_memberships gm ON g.id = gm.group_id
       LEFT JOIN users u_owner ON g.created_by = u_owner.id
       LEFT JOIN users u_collector ON g.dues_collector_user_id = u_collector.id
       ${userId ? 'LEFT JOIN group_memberships user_gm ON g.id = user_gm.group_id AND user_gm.user_id = $2' : ''}
       WHERE g.identifier = $1
-      GROUP BY g.id, u_owner.name, u_owner.picture_url, u_collector.name${userId ? ', user_gm.role' : ''}
+      GROUP BY g.id, u_owner.name, u_owner.picture_url, u_collector.name${userId ? ', user_gm.role, user_gm.email_reminders, user_gm.email_summaries' : ''}
     `;
     
     const values = userId ? [identifier, userId] : [identifier];
@@ -315,6 +399,10 @@ export class Group {
       duesCollectorUserId: row.dues_collector_user_id,
       duesCollectorName: row.dues_collector_name,
       knockoutOnly: row.knockout_only,
+      // The CALLER's own preferences, from the membership join already used for
+      // user_role — so the settings tab reads them off the group it already has.
+      emailReminders: row.user_email_reminders,
+      emailSummaries: row.user_email_summaries,
     });
   }
 
