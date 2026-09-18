@@ -91,6 +91,7 @@ ${resultsTable(grid.games)}
     '',
     `${appUrl}/groups`,
     '',
+    '— Confidence Picks, weekly NFL confidence pools with your friends.',
     `Unsubscribe: ${unsubscribeUrl}`,
   ].join('\n');
 

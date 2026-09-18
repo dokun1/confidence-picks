@@ -6,6 +6,33 @@ import { weeklySummary } from '../src/emails/weeklySummary.js';
 const UNSUB = 'https://api.confidence-picks.com/api/email/unsubscribe?token=abc';
 const APP = 'https://www.confidence-picks.com';
 
+describe('shared layout', () => {
+  const sample = () =>
+    pickReminder({
+      userName: 'Ann',
+      groups: [{ name: 'Sunday Squad', identifier: 'sunday-squad', count: 1 }],
+      kickoffLabel: '1:00 PM ET',
+      unsubscribeUrl: UNSUB,
+      appUrl: APP,
+    });
+
+  test('identifies Confidence Picks in the body, not just the From line', () => {
+    const { html, text } = sample();
+    // A forwarded or clipped message loses the display name first, so the
+    // message itself has to say what it is.
+    assert.match(html, /Confidence Picks/);
+    assert.match(text, /Confidence Picks/);
+  });
+
+  test("uses the site's own type stack", () => {
+    const { html } = sample();
+    assert.match(html, /Nunito Sans/, 'body face');
+    assert.match(html, /'Nunito'/, 'heading face');
+    assert.match(html, /fonts\.googleapis\.com/, 'webfont link for clients that honour it');
+    assert.match(html, /system-ui/, 'fallback stack for clients that strip it');
+  });
+});
+
 describe('pickReminder', () => {
   test('names one group and pluralises correctly', () => {
     const { subject, html, text } = pickReminder({

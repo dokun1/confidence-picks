@@ -37,6 +37,7 @@ ${items}
     '',
     "Picks lock at each game's kickoff.",
     '',
+    '— Confidence Picks, weekly NFL confidence pools with your friends.',
     `Unsubscribe: ${unsubscribeUrl}`,
   ].join('\n');
 
