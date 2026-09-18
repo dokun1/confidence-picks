@@ -70,7 +70,13 @@ export default function Banner({
   return (
     <div
       role="status"
-      className={`flex flex-col gap-xs rounded-base border p-md text-sm sm:flex-row sm:items-center sm:gap-sm ${VARIANT_CLASSES[variant]}`}
+      // The dismiss control is pinned to the top-right corner rather than
+      // participating in the flex flow: at phone width the row stacks, and an
+      // inline ✕ would land on its own line under the action, reading as a
+      // stray glyph. `pr-xl` keeps the copy clear of it.
+      className={`relative flex flex-col gap-xs rounded-base border p-md text-sm sm:flex-row sm:items-center sm:gap-sm ${
+        onDismiss ? 'pr-[2.75rem]' : ''
+      } ${VARIANT_CLASSES[variant]}`}
     >
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
       <span className="flex-1">{children}</span>
@@ -91,7 +97,7 @@ export default function Banner({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="self-start rounded-base p-xxs leading-none opacity-70 transition-opacity hover:opacity-100 sm:self-auto"
+          className="absolute right-[0.625rem] top-[0.625rem] rounded-base p-xxs leading-none opacity-70 transition-opacity hover:opacity-100"
         >
           <XMarkIcon className="h-4 w-4" aria-hidden="true" />
         </button>
