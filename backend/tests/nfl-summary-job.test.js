@@ -1,11 +1,18 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { runWeeklySummaries } from '../src/services/NflEmailJobs.js';
+import { runWeeklySummaries, SUMMARY_MAX_AGE_MS } from '../src/services/NflEmailJobs.js';
 
 process.env.EMAIL_TOKEN_SECRET = 'test-secret';
 
 const TUES_8AM_ET = new Date('2026-09-22T12:00:00Z');
 const TUES_2PM_ET = new Date('2026-09-22T18:00:00Z');
+
+// Monday night kickoff, ~12h before the Tuesday 08:00 ET send — the real case.
+const MNF_KICKOFF_EPOCH = new Date('2026-09-22T00:15:00Z').getTime() / 1000;
+/** A week row as the SQL returns it: counts plus the week's last kickoff. */
+function weekRow(week, total, finalCount, epoch = MNF_KICKOFF_EPOCH) {
+  return { week, total: String(total), final_count: String(finalCount), last_kickoff_epoch: epoch };
+}
 
 const SUBSCRIBER = {
   user_id: 1,
@@ -16,7 +23,7 @@ const SUBSCRIBER = {
   identifier: 'sunday-squad',
 };
 
-const COMPLETE_WEEK = [{ week: 3, total: '16', final_count: '16' }];
+const COMPLETE_WEEK = [weekRow(3, 16, 16)];
 
 function makeDeps({ weekRows, subscribers, sent = [] }) {
   return {
@@ -92,7 +99,7 @@ describe('runWeeklySummaries', () => {
   test('does nothing while any game in the week is unfinished', async () => {
     const sent = [];
     const deps = makeDeps({
-      weekRows: [{ week: 3, total: '16', final_count: '15' }],
+      weekRows: [weekRow(3, 16, 15)],
       subscribers: [SUBSCRIBER],
       sent,
     });
@@ -107,9 +114,9 @@ describe('runWeeklySummaries', () => {
     const sent = [];
     const deps = makeDeps({
       weekRows: [
-        { week: 4, total: '16', final_count: '9' }, // in progress
-        { week: 3, total: '16', final_count: '16' }, // the one to report
-        { week: 2, total: '16', final_count: '16' }, // already reported
+        weekRow(4, 16, 9), // in progress
+        weekRow(3, 16, 16), // the one to report
+        weekRow(2, 16, 16), // already reported
       ],
       subscribers: [SUBSCRIBER],
       sent,
@@ -123,7 +130,7 @@ describe('runWeeklySummaries', () => {
 
   test('ignores a week with no games at all', async () => {
     const deps = makeDeps({
-      weekRows: [{ week: 5, total: '0', final_count: '0' }],
+      weekRows: [weekRow(5, 0, 0)],
       subscribers: [SUBSCRIBER],
     });
 
@@ -198,6 +205,53 @@ describe('runWeeklySummaries', () => {
     const deps = makeDeps({ weekRows: COMPLETE_WEEK, subscribers: [] });
     const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
     assert.strictEqual(res.reason, 'no-subscribers');
+  });
+
+  test('refuses to summarise a week that finished long ago', async () => {
+    const sent = [];
+    // Week 1 style: last kickoff a week before the send. This is the
+    // mid-season-deploy case — without the guard, everyone who opts in gets a
+    // recap of a week they had long forgotten.
+    const staleEpoch = new Date('2026-09-15T00:15:00Z').getTime() / 1000;
+    const deps = makeDeps({
+      weekRows: [weekRow(1, 16, 16, staleEpoch)],
+      subscribers: [SUBSCRIBER],
+      sent,
+    });
+
+    const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
+
+    assert.strictEqual(res.sent, 0);
+    assert.strictEqual(res.reason, 'week-too-old');
+    assert.strictEqual(sent.length, 0);
+  });
+
+  test('still sends right at the edge of the freshness window', async () => {
+    const sent = [];
+    const edgeEpoch = (TUES_8AM_ET.getTime() - SUMMARY_MAX_AGE_MS + 60_000) / 1000;
+    const deps = makeDeps({
+      weekRows: [weekRow(3, 16, 16, edgeEpoch)],
+      subscribers: [SUBSCRIBER],
+      sent,
+    });
+
+    const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
+    assert.strictEqual(res.sent, 1);
+  });
+
+  test('does not send when the week age cannot be determined', async () => {
+    const sent = [];
+    const deps = makeDeps({
+      weekRows: [weekRow(3, 16, 16, null)],
+      subscribers: [SUBSCRIBER],
+      sent,
+    });
+
+    const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
+
+    // Fails closed: a missing age must not become a licence to mail everyone.
+    assert.strictEqual(res.sent, 0);
+    assert.strictEqual(res.reason, 'unknown-week-age');
   });
 
   test('marks the claim failed when the provider throws', async () => {
