@@ -36,7 +36,9 @@ CREATE TABLE IF NOT EXISTS users (
   provider VARCHAR(20) NOT NULL, -- 'google' or 'apple'
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- Global email kill switch. Non-null overrides every per-group preference.
+  email_paused_at TIMESTAMP NULL
 );
 
 -- User sessions table (for JWT token management)
@@ -71,6 +73,10 @@ CREATE TABLE IF NOT EXISTS group_memberships (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   role VARCHAR(20) DEFAULT 'member', -- 'admin', 'member'
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- Opt-in email preferences, per member per group. Default false: nothing is
+  -- ever sent to someone who has not explicitly turned it on.
+  email_reminders BOOLEAN NOT NULL DEFAULT false, -- "you have picks to make today"
+  email_summaries BOOLEAN NOT NULL DEFAULT false, -- weekly recap + leaderboard
   UNIQUE(group_id, user_id)
 );
 
@@ -600,3 +606,29 @@ CREATE TABLE IF NOT EXISTS mcp_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_mcp_tokens_hash ON mcp_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id);
+
+-- ---------------------------------------------------------------------------
+-- Opt-in email preferences (added 2026-09).
+--
+-- Two booleans per membership plus a global pause on users. Declared here for
+-- fresh databases and guarded below for existing ones; production also
+-- self-heals them lazily via Group.ensureEmailPrefsSchema(), because prod runs
+-- with INIT_DB unset and never executes this file on deploy.
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'email_reminders'
+  ) THEN
+    ALTER TABLE group_memberships
+      ADD COLUMN email_reminders BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN email_summaries BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'email_paused_at'
+  ) THEN
+    ALTER TABLE users ADD COLUMN email_paused_at TIMESTAMP NULL;
+  END IF;
+END $$;

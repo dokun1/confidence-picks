@@ -29,6 +29,10 @@ export class Group {
   // ensureMaxMembersConstraint). Same warm-instance fast path as above.
   static _maxMembersConstraintEnsured = false;
 
+  // Self-heal latch for the opt-in email preference columns (see
+  // ensureEmailPrefsSchema). Same warm-instance fast path as above.
+  static _emailPrefsSchemaEnsured = false;
+
   constructor(data) {
     this.id = data.id;
     this.name = data.name;
@@ -152,6 +156,42 @@ export class Group {
       // Do NOT latch on failure — a transient error must let the next call retry
       // rather than permanently believing the columns are present.
       console.warn('[groups] Failed to ensure dues columns (may already exist):', e.message);
+    }
+  }
+
+  // Self-heal the opt-in email preference columns. Prod runs with INIT_DB unset,
+  // so schema.sql is NOT synced on deploy -- mirror ensureDuesSchema.
+  //
+  // Like the dues columns, these gate READS as well as writes: findByIdentifier
+  // names user_gm.email_reminders in its select list, and Postgres errors on a
+  // missing column rather than yielding undefined. Without this, the first
+  // deploy would 500 every group route.
+  static async ensureEmailPrefsSchema() {
+    if (this._emailPrefsSchemaEnsured) return; // warm-instance fast path: no query
+    try {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'group_memberships' AND column_name = 'email_reminders'`
+      );
+      if (check.rows.length === 0) {
+        console.log('[groups] Missing email preference columns – adding');
+        await pool.query(`
+          ALTER TABLE group_memberships
+            ADD COLUMN IF NOT EXISTS email_reminders BOOLEAN NOT NULL DEFAULT false,
+            ADD COLUMN IF NOT EXISTS email_summaries BOOLEAN NOT NULL DEFAULT false
+        `);
+        await pool.query(`
+          ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS email_paused_at TIMESTAMP NULL
+        `);
+        console.log('[groups] email preference columns added');
+      }
+      // Latch only after a confirmed present/added column, so the next call
+      // settles into the zero-query fast path.
+      this._emailPrefsSchemaEnsured = true;
+    } catch (e) {
+      // Do NOT latch on failure — a transient error must let the next call retry
+      // rather than permanently believing the columns are present.
+      console.warn('[groups] Failed to ensure email preference columns (may already exist):', e.message);
     }
   }
 
