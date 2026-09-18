@@ -1,13 +1,16 @@
 name: Send NFL Emails
 
-# Manual dispatch only, matching the convention in this repo. The hourly
-# schedule: trigger is deliberately NOT here — it lands in a separate commit
-# after a green manual dry run, so no automatic trigger is added unasked.
-#
 # Both jobs are cheap no-ops outside their windows (a reminder needs the day's
 # first kickoff within 4 hours; a summary needs the 8am ET hour and a fully
 # final week), so running hourly is the whole schedule.
+#
+# GitHub only fires scheduled workflows from the DEFAULT branch, so this cron
+# does nothing until the file is merged to main. Scheduled runs can also fire
+# 5-30 minutes late under load, which is why the jobs are window-based rather
+# than exact-time.
 on:
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -52,7 +55,14 @@ jobs:
           # and what the verified domain is registered as.
           EMAIL_FROM: 'Confidence Picks <noreply@send.confidence-picks.com>'
           EMAIL_REPLY_TO: hello@noetalabs.tech
-          EMAIL_DRY_RUN: ${{ inputs.dry_run }}
+          # Scheduled runs send for real. Manual runs honour the checkbox,
+          # which defaults to a dry run.
+          #
+          # This cannot be a bare ${{ inputs.dry_run }}: a schedule event has no
+          # inputs, so that renders empty, and EmailService treats anything that
+          # is not the literal string "false" as a dry run — every hourly run
+          # would silently send nothing.
+          EMAIL_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) || 'false' }}
           EMAIL_MAX_PER_RUN: '80'
           FRONTEND_BASE_URL: https://www.confidence-picks.com
           API_BASE_URL: https://api.confidence-picks.com
