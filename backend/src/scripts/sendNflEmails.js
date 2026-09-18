@@ -28,6 +28,7 @@ import { computeClosestWeek } from '../routes/picks.js';
 import { buildScoreboard, buildWeekPickGrid } from '../services/NflScoreboardService.js';
 import { createEmailService } from '../services/EmailService.js';
 import { EmailSend } from '../models/EmailSend.js';
+import { Group } from '../models/Group.js';
 import { runPickReminders, runWeeklySummaries } from '../services/NflEmailJobs.js';
 
 /**
@@ -63,6 +64,14 @@ async function main() {
     throw new Error('EMAIL_TOKEN_SECRET is not set — unsubscribe links cannot be signed');
   }
 
+  // Self-heal BOTH schemas this process depends on. The jobs query
+  // gm.email_reminders / gm.email_summaries straight through the pool, and
+  // those columns are otherwise only healed by Group.findByIdentifier — which
+  // runs on the web backend, not here. On a freshly deployed database where
+  // nobody has opened a group page yet, the candidate query would throw
+  // 'column does not exist' on the first game day. Both calls latch, so every
+  // later run is a zero-query no-op.
+  await Group.ensureEmailPrefsSchema();
   if (!emailService.dryRun) await EmailSend.ensureSchema();
 
   const deps = {
