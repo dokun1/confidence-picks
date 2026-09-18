@@ -288,4 +288,22 @@ export class User {
       lastLogin: row.last_login
     });
   }
+
+  /**
+   * Global email kill switch.
+   *
+   * Overrides every per-group preference: a paused user is filtered out of
+   * every send query regardless of what their groups say. Stores WHEN it was
+   * paused rather than a bare boolean, so the ledger can explain a gap in
+   * someone's mail later.
+   */
+  static async setEmailPaused(userId, paused) {
+    const { rows } = await pool.query(
+      `UPDATE users SET email_paused_at = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 RETURNING email_paused_at`,
+      [userId, paused ? new Date() : null]
+    );
+    if (rows.length === 0) throw new Error('User not found');
+    return { emailPausedAt: rows[0].email_paused_at };
+  }
 }
