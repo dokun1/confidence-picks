@@ -1,0 +1,60 @@
+name: Send NFL Emails
+
+# Manual dispatch only, matching the convention in this repo. The hourly
+# schedule: trigger is deliberately NOT here — it lands in a separate commit
+# after a green manual dry run, so no automatic trigger is added unasked.
+#
+# Both jobs are cheap no-ops outside their windows (a reminder needs the day's
+# first kickoff within 4 hours; a summary needs the 8am ET hour and a fully
+# final week), so running hourly is the whole schedule.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Log what would be sent instead of sending'
+        type: boolean
+        default: true
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install backend dependencies (frozen)
+        working-directory: ./backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Send NFL emails
+        working-directory: ./backend
+        env:
+          NODE_ENV: production
+          # Load-bearing: games.game_date is a naive timestamp holding UTC and
+          # node-pg parses it in the PROCESS zone, so a non-UTC runner would
+          # shift every kickoff and fire reminders at the wrong hour.
+          TZ: UTC
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DEV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_TOKEN_SECRET: ${{ secrets.EMAIL_TOKEN_SECRET }}
+          EMAIL_FROM: 'Confidence Picks <noreply@confidence-picks.com>'
+          EMAIL_REPLY_TO: hello@noetalabs.tech
+          EMAIL_DRY_RUN: ${{ inputs.dry_run }}
+          EMAIL_MAX_PER_RUN: '80'
+          FRONTEND_BASE_URL: https://www.confidence-picks.com
+          API_BASE_URL: https://api.confidence-picks.com
+        run: pnpm run email:send
+
+      - name: Summary
+        if: always()
+        run: echo 'NFL email run completed.' >> $GITHUB_STEP_SUMMARY
