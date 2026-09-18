@@ -7,6 +7,7 @@
     "start": "node src/app.js",
     "db:init": "node src/database/init.js",
     "cleanup:invites": "node src/scripts/cleanupInvites.js",
+    "email:send": "node src/scripts/sendNflEmails.js",
     "test": "node --test tests/*.test.js",
     "test:db": "node --test tests/db-init.test.js",
     "test:server": "node --test tests/server.test.js",
