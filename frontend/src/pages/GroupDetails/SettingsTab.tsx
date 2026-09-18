@@ -6,9 +6,17 @@ import Card from '../../designsystem/components/Card';
 import EmptyState from '../../designsystem/components/EmptyState';
 import { ConfirmDeleteModal } from '../../designsystem/components/Modal';
 import { createLinkInvite } from '../../lib/invitesService.js';
-import { deleteGroup, leaveGroup, updateGroup, setMemberDues } from '../../lib/groupsService.js';
+import {
+  deleteGroup,
+  leaveGroup,
+  updateGroup,
+  setMemberDues,
+  setEmailPrefs,
+} from '../../lib/groupsService.js';
 import DuesSettings from '../../designsystem/components/DuesSettings';
 import type { DuesSettingsValues } from '../../designsystem/components/DuesSettings';
+import EmailPrefs from '../../designsystem/components/EmailPrefs';
+import type { EmailPrefsValues } from '../../designsystem/components/EmailPrefs';
 import type { GroupDetail, GroupMember } from '../../lib/groupsService';
 
 export interface SettingsTabProps {
@@ -118,6 +126,14 @@ export default function SettingsTab(props: SettingsTabProps) {
     onDuesChanged?.();
   }
 
+  // Member-scoped: this writes the caller's own preferences, so there is no
+  // admin branch and no member id. The parent re-fetch keeps the announcement
+  // banner in sync — it hides once either preference is on.
+  async function handleSaveEmailPrefs(values: EmailPrefsValues) {
+    await setEmailPrefs(identifier, values);
+    onDuesChanged?.();
+  }
+
   const confirmCopy =
     confirmAction === 'delete'
       ? {
@@ -187,6 +203,18 @@ export default function SettingsTab(props: SettingsTabProps) {
         onSave={handleSaveDues}
         onToggleMemberPaid={handleToggleMemberPaid}
       />
+
+      {/* Email — per-member opt-in, so every member sees it regardless of role.
+          World Cup pools send no email, so the panel stays hidden for them. */}
+      {group.poolType !== 'world_cup_2026' && (
+        <EmailPrefs
+          values={{
+            emailReminders: group.emailReminders ?? false,
+            emailSummaries: group.emailSummaries ?? false,
+          }}
+          onSave={handleSaveEmailPrefs}
+        />
+      )}
 
       {/* Invite link */}
       <Card as='section'>

@@ -7,7 +7,9 @@ import Card from '../designsystem/components/Card';
 import TextField from '../designsystem/components/TextField';
 import InlineToast from '../designsystem/components/InlineToast';
 import type { ToastVariant } from '../designsystem/components/InlineToast';
+import Toggle from '../designsystem/components/Toggle';
 import McpTokensCard from '../components/McpTokensCard';
+import { setEmailPause } from '../lib/groupsService.js';
 
 interface ToastState {
   open: boolean;
@@ -31,6 +33,22 @@ export default function ProfilePage() {
     message: '',
     variant: 'error',
   });
+  const [emailPaused, setEmailPaused] = useState(false);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+
+  // Optimistic: the switch should feel immediate. On failure it snaps back and
+  // says why, rather than silently disagreeing with the server.
+  async function handleTogglePause(next: boolean) {
+    setPauseError(null);
+    const previous = emailPaused;
+    setEmailPaused(next);
+    try {
+      await setEmailPause(next);
+    } catch (err) {
+      setEmailPaused(previous);
+      setPauseError(err instanceof Error ? err.message : 'Failed to update email settings');
+    }
+  }
 
   if (!user) {
     return (
@@ -171,6 +189,25 @@ export default function ProfilePage() {
             </span>
           </div>
         </div>
+      </Card>
+
+      {/* The single off switch. Overrides every per-group preference, so a
+          member who wants out entirely does not have to visit each group — and
+          so there is one place to stop everything if a send ever misfires. */}
+      <Card as="section" className="space-y-md">
+        <h2 className="text-lg font-heading font-semibold text-content">Email</h2>
+        <Toggle
+          id="email-pause-all"
+          checked={emailPaused}
+          onChange={handleTogglePause}
+          label="Pause all email"
+          description="Stops every confidence-picks email, whatever your individual groups are set to."
+        />
+        {pauseError && (
+          <p role="alert" className="text-sm text-error-600 dark:text-error-400">
+            {pauseError}
+          </p>
+        )}
       </Card>
 
       <McpTokensCard />

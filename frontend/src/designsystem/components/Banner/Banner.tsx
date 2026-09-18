@@ -3,6 +3,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ExclamationCircleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 export type BannerVariant = 'info' | 'success' | 'warning' | 'error';
@@ -27,6 +28,12 @@ export interface BannerProps {
    * before `action`, so a banner can offer both ("[Venmo] [Cash App] Details").
    */
   actions?: React.ReactNode;
+  /**
+   * Optional dismiss control. When provided, a trailing ✕ renders and calls
+   * this. The banner does NOT hide itself -- the parent owns visibility, so it
+   * can persist the dismissal rather than losing it on the next mount.
+   */
+  onDismiss?: () => void;
 }
 
 // Subtle, persistent inline-alert palette (border + tinted surface), matching
@@ -52,7 +59,13 @@ const VARIANT_ICON: Record<BannerVariant, React.ComponentType<{ className?: stri
  * positioned popover), a Banner stays put in the document flow and is meant to
  * span its container — e.g. a "you have picks to make" notice above a tab bar.
  */
-export default function Banner({ variant = 'info', children, action, actions }: BannerProps) {
+export default function Banner({
+  variant = 'info',
+  children,
+  action,
+  actions,
+  onDismiss,
+}: BannerProps) {
   const Icon = VARIANT_ICON[variant];
   return (
     <div
@@ -71,6 +84,16 @@ export default function Banner({ variant = 'info', children, action, actions }: 
           className="self-start whitespace-nowrap font-semibold underline underline-offset-2 hover:no-underline sm:self-auto"
         >
           {action.label}
+        </button>
+      )}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="self-start rounded-base p-xxs leading-none opacity-70 transition-opacity hover:opacity-100 sm:self-auto"
+        >
+          <XMarkIcon className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
     </div>

@@ -39,6 +39,10 @@ export interface GroupDetail {
   duesCollectorName?: string | null;
   // World Cup 2026 sub-setting: group allows only knockout-stage picks.
   knockoutOnly?: boolean;
+  // The VIEWING member's own email opt-ins for this group, carried on the same
+  // membership join that supplies userRole. Both default false.
+  emailReminders?: boolean;
+  emailSummaries?: boolean;
 }
 
 export interface GroupMember {
@@ -110,4 +114,9 @@ export function setMemberDues(
   userId: string,
   paid: boolean,
 ): Promise<{ userId: string; duesPaidAt: string | null }>;
+export function setEmailPrefs(
+  identifier: string,
+  prefs: { emailReminders?: boolean; emailSummaries?: boolean },
+): Promise<{ emailReminders: boolean; emailSummaries: boolean }>;
+export function setEmailPause(paused: boolean): Promise<{ emailPausedAt: string | null }>;
 export function deleteGroup(identifier: string): Promise<boolean>;
