@@ -32,7 +32,7 @@ Both are strictly opt-in, configured per group.
 | Summary batching | **One email per group**, each with that group's own pick grid and leaderboard. |
 | Summary timing | The 08:00 ET hour after every game in the week reads `FINAL`. Not a fixed weekday. |
 | Unsubscribe | Signed link kills that type in that group. Plus a global "pause all email" on ProfilePage. |
-| From | `Confidence Picks <noreply@confidence-picks.com>`, Reply-To `hello@noetalabs.tech`. |
+| From | `Confidence Picks <noreply@send.confidence-picks.com>`, Reply-To `hello@noetalabs.tech`. Sends from a **subdomain**, not the apex — see below. |
 | Delivery guarantee | **At-most-once**, enforced by a claim row. A missed send beats a duplicate. |
 
 ### Why a script, not an endpoint
@@ -270,7 +270,7 @@ rails are part of the design rather than an operational afterthought.
 |---|---|---|
 | `RESEND_API_KEY` | GH Actions secret | Only the cron runner sends. Not needed in Vercel. |
 | `EMAIL_TOKEN_SECRET` | GH Actions secret **and** Vercel backend | Must be **identical** in both: the script signs, the route verifies. |
-| `EMAIL_FROM` | job only | `Confidence Picks <noreply@confidence-picks.com>` |
+| `EMAIL_FROM` | job only | `Confidence Picks <noreply@send.confidence-picks.com>` |
 | `EMAIL_REPLY_TO` | job only | `hello@noetalabs.tech` |
 | `EMAIL_DRY_RUN` | job only | Defaults true. |
 | `EMAIL_MAX_PER_RUN` | job only | Defaults 80. |
@@ -297,6 +297,20 @@ cron job fail verification on the backend.
 Consequence for the script: it reads `process.env` directly and must **not**
 `dotenv`-load these particular variables. The repo's existing `.env` stays as
 it is for database and OAuth config; no email secret is ever written to disk.
+
+### Sending domain: a subdomain, not the apex
+
+Verified as **`send.confidence-picks.com`** in Resend (added 2026-09-17), not
+`confidence-picks.com`. Resend flags the apex with a warning, and the reasoning
+holds: bulk reminder mail that ever gets marked as spam would otherwise damage
+the reputation of the root domain, and a root-level SPF record has to be merged
+by hand with any other mail service later added to it. The subdomain keeps this
+sender's reputation and its SPF independent.
+
+The cost is a slightly longer From address. That is the whole tradeoff.
+
+DNS is hosted at **Namecheap**. Receiving (MX) is deliberately left off — this
+system only sends.
 
 ### Timezone dependency
 

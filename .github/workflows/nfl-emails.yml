@@ -47,7 +47,10 @@ jobs:
           DEV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_TOKEN_SECRET: ${{ secrets.EMAIL_TOKEN_SECRET }}
-          EMAIL_FROM: 'Confidence Picks <noreply@confidence-picks.com>'
+          # Sends from the send.* subdomain, not the apex: bulk-mail reputation
+          # stays isolated from the root domain, which is what Resend advises
+          # and what the verified domain is registered as.
+          EMAIL_FROM: 'Confidence Picks <noreply@send.confidence-picks.com>'
           EMAIL_REPLY_TO: hello@noetalabs.tech
           EMAIL_DRY_RUN: ${{ inputs.dry_run }}
           EMAIL_MAX_PER_RUN: '80'
