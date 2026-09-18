@@ -97,7 +97,10 @@ export default function Banner({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="absolute right-[0.625rem] top-[0.625rem] rounded-base p-xxs leading-none opacity-70 transition-opacity hover:opacity-100"
+          // Corner-pinned while the row is stacked (phone), vertically centred
+          // once it is a single row (sm+), so it lines up with the action link
+          // rather than floating above it.
+          className="absolute right-[0.625rem] top-[0.625rem] rounded-base p-xxs leading-none opacity-70 transition-opacity hover:opacity-100 sm:top-1/2 sm:-translate-y-1/2"
         >
           <XMarkIcon className="h-4 w-4" aria-hidden="true" />
         </button>
