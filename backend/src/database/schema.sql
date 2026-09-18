@@ -632,3 +632,28 @@ BEGIN
     ALTER TABLE users ADD COLUMN email_paused_at TIMESTAMP NULL;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- Email send ledger (added 2026-09).
+--
+-- The UNIQUE(user_id, email_type, dedupe_key) is the idempotency mechanism: a
+-- row is claimed BEFORE the provider call, so cron jitter, a duplicate dispatch
+-- and a retry all collapse to a no-op. Delivery is at-most-once by design --
+-- a missed reminder beats a duplicate inbox delivery.
+--
+-- group_id is NULL on reminder rows, which are batched across groups.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS email_sends (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id INTEGER NULL REFERENCES groups(id) ON DELETE CASCADE,
+  email_type VARCHAR(32) NOT NULL, -- 'pick_reminder' | 'weekly_summary'
+  dedupe_key VARCHAR(120) NOT NULL,
+  provider_message_id VARCHAR(80) NULL,
+  status VARCHAR(20) NOT NULL, -- 'claimed' | 'sent' | 'failed'
+  error TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, email_type, dedupe_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_sends_user_type ON email_sends(user_id, email_type);
