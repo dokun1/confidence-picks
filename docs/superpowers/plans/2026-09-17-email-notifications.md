@@ -22,6 +22,10 @@
 - **Never latch an `ensure*` method on failure.** Latch only after a confirmed present-or-added column, so a transient error lets the next call retry.
 - **Eastern time is explicit.** Always compute day/hour via `Intl.DateTimeFormat` with `timeZone: 'America/New_York'`. Never rely on the ambient process zone. The workflow pins `TZ=UTC`.
 - **`.d.ts` files are load-bearing.** tsconfig is `strict` without `allowJs`. Any new export from `groupsService.js` must be added to `groupsService.d.ts` or every `.tsx` importer fails to compile.
+- **No `supertest`.** Route tests mount the single router under test on a bare
+  Express app, `listen(0)`, and drive it with `fetch`. Auth is faked at
+  `AuthService.verifyAccessToken` + `User.findById`; models are stubbed with
+  `mock.method` per test. Template: `backend/tests/dues-routes.test.js`.
 - **Commit message trailers.** Every commit ends with:
   ```
   Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
@@ -2289,66 +2293,102 @@ EOF
 
 - [ ] **Step 1: Write the failing test**
 
+> **Harness note:** this repo has **no `supertest`**. Route tests mount the one
+> router under test on a bare Express app, `listen(0)`, and drive it with
+> `fetch` — see `backend/tests/dues-routes.test.js`. Follow that exactly.
+
 ```js
 // backend/tests/email-prefs-routes.test.js
-import { test, describe, beforeEach, mock } from 'node:test';
-import assert from 'node:assert/strict';
-import request from 'supertest';
-import app from '../src/app.js';
-import { Group } from '../src/models/Group.js';
+import { test, describe, before, after, beforeEach, afterEach, mock } from 'node:test';
+import assert from 'node:assert';
+import express from 'express';
+import groupsRouter from '../src/routes/groups.js';
 import { AuthService } from '../src/services/AuthService.js';
 import { User } from '../src/models/User.js';
+import { Group } from '../src/models/Group.js';
 
-function authAs(userId) {
-  mock.method(AuthService, 'verifyAccessToken', () => ({ userId }));
-  mock.method(User, 'findById', async () => ({ id: userId, name: 'Ann', email: 'ann@example.com' }));
-}
+const AUTH_HEADER = { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' };
 
-describe('POST /api/groups/:identifier/email-prefs', () => {
-  beforeEach(() => mock.restoreAll());
+describe('email preference routes', () => {
+  let server;
+  let baseURL;
 
-  test('a member updates their own preferences', async () => {
-    authAs(1);
-    mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
-    mock.method(Group, 'setEmailPrefs', async () => ({ emailReminders: true, emailSummaries: false }));
-
-    const res = await request(app)
-      .post('/api/groups/sunday-squad/email-prefs')
-      .set('Authorization', 'Bearer t')
-      .send({ emailReminders: true });
-
-    assert.equal(res.status, 200);
-    assert.deepEqual(res.body, { emailReminders: true, emailSummaries: false });
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use('/api/groups', groupsRouter);
+    await new Promise((resolve) => {
+      server = app.listen(0, () => {
+        baseURL = `http://localhost:${server.address().port}`;
+        resolve();
+      });
+    });
   });
 
-  test('a non-member gets 403', async () => {
-    authAs(1);
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  beforeEach(() => {
+    mock.method(AuthService, 'verifyAccessToken', () => ({ userId: 1 }));
+    mock.method(User, 'findById', async () => ({ id: 1, name: 'Ann', email: 'ann@example.com' }));
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  function postPrefs(body) {
+    return fetch(`${baseURL}/api/groups/sunday-squad/email-prefs`, {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify(body),
+    });
+  }
+
+  test('rejects an unauthenticated request', async () => {
+    const res = await fetch(`${baseURL}/api/groups/sunday-squad/email-prefs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailReminders: true }),
+    });
+    assert.strictEqual(res.status, 401);
+  });
+
+  test('a member updates their own preferences', async () => {
+    mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+    const setPrefs = mock.method(Group, 'setEmailPrefs', async () => ({
+      emailReminders: true, emailSummaries: false,
+    }));
+
+    const res = await postPrefs({ emailReminders: true });
+
+    assert.strictEqual(res.status, 200);
+    assert.deepStrictEqual(await res.json(), { emailReminders: true, emailSummaries: false });
+    const [groupId, userId] = setPrefs.mock.calls[0].arguments;
+    assert.strictEqual(groupId, 9);
+    assert.strictEqual(userId, 1);
+  });
+
+  test('a non-member gets 403 and the model is never called', async () => {
     mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: null }));
-    const res = await request(app)
-      .post('/api/groups/sunday-squad/email-prefs')
-      .set('Authorization', 'Bearer t')
-      .send({ emailReminders: true });
-    assert.equal(res.status, 403);
+    const setPrefs = mock.method(Group, 'setEmailPrefs', async () => ({}));
+    const res = await postPrefs({ emailReminders: true });
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual(setPrefs.mock.calls.length, 0);
   });
 
   test('a missing group gets 404', async () => {
-    authAs(1);
     mock.method(Group, 'findByIdentifier', async () => null);
-    const res = await request(app)
-      .post('/api/groups/nope/email-prefs')
-      .set('Authorization', 'Bearer t')
-      .send({ emailReminders: true });
-    assert.equal(res.status, 404);
+    const res = await postPrefs({ emailReminders: true });
+    assert.strictEqual(res.status, 404);
   });
 
-  test('a body with no boolean fields gets 400', async () => {
-    authAs(1);
-    mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
-    const res = await request(app)
-      .post('/api/groups/sunday-squad/email-prefs')
-      .set('Authorization', 'Bearer t')
-      .send({ emailReminders: 'yes' });
-    assert.equal(res.status, 400);
+  test('a body with no boolean fields gets 400 before any lookup', async () => {
+    const find = mock.method(Group, 'findByIdentifier', async () => ({ id: 9, userRole: 'member' }));
+    const res = await postPrefs({ emailReminders: 'yes' });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(find.mock.calls.length, 0, 'validate before touching the DB');
   });
 });
 ```
@@ -2452,67 +2492,91 @@ EOF
 
 ```js
 // backend/tests/email-unsubscribe-route.test.js
-import { test, describe, beforeEach, mock } from 'node:test';
-import assert from 'node:assert/strict';
-import request from 'supertest';
-import app from '../src/app.js';
-import { Group } from '../src/models/Group.js';
-import { signUnsubscribe } from '../src/utils/emailTokens.js';
+import { test, describe, before, after, afterEach, mock } from 'node:test';
+import assert from 'node:assert';
+import express from 'express';
 
 process.env.EMAIL_TOKEN_SECRET = 'test-secret';
 
-describe('unsubscribe', () => {
-  beforeEach(() => mock.restoreAll());
+const { default: emailRouter } = await import('../src/routes/email.js');
+const { Group } = await import('../src/models/Group.js');
+const { User } = await import('../src/models/User.js');
+const { signUnsubscribe } = await import('../src/utils/emailTokens.js');
 
-  test('GET with a valid token turns that preference off and needs no auth', async () => {
-    let captured = null;
-    mock.method(Group, 'setEmailPrefs', async (groupId, userId, prefs) => {
-      captured = { groupId, userId, prefs };
-      return { emailReminders: false, emailSummaries: true };
+describe('unsubscribe routes', () => {
+  let server;
+  let baseURL;
+
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use('/api/email', emailRouter);
+    await new Promise((resolve) => {
+      server = app.listen(0, () => {
+        baseURL = `http://localhost:${server.address().port}`;
+        resolve();
+      });
     });
+  });
+
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+  });
+
+  test('GET with a valid token turns that preference off, with no auth header', async () => {
+    const setPrefs = mock.method(Group, 'setEmailPrefs', async () => ({
+      emailReminders: false, emailSummaries: true,
+    }));
 
     const token = signUnsubscribe({ userId: 3, groupId: 9, type: 'pick_reminder' });
-    const res = await request(app).get(`/api/email/unsubscribe?token=${token}`);
+    const res = await fetch(`${baseURL}/api/email/unsubscribe?token=${token}`);
 
-    assert.equal(res.status, 200);
-    assert.match(res.headers['content-type'], /html/);
-    assert.deepEqual(captured, { groupId: 9, userId: 3, prefs: { emailReminders: false } });
+    assert.strictEqual(res.status, 200);
+    assert.match(res.headers.get('content-type'), /html/);
+    const [groupId, userId, prefs] = setPrefs.mock.calls[0].arguments;
+    assert.strictEqual(groupId, 9);
+    assert.strictEqual(userId, 3);
+    assert.deepStrictEqual(prefs, { emailReminders: false });
   });
 
   test('a summary token turns off summaries, not reminders', async () => {
-    let captured = null;
-    mock.method(Group, 'setEmailPrefs', async (g, u, prefs) => { captured = prefs; return {}; });
+    const setPrefs = mock.method(Group, 'setEmailPrefs', async () => ({}));
     const token = signUnsubscribe({ userId: 3, groupId: 9, type: 'weekly_summary' });
-    await request(app).get(`/api/email/unsubscribe?token=${token}`);
-    assert.deepEqual(captured, { emailSummaries: false });
+    await fetch(`${baseURL}/api/email/unsubscribe?token=${token}`);
+    const [, , prefs] = setPrefs.mock.calls[0].arguments;
+    assert.deepStrictEqual(prefs, { emailSummaries: false });
   });
 
   test('a forged token is rejected and changes nothing', async () => {
-    let called = false;
-    mock.method(Group, 'setEmailPrefs', async () => { called = true; return {}; });
-    const res = await request(app).get('/api/email/unsubscribe?token=bogus.token');
-    assert.equal(res.status, 400);
-    assert.equal(called, false);
+    const setPrefs = mock.method(Group, 'setEmailPrefs', async () => ({}));
+    const res = await fetch(`${baseURL}/api/email/unsubscribe?token=bogus.token`);
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(setPrefs.mock.calls.length, 0);
   });
 
   test('POST is the one-click target and returns JSON', async () => {
     mock.method(Group, 'setEmailPrefs', async () => ({}));
     const token = signUnsubscribe({ userId: 3, groupId: 9, type: 'pick_reminder' });
-    const res = await request(app).post('/api/email/unsubscribe').send({ token });
-    assert.equal(res.status, 200);
-    assert.equal(res.body.ok, true);
+    const res = await fetch(`${baseURL}/api/email/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual((await res.json()).ok, true);
   });
 
-  test('a group-less reminder token is accepted and pauses the user globally', async () => {
-    let pausedFor = null;
-    const { User } = await import('../src/models/User.js');
-    mock.method(User, 'setEmailPaused', async (userId) => { pausedFor = userId; return { emailPausedAt: new Date() }; });
-
+  test('a group-less reminder token pauses the user globally', async () => {
+    const pause = mock.method(User, 'setEmailPaused', async () => ({ emailPausedAt: new Date() }));
     const token = signUnsubscribe({ userId: 3, groupId: null, type: 'pick_reminder' });
-    const res = await request(app).get(`/api/email/unsubscribe?token=${token}`);
+    const res = await fetch(`${baseURL}/api/email/unsubscribe?token=${token}`);
 
-    assert.equal(res.status, 200);
-    assert.equal(pausedFor, 3);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(pause.mock.calls[0].arguments[0], 3);
   });
 });
 ```
