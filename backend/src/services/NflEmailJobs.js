@@ -8,6 +8,17 @@ import { weeklySummary } from '../emails/weeklySummary.js';
 export const REMINDER_WINDOW_MS = 4 * 60 * 60 * 1000;
 export const SUMMARY_SEND_HOUR_ET = 8;
 
+// How stale a completed week may be and still be worth summarising, measured
+// from its LAST kickoff.
+//
+// Without this, the job reports whatever the most recent fully-final week is,
+// however long ago it ended — so the first run after a mid-season deploy mails
+// everyone a recap of a week they had long forgotten. 36 hours covers the real
+// case (a Monday night game ending ~23:30 ET, summarised at 08:00 ET Tuesday,
+// about 12 hours later) with room for a postponement, and excludes anything
+// older.
+export const SUMMARY_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+
 const KICKOFF_FMT = new Intl.DateTimeFormat('en-US', {
   timeZone: NFL_TIME_ZONE,
   hour: 'numeric',
@@ -170,7 +181,8 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
   if (etHour(now) !== SUMMARY_SEND_HOUR_ET) return { sent: 0, reason: 'not-send-hour' };
 
   const { rows: weekRows } = await pool.query(
-    `SELECT week, COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'FINAL') AS final_count
+    `SELECT week, COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'FINAL') AS final_count,
+            EXTRACT(EPOCH FROM (MAX(game_date) AT TIME ZONE 'UTC')) AS last_kickoff_epoch
      FROM games
      WHERE season = $1 AND season_type = $2 AND league = 'nfl'
      GROUP BY week ORDER BY week DESC`,
@@ -181,6 +193,19 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
   );
   if (!complete) return { sent: 0, reason: 'no-completed-week' };
   const week = Number(complete.week);
+
+  // Don't summarise a week that finished long ago. The epoch is computed in SQL
+  // (game_date is a naive timestamp holding UTC) so this does not depend on the
+  // process timezone the way a JS Date parse would.
+  // Checked before the arithmetic: Number(null) is 0, not NaN, so a null epoch
+  // would otherwise look like 1970 and report 'week-too-old' — failing closed,
+  // but for a reason that would send you hunting the wrong bug.
+  const epochRaw = complete.last_kickoff_epoch;
+  const lastKickoffMs = epochRaw == null ? NaN : Number(epochRaw) * 1000;
+  if (!Number.isFinite(lastKickoffMs)) return { sent: 0, reason: 'unknown-week-age' };
+  if (now.getTime() - lastKickoffMs > SUMMARY_MAX_AGE_MS) {
+    return { sent: 0, reason: 'week-too-old' };
+  }
 
   const { rows: subscribers } = await pool.query(
     `SELECT u.id AS user_id, u.name, u.email,
