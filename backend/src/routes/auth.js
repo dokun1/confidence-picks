@@ -142,6 +142,23 @@ router.get('/me', authenticateToken, (req, res) => {
   });
 });
 
+// Global email kill switch for the signed-in user.
+//
+// Overrides every per-group preference: the single honest off switch, and the
+// safety valve if a send ever misfires.
+router.post('/me/email-pause', authenticateToken, async (req, res) => {
+  try {
+    const { paused } = req.body;
+    if (typeof paused !== 'boolean') {
+      return res.status(400).json({ error: 'Body must include a boolean "paused" field' });
+    }
+    const result = await User.setEmailPaused(req.user.id, paused);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update current user profile
 router.put('/me', authenticateToken, async (req, res) => {
   try {

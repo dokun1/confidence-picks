@@ -370,6 +370,41 @@ router.post('/:identifier/messages/read', authenticateToken, async (req, res) =>
   }
 });
 
+// Set the CALLING member's own email preferences.
+//
+// Member-scoped on purpose: every member owns their own inbox, so there is no
+// admin branch, no :userId in the path, and no way to subscribe someone else.
+router.post('/:identifier/email-prefs', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const { emailReminders, emailSummaries } = req.body;
+
+    // Validate before any lookup: a malformed call should never touch the DB.
+    if (typeof emailReminders !== 'boolean' && typeof emailSummaries !== 'boolean') {
+      return res.status(400).json({
+        error: 'Body must include a boolean "emailReminders" and/or "emailSummaries"'
+      });
+    }
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    if (!group.userRole) {
+      return res.status(403).json({ error: 'Must be a group member to set email preferences' });
+    }
+
+    const prefs = await Group.setEmailPrefs(group.id, req.user.id, {
+      emailReminders,
+      emailSummaries
+    });
+    res.json(prefs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Post message to group
 router.post('/:identifier/messages', authenticateToken, async (req, res) => {
   try {

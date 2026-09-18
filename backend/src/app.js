@@ -12,6 +12,7 @@ import worldCupPicksRoutes from './routes/worldCupPicks.js';
 import invitesRoutes from './routes/invites.js';
 import adminRoutes from './routes/admin.js';
 import mcpTokensRoutes from './routes/mcpTokens.js';
+import emailRoutes from './routes/email.js';
 import { mcpTokenExchange } from './middleware/mcpAuth.js';
 import { initDatabase } from './database/init.js';
 
@@ -63,6 +64,9 @@ app.use('/api/groups', groupsRoutes);
 app.use('/api/groups', picksRoutes);
 app.use('/api/picks', worldCupPicksRoutes);
 app.use('/api/invites', invitesRoutes);
+// Public: the signed token in the URL is the credential, because someone
+// clicking unsubscribe from their mail client is not signed in.
+app.use('/api/email', emailRoutes);
 app.use('/api', adminRoutes);
 
 // Health check
