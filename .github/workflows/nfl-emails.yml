@@ -46,8 +46,12 @@ jobs:
           # node-pg parses it in the PROCESS zone, so a non-UTC runner would
           # shift every kickoff and fire reminders at the wrong hour.
           TZ: UTC
+          # config/database.js resolves PROD_DATABASE_URL || DATABASE_URL when
+          # NODE_ENV=production, so both are mapped from the one secret. Passing
+          # only DEV_DATABASE_URL (as cleanup-invites.yml does) is a no-op under
+          # production and leaves pg defaulting to localhost:5432.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DEV_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PROD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_TOKEN_SECRET: ${{ secrets.EMAIL_TOKEN_SECRET }}
           # Sends from the send.* subdomain, not the apex: bulk-mail reputation

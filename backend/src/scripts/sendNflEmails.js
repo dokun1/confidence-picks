@@ -64,6 +64,14 @@ async function main() {
     throw new Error('EMAIL_TOKEN_SECRET is not set — unsubscribe links cannot be signed');
   }
 
+  // Without a connection string, pg silently defaults to localhost:5432 and the
+  // run dies with a bare ECONNREFUSED that says nothing about the real problem.
+  if (!process.env.PROD_DATABASE_URL && !process.env.DATABASE_URL) {
+    throw new Error(
+      'No database URL set — expected PROD_DATABASE_URL or DATABASE_URL (repository secret DATABASE_URL)'
+    );
+  }
+
   // Self-heal BOTH schemas this process depends on. The jobs query
   // gm.email_reminders / gm.email_summaries straight through the pool, and
   // those columns are otherwise only healed by Group.findByIdentifier — which
