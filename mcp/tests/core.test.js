@@ -140,6 +140,7 @@ describe('getSlate', () => {
   test('flattens games into what a model needs to pick', async () => {
     const c = fakeClient({ get: async () => ({ games: [{
       id: 55, gameDate: '2026-09-13T16:00:00Z', status: 'SCHEDULED',
+      statusDetail: 'Sun, September 13th at 12:00 PM EDT', homeScore: 0, awayScore: 0,
       locksAt: '2026-09-13T16:00:00Z', editable: true,
       homeTeam: { id: '1', abbreviation: 'SEA' }, awayTeam: { id: '2', abbreviation: 'NE' }, odds: { spread: 'SEA -3' }
     }] }) });
@@ -147,6 +148,7 @@ describe('getSlate', () => {
     assert.deepStrictEqual(out[0], {
       gameId: 55, matchup: 'NE@SEA', kickoff: '2026-09-13T16:00:00Z',
       locksAt: '2026-09-13T16:00:00Z', editable: true, status: 'SCHEDULED',
+      statusDetail: 'Sun, September 13th at 12:00 PM EDT', score: null,
       homeTeam: { id: '1', abbreviation: 'SEA' }, awayTeam: { id: '2', abbreviation: 'NE' }, odds: { spread: 'SEA -3' }
     });
   });
@@ -162,6 +164,46 @@ describe('getSlate', () => {
     // Unknown, not "true": an older server that cannot answer must never be read
     // as permission to edit.
     assert.strictEqual(out[0].editable, null);
+  });
+
+  // Field names are the live API's: `homeScore` / `awayScore` / `statusDetail`,
+  // copied from a real in-progress payload rather than guessed (see above).
+  test('carries the live score and game clock once a game has started', async () => {
+    const c = fakeClient({ get: async () => ({ games: [
+      { id: 60, gameDate: '2026-09-20T17:00:00.000Z', status: 'IN_PROGRESS', statusDetail: '10:08 - 4th Quarter',
+        homeScore: 3, awayScore: 34, editable: false,
+        homeTeam: { id: '1', abbreviation: 'ATL' }, awayTeam: { id: '29', abbreviation: 'CAR' } },
+      { id: 61, gameDate: '2026-09-18T00:15:00.000Z', status: 'FINAL', statusDetail: 'Final',
+        homeScore: 41, awayScore: 31, editable: false,
+        homeTeam: { id: '2', abbreviation: 'BUF' }, awayTeam: { id: '8', abbreviation: 'DET' } }
+    ] }) });
+    const out = await getSlate(c, { season: 2026, week: 2 });
+    assert.deepStrictEqual(out[0].score, { home: 3, away: 34 });
+    assert.strictEqual(out[0].statusDetail, '10:08 - 4th Quarter');
+    assert.deepStrictEqual(out[1].score, { home: 41, away: 31 });
+    assert.strictEqual(out[1].statusDetail, 'Final');
+  });
+
+  test('a started game that is still scoreless reports 0-0, not null', async () => {
+    const c = fakeClient({ get: async () => ({ games: [{
+      id: 62, gameDate: '2026-09-20T17:00:00.000Z', status: 'IN_PROGRESS', statusDetail: '12:40 - 1st Quarter',
+      homeScore: 0, awayScore: 0,
+      homeTeam: { id: '3', abbreviation: 'CHI' }, awayTeam: { id: '16', abbreviation: 'MIN' }
+    }] }) });
+    const out = await getSlate(c, { season: 2026, week: 2 });
+    assert.deepStrictEqual(out[0].score, { home: 0, away: 0 });
+  });
+
+  // The API sends 0-0 for a game that has not kicked off. Passed through, a model
+  // reads that as a live scoreless tie; null says "no score exists yet".
+  test('an unstarted game has no score, even though the API sends 0-0', async () => {
+    const c = fakeClient({ get: async () => ({ games: [{
+      id: 63, gameDate: '2026-09-22T00:15:00.000Z', status: 'SCHEDULED', homeScore: 0, awayScore: 0,
+      homeTeam: { id: '14', abbreviation: 'LAR' }, awayTeam: { id: '19', abbreviation: 'NYG' }
+    }] }) });
+    const out = await getSlate(c, { season: 2026, week: 2 });
+    assert.strictEqual(out[0].score, null);
+    assert.strictEqual(out[0].statusDetail, null);
   });
 });
 

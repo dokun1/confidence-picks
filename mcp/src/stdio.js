@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -34,7 +35,7 @@ export const TOOLS = [
   },
   {
     name: 'get_slate',
-    description: 'Get the games for a week, with kickoff times, status, team ids and betting odds. Use the returned gameId and team ids when submitting picks.',
+    description: 'Get the games for a week, with kickoff times, status, live score and game clock (score is null before kickoff; in-progress scores are at most about a minute old), team ids and betting odds. Use the returned gameId and team ids when submitting picks.',
     inputSchema: { type: 'object', properties: { season, seasonType, week }, required: ['season', 'week'] }
   },
   {
@@ -94,8 +95,11 @@ export async function dispatch(name, args, c) {
   }
 }
 
+// Announce the version that was actually published, not a literal that drifts.
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
 const server = new Server(
-  { name: 'confidence-picks', version: '0.1.0' },
+  { name: 'confidence-picks', version },
   { capabilities: { tools: {} } }
 );
 

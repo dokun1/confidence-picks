@@ -89,6 +89,10 @@ export async function listGroups(client) {
   }));
 }
 
+// Mirrors the backend's PRE_STATUSES (utils/pickLock.js): a game in one of these
+// has not kicked off, so the 0-0 the API sends for it is a placeholder, not a score.
+const NOT_STARTED = new Set(['SCHEDULED', 'NOT_STARTED', 'PRE', 'PREGAME']);
+
 export async function getSlate(client, { season, seasonType = 2, week }) {
   const data = await client.get(`/api/games/${season}/${seasonType}/${week}`);
   const games = data.games || data || [];
@@ -105,6 +109,12 @@ export async function getSlate(client, { season, seasonType = 2, week }) {
     locksAt: g.locksAt ?? g.gameDate ?? null,
     editable: g.editable ?? null,
     status: g.status,
+    // ESPN's human-readable state: the game clock while live ("10:08 - 4th
+    // Quarter"), "Final" after, the kickoff time before.
+    statusDetail: g.statusDetail ?? null,
+    // null until kickoff. Passing the API's pre-game 0-0 through would read as a
+    // live scoreless tie.
+    score: NOT_STARTED.has(g.status) ? null : { home: g.homeScore ?? 0, away: g.awayScore ?? 0 },
     homeTeam: { id: g.homeTeam?.id, abbreviation: g.homeTeam?.abbreviation },
     awayTeam: { id: g.awayTeam?.id, abbreviation: g.awayTeam?.abbreviation },
     odds: g.odds ?? null

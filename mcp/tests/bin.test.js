@@ -1,6 +1,6 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, symlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, symlinkSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,9 +46,19 @@ describe('published bin entrypoint', () => {
     // before it ever spoke the protocol.
     await client.connect(transport);
 
-    const { tools } = await client.listTools();
-    assert.strictEqual(tools.length, 5, `expected 5 tools, got ${tools.map(t => t.name)}`);
-    assert.ok(tools.some((t) => t.name === 'submit_week'));
-    await client.close();
+    // Close in `finally`: a failed assertion that skips close() leaves the spawned
+    // server alive, and the test runner then hangs waiting on it.
+    try {
+      const { tools } = await client.listTools();
+      assert.strictEqual(tools.length, 5, `expected 5 tools, got ${tools.map(t => t.name)}`);
+      assert.ok(tools.some((t) => t.name === 'submit_week'));
+
+      // The server used to announce a hardcoded '0.1.0' long after the package had
+      // moved on, so a client could not tell which build it was talking to.
+      const pkg = JSON.parse(readFileSync(path.join(here, '..', 'package.json'), 'utf8'));
+      assert.strictEqual(client.getServerVersion().version, pkg.version);
+    } finally {
+      await client.close();
+    }
   });
 });
