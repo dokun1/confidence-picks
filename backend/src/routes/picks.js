@@ -5,7 +5,7 @@ import { GameService } from '../services/GameService.js';
 import { UserPick } from '../models/UserPick.js';
 import pool from '../config/database.js';
 import { getCurrentNFLSeason } from '../utils/nflSeasonUtils.js';
-import { isPickLocked, PRE_STATUSES } from '../utils/pickLock.js';
+import { isPickLocked, pickWindow, PRE_STATUSES } from '../utils/pickLock.js';
 import { buildScoreboard } from '../services/NflScoreboardService.js';
 
 const router = express.Router();
@@ -18,6 +18,7 @@ async function ensureMembership(groupIdentifier, userId) {
 }
 
 function normalizeGame(g) { return typeof g.toJSON === 'function' ? g.toJSON() : g; }
+
 
 // Determine closest upcoming week (first with any non-final game).
 //
@@ -253,6 +254,7 @@ router.get('/:identifier/picks', authenticateToken, async (req, res) => {
           won: pick.won,
           points: pick.points
         } : null,
+        ...pickWindow(j, Date.now()),
         meta: deriveGamePickMeta(j, pick)
       };
     });
@@ -406,7 +408,10 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
 
     // Validate picks
     const totalGames = games.length;
-    const seenConf = new Set();
+    // confidence -> gameId. A Map (not a Set) so a duplicate can name BOTH games
+    // it conflicts between: a client with seconds left before kickoff cannot
+    // self-correct from an error that only says "duplicate".
+    const seenConf = new Map();
     const lockedUnchanged = new Set();
   for (const p of picks) {
       const game = gameById.get(p.gameId);
@@ -419,9 +424,13 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
         lockedUnchanged.add(p.gameId);
       }
       if (p.confidence != null) {
-        if (p.confidence < 1 || p.confidence > totalGames) return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId });
-        if (seenConf.has(p.confidence)) return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence });
-        seenConf.add(p.confidence);
+        if (p.confidence < 1 || p.confidence > totalGames) {
+          return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId, confidence: p.confidence, min: 1, max: totalGames });
+        }
+        if (seenConf.has(p.confidence)) {
+          return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence, gameIds: [seenConf.get(p.confidence), p.gameId] });
+        }
+        seenConf.set(p.confidence, p.gameId);
         if (!p.pickedTeamId) return res.status(400).json({ error: 'Winner required when confidence set', gameId: p.gameId });
       }
       if (p.pickedTeamId != null) {
@@ -470,7 +479,12 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
       const params = [req.user.id, group.id, season, fetchSeasonType, fetchWeek];
       const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
       params.push(...icIds);
-      await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
+      // picked_team_id must clear alongside the confidence: chk_pick_consistency
+      // requires the pair to be set or unset together, so the previous
+      // confidence-only UPDATE violated the CHECK and failed the request outright
+      // whenever this path fired. The winner cannot be retained here — the schema
+      // does not permit a team with no confidence.
+      await pool.query(`UPDATE user_picks SET confidence_level=NULL, picked_team_id=NULL, updated_at=NOW()
         WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5 AND game_id IN (${inClause})` , params);
     }
   console.log('[picks][POST] performed clears', { explicit: cleared, implicit:[...implicitConfidenceClears] });
@@ -500,6 +514,7 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
           won: pick.won,
           points: pick.points
         } : null,
+        ...pickWindow(j, now),
         meta: deriveGamePickMeta(j, pick)
       };
     });
@@ -508,7 +523,27 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
     const availableConfidences = Array.from({ length: games.length }, (_, i) => i + 1).filter(n => !usedConfidences.includes(n));
     const weekPoints = updatedPicks.reduce((sum, p) => sum + (p.points || 0), 0);
 
-    const responseBody = { games: payloadGames, availableConfidences, totalGames: games.length, pickedCount: usedConfidences.length, weekPoints };
+    // `skippedLocked` names the games whose pick was accepted as an unchanged
+    // no-op because they had already kicked off. Without it a client that
+    // re-sends the whole week cannot tell "saved" from "silently not applied",
+    // and has to diff the response to find out.
+    // Echoed so a client that retried after a timeout can correlate the response
+    // it finally got with the submission it sent. The write itself is safe to
+    // replay without this: it is a deterministic whole-week upsert, and
+    // bulkUpsert serialises concurrent writers for this user/group/week behind
+    // an advisory lock, so a duplicate retry converges on the same state rather
+    // than interleaving with its own twin.
+    const idempotencyKey = req.get('Idempotency-Key') || null;
+
+    const responseBody = {
+      games: payloadGames,
+      availableConfidences,
+      totalGames: games.length,
+      pickedCount: usedConfidences.length,
+      weekPoints,
+      skippedLocked: [...lockedUnchanged],
+      ...(idempotencyKey ? { idempotencyKey } : {})
+    };
     console.log('[picks][POST] response', {
       availableConfidences,
       usedConfidences,
@@ -519,7 +554,16 @@ router.post('/:identifier/picks', authenticateToken, async (req, res) => {
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
-    if (e.code === '23505') return res.status(400).json({ error: 'Duplicate confidence (constraint)' });
+    // Unreachable for a plain reorder since bulkUpsert vacates confidences before
+    // claiming them, but kept as a backstop. Surface the detail Postgres gives us
+    // so a caller is not left guessing which value collided.
+    if (e.code === '23505') {
+      return res.status(400).json({
+        error: 'Duplicate confidence (constraint)',
+        constraint: e.constraint ?? null,
+        detail: e.detail ?? null
+      });
+    }
     console.error('POST picks error', e);
     res.status(500).json({ error: 'Failed to save picks' });
   }
@@ -803,7 +847,10 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
     const now = Date.now();
     const lockedUnchanged = new Set();
     const totalGames = games.length;
-    const seenConf = new Set();
+    // confidence -> gameId. A Map (not a Set) so a duplicate can name BOTH games
+    // it conflicts between: a client with seconds left before kickoff cannot
+    // self-correct from an error that only says "duplicate".
+    const seenConf = new Map();
     for (const p of picks) {
       const game = gameById.get(p.gameId);
       if (!game) return res.status(400).json({ error: 'Invalid gameId', gameId: p.gameId });
@@ -815,9 +862,13 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
       }
       
       if (p.confidence != null) {
-        if (p.confidence < 1 || p.confidence > totalGames) return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId });
-        if (seenConf.has(p.confidence)) return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence });
-        seenConf.add(p.confidence);
+        if (p.confidence < 1 || p.confidence > totalGames) {
+          return res.status(400).json({ error: 'Confidence out of range', gameId: p.gameId, confidence: p.confidence, min: 1, max: totalGames });
+        }
+        if (seenConf.has(p.confidence)) {
+          return res.status(400).json({ error: 'Duplicate confidence', confidence: p.confidence, gameIds: [seenConf.get(p.confidence), p.gameId] });
+        }
+        seenConf.set(p.confidence, p.gameId);
         if (!p.pickedTeamId) return res.status(400).json({ error: 'Winner required when confidence set', gameId: p.gameId });
       }
       if (p.pickedTeamId != null) {
@@ -865,7 +916,12 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
       const params = [targetUserId, group.id, season, fetchSeasonType, fetchWeek];
       const inClause = icIds.map((_, i) => `$${i+6}`).join(',');
       params.push(...icIds);
-      await pool.query(`UPDATE user_picks SET confidence_level=NULL, updated_at=NOW()
+      // picked_team_id must clear alongside the confidence: chk_pick_consistency
+      // requires the pair to be set or unset together, so the previous
+      // confidence-only UPDATE violated the CHECK and failed the request outright
+      // whenever this path fired. The winner cannot be retained here — the schema
+      // does not permit a team with no confidence.
+      await pool.query(`UPDATE user_picks SET confidence_level=NULL, picked_team_id=NULL, updated_at=NOW()
         WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5 AND game_id IN (${inClause})` , params);
     }
     console.log('[picks][POST user] performed clears', { explicit: cleared, implicit:[...implicitConfidenceClears] });
@@ -918,7 +974,16 @@ router.post('/:identifier/picks/user/:userId', authenticateToken, async (req, re
   } catch (e) {
     if (e.message === 'GROUP_NOT_FOUND') return res.status(404).json({ error: 'Group not found' });
     if (e.message === 'NOT_MEMBER') return res.status(403).json({ error: 'Not a group member' });
-    if (e.code === '23505') return res.status(400).json({ error: 'Duplicate confidence (constraint)' });
+    // Unreachable for a plain reorder since bulkUpsert vacates confidences before
+    // claiming them, but kept as a backstop. Surface the detail Postgres gives us
+    // so a caller is not left guessing which value collided.
+    if (e.code === '23505') {
+      return res.status(400).json({
+        error: 'Duplicate confidence (constraint)',
+        constraint: e.constraint ?? null,
+        detail: e.detail ?? null
+      });
+    }
     console.error('POST user picks error', e);
     res.status(500).json({ error: 'Failed to save picks' });
   }

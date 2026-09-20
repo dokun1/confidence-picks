@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { isPickLocked } from '../src/utils/pickLock.js';
+import { isPickLocked, pickWindow } from '../src/utils/pickLock.js';
 
 // Picks stay open until the scheduled kickoff instant, and not a millisecond
 // longer. ESPN's status lags the real kickoff by minutes, so the scheduled time
@@ -52,5 +52,51 @@ describe('isPickLocked', () => {
     const later = KICKOFF.getTime() + 60 * 60 * 1000;
     assert.strictEqual(isPickLocked(game({ gameDate: null }), later), false);
     assert.strictEqual(isPickLocked(game({ gameDate: 'not a date' }), later), false);
+  });
+});
+
+// pickWindow is what clients are supposed to trust instead of ESPN `status` or
+// their own clock. It must agree with isPickLocked exactly -- two answers to
+// "can I still edit this?" that can disagree is the bug that caused the Week 1
+// lockout, just relocated.
+describe('pickWindow', () => {
+  const kickoff = '2026-09-20T17:00:00.000Z';
+  const T = Date.parse(kickoff);
+
+  test('publishes the scheduled kickoff as the deadline', () => {
+    const w = pickWindow({ status: 'SCHEDULED', gameDate: kickoff }, T - 60_000);
+    assert.deepStrictEqual(w, { locksAt: kickoff, editable: true });
+  });
+
+  test('closes exactly at kickoff, to the millisecond', () => {
+    const g = { status: 'SCHEDULED', gameDate: kickoff };
+    assert.strictEqual(pickWindow(g, T - 1).editable, true);
+    assert.strictEqual(pickWindow(g, T).editable, false);
+  });
+
+  test('never disagrees with isPickLocked', () => {
+    const cases = [
+      { status: 'SCHEDULED', gameDate: kickoff },
+      { status: 'FINAL', gameDate: kickoff },
+      { status: 'IN_PROGRESS', gameDate: kickoff },
+      { status: 'SCHEDULED', gameDate: kickoff, postponed: true },
+      { status: 'SCHEDULED', gameDate: null }
+    ];
+    for (const g of cases) {
+      for (const now of [T - 1000, T, T + 1000]) {
+        assert.strictEqual(pickWindow(g, now).editable, !isPickLocked(g, now), JSON.stringify({ g, now }));
+      }
+    }
+  });
+
+  test('a postponed game stays editable and reports its original date', () => {
+    const w = pickWindow({ status: 'SCHEDULED', gameDate: kickoff, postponed: true }, T + 86_400_000);
+    assert.strictEqual(w.editable, true);
+    assert.strictEqual(w.locksAt, kickoff);
+  });
+
+  test('a game with no usable kickoff reports no deadline rather than a bogus one', () => {
+    assert.strictEqual(pickWindow({ status: 'SCHEDULED', gameDate: null }, T).locksAt, null);
+    assert.strictEqual(pickWindow({ status: 'SCHEDULED', gameDate: 'not-a-date' }, T).locksAt, null);
   });
 });
