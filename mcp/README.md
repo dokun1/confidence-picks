@@ -27,7 +27,7 @@ codex mcp add confidence-picks \
 | Tool | Purpose |
 |---|---|
 | `list_groups` | Your NFL pools (World Cup pools excluded) |
-| `get_slate` | Games for a week, with kickoff, `locksAt`, `editable`, status, team ids and odds |
+| `get_slate` | Games for a week, with kickoff, `locksAt`, `editable`, status, live `score` and `statusDetail` (game clock), team ids and odds |
 | `get_my_picks` | Your existing picks for a group and week |
 | `get_standings` | Season scoreboard for a group |
 | `submit_week` | Submit picks to one or more groups at once |
