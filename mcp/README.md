@@ -27,7 +27,7 @@ codex mcp add confidence-picks \
 | Tool | Purpose |
 |---|---|
 | `list_groups` | Your NFL pools (World Cup pools excluded) |
-| `get_slate` | Games for a week, with kickoff, status, team ids and odds |
+| `get_slate` | Games for a week, with kickoff, `locksAt`, `editable`, status, team ids and odds |
 | `get_my_picks` | Your existing picks for a group and week |
 | `get_standings` | Season scoreboard for a group |
 | `submit_week` | Submit picks to one or more groups at once |
@@ -56,3 +56,25 @@ npm test
 ```
 
 Point at a local backend with `CONFIDENCE_PICKS_API=http://localhost:3001`.
+
+## Editing up to the deadline
+
+`get_slate` reports a pick window per game:
+
+- `kickoff` / `locksAt` — the scheduled kickoff instant, which is when writes
+  close. Read it from here, not from `status`: ESPN's status trails the real
+  kickoff by minutes, so a game can still say `SCHEDULED` after it stops
+  accepting picks.
+- `editable` — resolved by the server, which owns the clock. `null` means an
+  older server did not answer; treat that as unknown, never as permission.
+
+`submit_week` uses that window to withhold picks on games that have already
+started, so one kicked-off game cannot sink the still-open picks in the same
+batch. Anything withheld comes back in `skippedLocked` (client-side) or
+`serverSkippedLocked` (accepted by the server as an unchanged no-op) rather than
+failing silently.
+
+Reordering a ladder — swapping two confidences, rotating three — is a normal
+edit and is accepted. Every submission carries an `Idempotency-Key`, and the
+server serialises concurrent writes per user/group/week, so retrying after a
+timeout converges on the same week instead of racing itself.

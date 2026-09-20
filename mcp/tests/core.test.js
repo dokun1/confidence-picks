@@ -133,16 +133,35 @@ describe('listGroups', () => {
 });
 
 describe('getSlate', () => {
+  // The API field is `gameDate`, which is what this fixture must use. The
+  // original fixture said `date` -- the same wrong name getSlate was reading --
+  // so the two agreed with each other and disagreed with production, and every
+  // real slate shipped with no kickoff at all while this test stayed green.
   test('flattens games into what a model needs to pick', async () => {
     const c = fakeClient({ get: async () => ({ games: [{
-      id: 55, date: '2026-09-13T16:00:00Z', status: 'SCHEDULED',
+      id: 55, gameDate: '2026-09-13T16:00:00Z', status: 'SCHEDULED',
+      locksAt: '2026-09-13T16:00:00Z', editable: true,
       homeTeam: { id: '1', abbreviation: 'SEA' }, awayTeam: { id: '2', abbreviation: 'NE' }, odds: { spread: 'SEA -3' }
     }] }) });
     const out = await getSlate(c, { season: 2026, week: 1 });
     assert.deepStrictEqual(out[0], {
-      gameId: 55, matchup: 'NE@SEA', kickoff: '2026-09-13T16:00:00Z', status: 'SCHEDULED',
+      gameId: 55, matchup: 'NE@SEA', kickoff: '2026-09-13T16:00:00Z',
+      locksAt: '2026-09-13T16:00:00Z', editable: true, status: 'SCHEDULED',
       homeTeam: { id: '1', abbreviation: 'SEA' }, awayTeam: { id: '2', abbreviation: 'NE' }, odds: { spread: 'SEA -3' }
     });
+  });
+
+  test('falls back to the kickoff when the server sends no pick window', async () => {
+    const c = fakeClient({ get: async () => ({ games: [{
+      id: 56, gameDate: '2026-09-13T20:00:00Z', status: 'SCHEDULED',
+      homeTeam: { id: '3', abbreviation: 'KC' }, awayTeam: { id: '4', abbreviation: 'DEN' }
+    }] }) });
+    const out = await getSlate(c, { season: 2026, week: 1 });
+    assert.strictEqual(out[0].kickoff, '2026-09-13T20:00:00Z');
+    assert.strictEqual(out[0].locksAt, '2026-09-13T20:00:00Z');
+    // Unknown, not "true": an older server that cannot answer must never be read
+    // as permission to edit.
+    assert.strictEqual(out[0].editable, null);
   });
 });
 
@@ -190,5 +209,75 @@ describe('submitWeek', () => {
     assert.strictEqual(res.failed, 1);
     assert.match(res.results[0].error, /no winner/);
     assert.strictEqual(c.calls.filter((x) => x[0] === 'POST').length, 0);
+  });
+});
+
+// The last-minute-edit contract. Every case here is a real failure a user hit
+// during 2026 Week 2, when a two-game confidence swap could not be expressed at
+// all and a single kicked-off game sank an otherwise-valid batch.
+describe('submitWeek: locked games and retries', () => {
+  function slateAwareClient({ slate, picks = [], post = async () => ({}) }) {
+    const calls = [];
+    return {
+      calls,
+      get: async (p) => {
+        calls.push(['GET', p]);
+        if (p.startsWith('/api/games/')) return { games: slate };
+        return { picks };
+      },
+      post: async (p, b, h) => { calls.push(['POST', p, b, h]); return post(p, b, h); }
+    };
+  }
+
+  const openGame = (id) => ({ id, gameDate: '2026-09-20T20:25:00Z', status: 'SCHEDULED', editable: true, locksAt: '2026-09-20T20:25:00Z', homeTeam: { id: 'h' }, awayTeam: { id: 'a' } });
+  const lockedGame = (id) => ({ id, gameDate: '2026-09-20T17:00:00Z', status: 'SCHEDULED', editable: false, locksAt: '2026-09-20T17:00:00Z', homeTeam: { id: 'h' }, awayTeam: { id: 'a' } });
+
+  test('a kicked-off game is withheld instead of sinking the whole batch', async () => {
+    const c = slateAwareClient({ slate: [openGame(1), lockedGame(2)] });
+    const res = await submitWeek(c, {
+      groups: ['g1'], season: 2026, week: 2,
+      picks: [
+        { gameId: 1, pickedTeamId: 'h', confidence: 2 },
+        { gameId: 2, pickedTeamId: 'h', confidence: 1 }
+      ]
+    });
+    assert.strictEqual(res.saved, 1);
+    assert.deepStrictEqual(res.skippedLocked, [2]);
+    const posted = c.calls.find((x) => x[0] === 'POST')[2];
+    assert.deepStrictEqual(posted.picks.map((p) => p.gameId), [1]);
+  });
+
+  test('the server\'s own skipped-locked list is surfaced, not swallowed', async () => {
+    const c = slateAwareClient({ slate: [openGame(1)], post: async () => ({ skippedLocked: [9] }) });
+    const res = await submitWeek(c, {
+      groups: ['g1'], season: 2026, week: 2,
+      picks: [{ gameId: 1, pickedTeamId: 'h', confidence: 1 }]
+    });
+    assert.deepStrictEqual(res.results[0].serverSkippedLocked, [9]);
+  });
+
+  test('one idempotency key covers the whole fan-out so a retry is not a race', async () => {
+    const c = slateAwareClient({ slate: [openGame(1)] });
+    await submitWeek(c, {
+      groups: ['g1', 'g2', 'g3'], season: 2026, week: 2,
+      picks: [{ gameId: 1, pickedTeamId: 'h', confidence: 1 }]
+    });
+    const keys = c.calls.filter((x) => x[0] === 'POST').map((x) => x[3]['Idempotency-Key']);
+    assert.strictEqual(keys.length, 3);
+    assert.strictEqual(new Set(keys).size, 1, 'every group must share one key');
+  });
+
+  test('an unreadable slate still saves rather than refusing to write', async () => {
+    const c = {
+      calls: [],
+      get: async (p) => { if (p.startsWith('/api/games/')) throw new Error('slate down'); return { picks: [] }; },
+      post: async () => ({})
+    };
+    const res = await submitWeek(c, {
+      groups: ['g1'], season: 2026, week: 2,
+      picks: [{ gameId: 1, pickedTeamId: 'h', confidence: 1 }]
+    });
+    assert.strictEqual(res.saved, 1);
+    assert.strictEqual(res.skippedLocked, undefined);
   });
 });

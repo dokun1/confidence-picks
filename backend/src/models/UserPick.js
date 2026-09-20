@@ -143,17 +143,62 @@ export class UserPick {
     return rows.map(r => r.season);
   }
 
+  // Persist a batch of NFL picks for one user/group/week.
+  //
+  // Confidence uniqueness is enforced by the PARTIAL unique index
+  // `ux_user_picks_conf_per_week` (…, confidence_level) WHERE confidence_level
+  // IS NOT NULL. A partial index cannot be made DEFERRABLE in Postgres, so the
+  // "just defer the constraint" fix is unavailable and the ordering problem has
+  // to be solved in the write itself.
+  //
+  // The problem: a single multi-row INSERT ... ON CONFLICT applies rows in order
+  // against the live index. Reordering a ladder is a PERMUTATION of confidences,
+  // so any swap has a transient duplicate mid-statement — game A takes 3 while
+  // game B still holds 3 — and the index rejects the whole statement with 23505.
+  // With every value 1..N already spoken for there is no free slot to route
+  // through, which made reordering an existing ladder impossible through the API.
+  //
+  // The fix is a two-phase write inside one transaction:
+  //   1. NULL the confidence of every game named in this batch, vacating the
+  //      values the batch is about to reassign. The partial index ignores NULLs,
+  //      so no duplicate can exist at this point.
+  //   2. Upsert the batch. Every confidence it claims is now free.
+  // Both phases commit together, so a concurrent reader never observes the
+  // vacated middle state and a failure leaves the week exactly as it was.
   static async bulkUpsert({ userId, groupId, season, seasonType, week, picks }) {
     if (!picks || picks.length === 0) return [];
-  console.log('[user_picks] bulkUpsert incoming', { userId, groupId, season, seasonType, week, picks });
-    const values = [];
-    const placeholders = picks.map((p, i) => {
-      // 8 columns per row; base offset must reflect that to keep parameter numbers contiguous
-      const base = i * 8;
-      values.push(userId, groupId, p.gameId, p.pickedTeamId || null, p.confidence ?? null, week, season, seasonType);
-      return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8})`;
-    }).join(',');
-  const sql = `INSERT INTO user_picks (user_id, group_id, game_id, picked_team_id, confidence_level, week, season, season_type)
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Serialize concurrent submits for this user/group/week. Two racing
+      // retries (a deadline user mashing save) would otherwise interleave their
+      // two-phase writes and could resurrect a duplicate between phases.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `picks:${userId}:${groupId}:${season}:${seasonType}:${week}`
+      ]);
+
+      // Phase 1 — vacate. Both columns must be nulled together: chk_pick_consistency
+      // requires confidence_level and picked_team_id to be set or unset as a pair,
+      // so clearing the confidence alone violates the CHECK. Nothing is lost —
+      // phase 2 rewrites every one of these rows with its full desired value.
+      const gameIds = picks.map(p => p.gameId);
+      await client.query(
+        `UPDATE user_picks SET confidence_level = NULL, picked_team_id = NULL, updated_at = NOW()
+           WHERE user_id=$1 AND group_id=$2 AND season=$3 AND season_type=$4 AND week=$5
+             AND game_id = ANY($6::int[]) AND confidence_level IS NOT NULL`,
+        [userId, groupId, season, seasonType, week, gameIds]
+      );
+
+      // Phase 2 — claim.
+      const values = [];
+      const placeholders = picks.map((p, i) => {
+        // 8 columns per row; base offset must reflect that to keep parameter numbers contiguous
+        const base = i * 8;
+        values.push(userId, groupId, p.gameId, p.pickedTeamId || null, p.confidence ?? null, week, season, seasonType);
+        return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8})`;
+      }).join(',');
+      const sql = `INSERT INTO user_picks (user_id, group_id, game_id, picked_team_id, confidence_level, week, season, season_type)
          VALUES ${placeholders}
          ON CONFLICT (user_id, group_id, game_id) DO UPDATE SET
                    picked_team_id = EXCLUDED.picked_team_id,
@@ -163,9 +208,16 @@ export class UserPick {
                    season_type = EXCLUDED.season_type,
                    updated_at = NOW()
                  RETURNING *`;
-    const { rows } = await pool.query(sql, values);
-  console.log('[user_picks] bulkUpsert result', rows.map(r => ({ id:r.id, game:r.game_id, conf:r.confidence_level, team:r.picked_team_id })));
-    return rows.map(r => new UserPick(r));
+      const { rows } = await client.query(sql, values);
+
+      await client.query('COMMIT');
+      return rows.map(r => new UserPick(r));
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 
   /**

@@ -4,6 +4,7 @@ import { GameService } from '../services/GameService.js';
 import { ESPNService } from '../services/ESPNService.js';
 import { SoccerSummaryService } from '../services/SoccerSummaryService.js';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
+import { pickWindow } from '../utils/pickLock.js';
 
 const router = express.Router();
 
@@ -111,8 +112,17 @@ router.get('/games/:year/:seasonType/:week', async (req, res) => {
       forceRefresh
     );
     
+    // Carry the pick window on every game. This is the slate endpoint the MCP
+    // and any third-party client reads, and without a server-computed
+    // `editable`/`locksAt` a caller has only ESPN `status` to go on — which lags
+    // the real kickoff, so it reports a game as open for minutes after writes
+    // have actually closed.
+    const now = Date.now();
     res.json({
-      games: games.map(g => (typeof g.toJSON === 'function' ? g.toJSON() : g)),
+      games: games.map(g => {
+        const j = typeof g.toJSON === 'function' ? g.toJSON() : g;
+        return { ...j, ...pickWindow(j, now) };
+      }),
       count: games.length,
       cached: !forceRefresh
     });

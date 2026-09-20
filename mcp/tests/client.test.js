@@ -97,3 +97,45 @@ describe('tool surface', () => {
     ]);
   });
 });
+
+// A deadline user cannot act on "Duplicate confidence". These assert the error
+// text names the value and the two games, which is the difference between a
+// self-correctable mistake and a lost week.
+describe('ConfidencePicksClient: actionable write errors', () => {
+  const fail = (status, body) => async () => ({ ok: false, status, json: async () => body });
+
+  test('a duplicate-confidence 400 names the value and both games', async () => {
+    const c = new ConfidencePicksClient({
+      token: 't',
+      fetchImpl: fail(400, { error: 'Duplicate confidence', confidence: 3, gameIds: [126875, 126882] })
+    });
+    await assert.rejects(() => c.post('/x', {}), (e) => {
+      assert.match(e.message, /Duplicate confidence 3/);
+      assert.match(e.message, /126875 and 126882/);
+      return true;
+    });
+  });
+
+  test('an out-of-range 400 names the bound it broke', async () => {
+    const c = new ConfidencePicksClient({
+      token: 't',
+      fetchImpl: fail(400, { error: 'Confidence out of range', gameId: 126882, confidence: 17, min: 1, max: 16 })
+    });
+    await assert.rejects(() => c.post('/x', {}), (e) => {
+      assert.match(e.message, /Confidence 17 is out of range for game 126882/);
+      assert.match(e.message, /allowed 1\.\.16/);
+      return true;
+    });
+  });
+
+  test('an idempotency key rides along on the request headers', async () => {
+    let seen;
+    const c = new ConfidencePicksClient({
+      token: 't',
+      fetchImpl: async (_u, o) => { seen = o; return { ok: true, status: 200, json: async () => ({}) }; }
+    });
+    await c.post('/x', { a: 1 }, { 'Idempotency-Key': 'k-123' });
+    assert.strictEqual(seen.headers['Idempotency-Key'], 'k-123');
+    assert.strictEqual(seen.headers.Authorization, 'Bearer t');
+  });
+});

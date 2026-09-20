@@ -5,13 +5,20 @@
 export const WORLD_CUP_POOL = 'world_cup_2026';
 
 // POST /picks is a WHOLE-WEEK upsert, not a per-pick setter. The server
-// enforces that confidence is unique across the week, and assigning a value
-// that another game already holds implicitly strips it from that game. A naive
-// "set one pick" call therefore corrupts the rest of the week.
+// enforces that confidence is unique across the week, so a naive "set one pick"
+// call would post a payload that collides with the rest of the saved week.
 //
 // mergeWeek is the guard: it folds the caller's changes into the picks that
-// already exist and resolves collisions the same way the server would, so the
-// array we post is always internally consistent.
+// already exist and hands the value back to whichever game the caller assigned
+// it to, so the array we post is always internally consistent.
+//
+// Note on the server contract: assigning a confidence another game holds does
+// NOT implicitly strip it from that game (an earlier version of this comment
+// claimed it did). The server clears the previous holder only when that game is
+// absent from the payload; when BOTH games are in the payload it relies on the
+// write being ordered safely. That is why this function must still resolve
+// collisions locally, and why the ordering fix lives in the server's two-phase
+// bulkUpsert rather than here.
 export function mergeWeek(existing, incoming) {
   const byGame = new Map();
   for (const p of existing || []) {
@@ -88,7 +95,15 @@ export async function getSlate(client, { season, seasonType = 2, week }) {
   return games.map((g) => ({
     gameId: g.id,
     matchup: `${g.awayTeam?.abbreviation}@${g.homeTeam?.abbreviation}`,
-    kickoff: g.date,
+    // The API field is `gameDate`. This read `g.date` -- always undefined, which
+    // JSON.stringify drops silently, so every slate went out with no kickoff at
+    // all and callers had no way to see a deadline coming.
+    kickoff: g.gameDate ?? null,
+    // Editability is resolved by the server (it owns the clock). `status` alone
+    // is not a substitute: it trails the real kickoff by minutes, so a client
+    // keying off it will happily offer to edit a game whose writes have closed.
+    locksAt: g.locksAt ?? g.gameDate ?? null,
+    editable: g.editable ?? null,
     status: g.status,
     homeTeam: { id: g.homeTeam?.id, abbreviation: g.homeTeam?.abbreviation },
     awayTeam: { id: g.awayTeam?.id, abbreviation: g.awayTeam?.abbreviation },
@@ -110,24 +125,68 @@ export async function getStandings(client, { group, season, seasonType = 2 }) {
 // separate request, so a partial failure is a real outcome and is reported as
 // one -- never silently swallowed.
 export async function submitWeek(client, { groups, season, seasonType = 2, week, picks }) {
+  // One slate read for the whole fan-out (the slate does not vary by group). It
+  // tells us which games the server considers closed, so a pick on a game that
+  // has kicked off is dropped here and reported, instead of being posted and
+  // taking every still-open pick in the batch down with it on a 409.
+  //
+  // A slate that cannot be read is not fatal: fall through with no filter and
+  // let the server be the judge. Losing the optimisation beats refusing to save.
+  let lockedIds = new Set();
+  let slateKnown = false;
+  try {
+    const slate = await getSlate(client, { season, seasonType, week });
+    lockedIds = new Set(slate.filter((g) => g.editable === false).map((g) => g.gameId));
+    slateKnown = true;
+  } catch {
+    // keep going unfiltered
+  }
+
+  const submittable = slateKnown ? picks.filter((p) => !lockedIds.has(p.gameId)) : picks;
+  const droppedLocked = slateKnown ? picks.filter((p) => lockedIds.has(p.gameId)).map((p) => p.gameId) : [];
+
+  // Stable across the fan-out AND across retries of the same logical submission,
+  // so a client that resends after a timeout is not racing itself. The server
+  // serialises concurrent writes per user/group/week behind an advisory lock.
+  const idempotencyKey = `w${season}-${seasonType}-${week}-${submittable
+    .map((p) => `${p.gameId}:${p.pickedTeamId ?? ''}:${p.confidence ?? ''}`)
+    .sort()
+    .join('|')}`;
+
   const results = [];
   for (const group of groups) {
     try {
       const existing = await getMyPicks(client, { group, season, seasonType, week });
-      const merged = mergeWeek(existing, picks);
+      const merged = mergeWeek(existing, submittable);
       const errors = validateWeek(merged);
       if (errors.length) {
         results.push({ group, ok: false, error: errors.join(' ') });
         continue;
       }
-      await client.post(`/api/groups/${encodeURIComponent(group)}/picks`, {
-        season, seasonType, week, picks: merged, clearedGameIds: []
+      const body = await client.post(
+        `/api/groups/${encodeURIComponent(group)}/picks`,
+        { season, seasonType, week, picks: merged, clearedGameIds: [] },
+        { 'Idempotency-Key': idempotencyKey }
+      );
+      results.push({
+        group,
+        ok: true,
+        count: merged.length,
+        // Locked games the client withheld, plus any the server accepted only as
+        // an unchanged no-op. Both mean "not applied", and a caller that cannot
+        // see them has to diff the week to find out.
+        ...(droppedLocked.length ? { skippedLocked: droppedLocked } : {}),
+        ...(body?.skippedLocked?.length ? { serverSkippedLocked: body.skippedLocked } : {})
       });
-      results.push({ group, ok: true, count: merged.length });
     } catch (e) {
       results.push({ group, ok: false, error: e.message });
     }
   }
   const ok = results.filter((r) => r.ok).length;
-  return { saved: ok, failed: results.length - ok, results };
+  return {
+    saved: ok,
+    failed: results.length - ok,
+    ...(droppedLocked.length ? { skippedLocked: droppedLocked } : {}),
+    results
+  };
 }

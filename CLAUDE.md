@@ -394,6 +394,63 @@ the closest week to 1 so the pre-existing week-1 URL assertions keep their
 meaning. A `LocationProbe` in `renderPage` exposes the query string for the
 URL-writing assertion.
 
+## Fix: a confidence ladder could not be reordered (2026-09)
+
+**Symptom:** Week 2, 2026. A user trying to swap two games' confidences minutes
+before kickoff got `400 {"error":"Duplicate confidence (constraint)"}` from every
+attempt — the merged payload, the whole-week resend, and a park-at-17 workaround
+(`Confidence out of range`, the range is hard 1..slate size). Reordering a saved
+ladder was impossible through the API.
+
+**Root cause:** reordering is a PERMUTATION of confidences, and
+`ux_user_picks_conf_per_week` is a **partial** unique index
+(`… , confidence_level) WHERE confidence_level IS NOT NULL`). `UserPick.bulkUpsert`
+sent one multi-row `INSERT … ON CONFLICT`, which Postgres applies row-by-row
+against the live index: game A claims 3 while game B still holds 3 → 23505 on the
+whole statement. With every value 1..N already spoken for there is no free slot
+to route through, so no ordering of a 2-cycle (or any cycle) can succeed. A
+partial index **cannot** be made `DEFERRABLE`, so deferring the constraint — the
+usual fix — is not available here.
+
+**Fix:** two-phase write inside one transaction in `bulkUpsert`:
+1. NULL `confidence_level` **and** `picked_team_id` for every game in the batch
+   (the partial index ignores NULLs, so no duplicate can exist mid-write). Both
+   columns must clear together or `chk_pick_consistency` fails — that CHECK
+   requires the pair to be set or unset as one.
+2. Upsert the batch; every value it claims is now free.
+Plus `pg_advisory_xact_lock` keyed on user/group/season/type/week so two racing
+retries cannot interleave their phases.
+
+Same CHECK bug existed in `routes/picks.js` `implicitConfidenceClears`, which set
+`confidence_level=NULL` alone and therefore 500'd whenever that path fired. It
+now clears the team too; the schema simply does not permit a winner with no
+confidence, so the old "retain picked_team_id" comment described something
+impossible.
+
+**Also shipped (MCP usability up to the deadline):**
+- `pickWindow(game, now)` in `utils/pickLock.js` — publishes `locksAt` (the
+  scheduled kickoff) and a server-resolved `editable`. Carried on
+  `GET /api/games/:year/:seasonType/:week` and the picks payloads. Clients must
+  never infer editability from ESPN `status` (lags kickoff by minutes) or their
+  own clock (a fast device locks early).
+- `mcp/src/core.js` `getSlate` read `g.date`; the API field is **`gameDate`**, so
+  every slate shipped with `kickoff: undefined` and `JSON.stringify` dropped it.
+  The unit test's fixture used `date` too, so the test and the code agreed with
+  each other and disagreed with production — when fixing a mapping bug, check the
+  fixture encodes the real payload shape.
+- Duplicate/out-of-range 400s now name the value, both `gameIds`, and the bounds.
+- POST picks returns `skippedLocked` (games accepted only as unchanged no-ops)
+  and echoes `Idempotency-Key`. `submitWeek` withholds picks on started games so
+  one kicked-off game can't sink an otherwise-valid batch.
+
+**Test seams:** `tests/picks-confidence-swap-db.test.js` is the only test that
+would have caught the original bug — it exercises the **real** partial index
+(mocks cannot reproduce index evaluation) and skips cleanly with no database. It
+also caught the `chk_pick_consistency` violation in the first draft of the fix.
+`tests/userpick-bulkupsert-order.test.js` pins vacate-before-claim.
+Route fixtures must keep confidences ≤ the mocked slate size (`max` is the slate
+length, so a 2-game slate rejects confidence 3).
+
 ## Commands
 
 ```bash
