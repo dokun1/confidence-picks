@@ -19,8 +19,13 @@ const MCP_PREFIX = 'cp_live_';
 // Deny by default. A route reaches the real API only if it matches an entry
 // here, so newly added endpoints are unreachable by MCP tokens until someone
 // deliberately lists them. This is what keeps DELETE /api/groups/:id,
-// POST /leave, POST /join, the dues ledger, chat, and admin pick-override off
-// limits no matter what an agent is talked into trying.
+// POST /leave, POST /join, chat, and admin pick-override off limits no matter
+// what an agent is talked into trying.
+//
+// Dues are reachable, but narrowly: only the two routes below, only with the
+// opt-in dues:write scope. Note what is NOT here -- PUT /groups/:id, the general
+// settings route, which also renames a group and flips is_public. Dues settings
+// have their own route (PUT /groups/:id/dues) so that one never needs listing.
 export const MCP_ROUTE_POLICY = [
   { method: 'GET', pattern: /^\/groups\/my-groups\/?$/, scope: 'groups:read' },
   { method: 'GET', pattern: /^\/groups\/[^/]+\/members\/?$/, scope: 'groups:read' },
@@ -31,6 +36,8 @@ export const MCP_ROUTE_POLICY = [
   { method: 'GET', pattern: /^\/groups\/[^/]+\/picks\/?$/, scope: 'picks:read' },
   { method: 'POST', pattern: /^\/groups\/[^/]+\/picks\/?$/, scope: 'picks:write' },
   { method: 'POST', pattern: /^\/groups\/[^/]+\/picks\/clear\/?$/, scope: 'picks:write' },
+  { method: 'PUT', pattern: /^\/groups\/[^/]+\/dues\/?$/, scope: 'dues:write' },
+  { method: 'POST', pattern: /^\/groups\/[^/]+\/members\/[^/]+\/dues\/?$/, scope: 'dues:write' },
   { method: 'GET', pattern: /^\/games\/.+/, scope: null }, // slate is public anyway
   // Group detail last: its pattern is the broadest, so the specific
   // /groups/:id/... routes above must be tested first.

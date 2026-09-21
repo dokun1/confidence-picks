@@ -18,6 +18,9 @@ const CAMEL_TO_COLUMN = {
   duesCollectorUserId: 'dues_collector_user_id',
 };
 
+// How a member was marked paid: in the web app, or through an MCP token.
+const DUES_MARKED_VIA = ['web', 'mcp'];
+
 export class Group {
   // Self-heal latch for the knockout_only column (see ensureKnockoutOnlyColumn).
   // Once the column is confirmed present in this process, every later create()
@@ -111,6 +114,24 @@ export class Group {
       // Do NOT latch on failure — a transient error must let the next create retry
       // rather than permanently believing the column is present.
       console.warn('[groups] Failed to ensure knockout_only column (may already exist):', e.message);
+    }
+  }
+
+  // dues_marked_via ('web' | 'mcp') shipped AFTER the dues columns.
+  // ensureDuesSchema short-circuits on the presence of dues_enabled, which
+  // production already has, so it would never add this one -- it needs a guard
+  // and latch of its own (the ensureKnockoutOnlyColumn pattern). Called by the
+  // two paths that name the column: setDuesPaid and getMembers.
+  static async ensureDuesMarkedViaColumn() {
+    if (this._duesMarkedViaEnsured) return; // warm-instance fast path: no query
+    try {
+      await pool.query(
+        'ALTER TABLE group_memberships ADD COLUMN IF NOT EXISTS dues_marked_via VARCHAR(8) NULL'
+      );
+      this._duesMarkedViaEnsured = true;
+    } catch (e) {
+      // Do not latch: a transient failure must be retried on the next call.
+      console.warn('[groups] Failed to ensure dues_marked_via column:', e.message);
     }
   }
 
@@ -554,11 +575,13 @@ export class Group {
   static async getMembers(groupId) {
     // Selects gm.dues_paid_at explicitly. No-op once latched.
     await Group.ensureDuesSchema();
+    await Group.ensureDuesMarkedViaColumn();
     const query = `
       SELECT u.id, u.name, u.email, u.picture_url, gm.role, gm.joined_at,
-             gm.dues_paid_at
+             gm.dues_paid_at, gm.dues_marked_via, u_marker.name AS dues_marked_by_name
       FROM users u
       JOIN group_memberships gm ON u.id = gm.user_id
+      LEFT JOIN users u_marker ON gm.dues_marked_by = u_marker.id
       WHERE gm.group_id = $1
       ORDER BY gm.role DESC, gm.joined_at ASC
     `;
@@ -742,11 +765,18 @@ export class Group {
    * involved, so an admin confirming receipt out of band IS the ledger. Returns
    * the updated membership row.
    *
-   * `paid=false` clears both columns so an unpaid row is indistinguishable from
-   * one that was never marked -- keeps "unpaid" a single representable state.
+   * `paid=false` clears all three columns so an unpaid row is indistinguishable
+   * from one that was never marked -- keeps "unpaid" a single representable state.
+   *
+   * `via` records whether the mark came from the web app or through an MCP token,
+   * so an agent's bookkeeping can be told apart from the admin's own.
    */
-  static async setDuesPaid(groupId, targetUserId, paid, actingUserId) {
+  static async setDuesPaid(groupId, targetUserId, paid, actingUserId, via = 'web') {
+    if (!DUES_MARKED_VIA.includes(via)) {
+      throw new Error(`Unknown dues via: ${via}`);
+    }
     await Group.ensureDuesSchema();
+    await Group.ensureDuesMarkedViaColumn();
     const roleCheck = await pool.query(
       'SELECT role FROM group_memberships WHERE group_id = $1 AND user_id = $2',
       [groupId, actingUserId]
@@ -758,10 +788,10 @@ export class Group {
 
     const result = await pool.query(
       `UPDATE group_memberships
-       SET dues_paid_at = $1, dues_marked_by = $2
-       WHERE group_id = $3 AND user_id = $4
-       RETURNING user_id, dues_paid_at, dues_marked_by`,
-      [paid ? new Date() : null, paid ? actingUserId : null, groupId, targetUserId]
+       SET dues_paid_at = $1, dues_marked_by = $2, dues_marked_via = $3
+       WHERE group_id = $4 AND user_id = $5
+       RETURNING user_id, dues_paid_at, dues_marked_by, dues_marked_via`,
+      [paid ? new Date() : null, paid ? actingUserId : null, paid ? via : null, groupId, targetUserId]
     );
 
     if (result.rows.length === 0) {

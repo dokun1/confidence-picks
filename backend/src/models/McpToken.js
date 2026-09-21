@@ -1,11 +1,17 @@
 import crypto from 'crypto';
 import pool from '../config/database.js';
 
-// Scopes a phase-1 MCP token may hold. Deliberately excludes every destructive
-// operation -- no group delete, no leave, no dues marking, no admin override of
-// another member's picks. An agent bug or prompt injection can cost a bad pick,
-// never a destroyed pool.
-export const MCP_SCOPES = ['groups:read', 'picks:read', 'picks:write'];
+// Scopes an MCP token may hold. Deliberately excludes every destructive
+// operation -- no group delete, no leave, no admin override of another member's
+// picks. An agent bug or prompt injection can cost a bad pick, never a destroyed
+// pool.
+//
+// `dues:write` is the one scope that reaches money-handling settings (the
+// payment handle, the collector, who is marked paid). It is opt-in when minting
+// -- never part of the default set -- and it only answers "may this token touch
+// dues at all": the dues routes still require the token's owner to be an ADMIN
+// of the group in question.
+export const MCP_SCOPES = ['groups:read', 'picks:read', 'picks:write', 'dues:write'];
 
 const TOKEN_PREFIX = 'cp_live_';
 const DEFAULT_EXPIRY_DAYS = 90;

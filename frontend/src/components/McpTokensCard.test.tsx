@@ -85,6 +85,51 @@ describe('McpTokensCard', () => {
     expect(screen.getByText('CLI')).toBeInTheDocument();
   });
 
+  // dues:write reaches money-handling settings (the payment handle, the collector,
+  // who is marked paid). It must be a deliberate choice, never a default.
+  it('offers Manage dues unchecked, and a default token does not carry it', async () => {
+    vi.mocked(createMcpToken).mockResolvedValue({ token: token({ id: 3, name: 'CLI' }), plaintext: 'cp_live_x' });
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    expect(screen.getByLabelText('Manage dues')).not.toBeChecked();
+    for (const label of ['Read groups', 'Read picks', 'Make picks']) {
+      expect(screen.getByLabelText(label)).toBeChecked();
+    }
+    fireEvent.change(screen.getByPlaceholderText('My laptop'), { target: { value: 'CLI' } });
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+    await waitFor(() => expect(createMcpToken).toHaveBeenCalled());
+    expect(vi.mocked(createMcpToken).mock.calls[0][1]).not.toContain('dues:write');
+  });
+
+  it('adds dues:write only when Manage dues is ticked', async () => {
+    vi.mocked(createMcpToken).mockResolvedValue({ token: token({ id: 4, name: 'Treasurer' }), plaintext: 'cp_live_y' });
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    fireEvent.change(screen.getByPlaceholderText('My laptop'), { target: { value: 'Treasurer' } });
+    fireEvent.click(screen.getByLabelText('Manage dues'));
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+    await waitFor(() => expect(createMcpToken).toHaveBeenCalledWith('Treasurer', [
+      'groups:read', 'picks:read', 'picks:write', 'dues:write',
+    ]));
+  });
+
+  it('goes back to Manage dues unchecked after minting a token that had it', async () => {
+    vi.mocked(createMcpToken).mockResolvedValue({ token: token({ id: 5, name: 'Treasurer' }), plaintext: 'cp_live_z' });
+    render(<McpTokensCard />);
+    await screen.findByText('No tokens yet.');
+    fireEvent.change(screen.getByPlaceholderText('My laptop'), { target: { value: 'Treasurer' } });
+    fireEvent.click(screen.getByLabelText('Manage dues'));
+    fireEvent.click(screen.getByRole('button', { name: /create token/i }));
+    await screen.findByText('cp_live_z');
+    expect(screen.getByLabelText('Manage dues')).not.toBeChecked();
+  });
+
+  it('says plainly what Manage dues allows, and that it is admin-only', async () => {
+    render(<McpTokensCard />);
+    expect(screen.getByText(/groups you admin/i)).toBeInTheDocument();
+    expect(screen.getByText(/unless you grant manage dues/i)).toBeInTheDocument();
+  });
+
   it('dismisses the revealed token so the secret leaves the screen', async () => {
     vi.mocked(createMcpToken).mockResolvedValue({
       token: token({ id: 3, name: 'X' }),

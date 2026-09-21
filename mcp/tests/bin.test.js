@@ -50,7 +50,7 @@ describe('published bin entrypoint', () => {
     // server alive, and the test runner then hangs waiting on it.
     try {
       const { tools } = await client.listTools();
-      assert.strictEqual(tools.length, 5, `expected 5 tools, got ${tools.map(t => t.name)}`);
+      assert.strictEqual(tools.length, 8, `expected 8 tools, got ${tools.map(t => t.name)}`);
       assert.ok(tools.some((t) => t.name === 'submit_week'));
 
       // The server used to announce a hardcoded '0.1.0' long after the package had

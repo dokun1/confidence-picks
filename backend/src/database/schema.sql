@@ -583,6 +583,25 @@ BEGIN
   END IF;
 END $$;
 
+-- ---------------------------------------------------------------------------
+-- Dues: how a member was marked paid.
+--
+-- Group admins can mark dues through an MCP token (scope dues:write) as well as
+-- in the web app. `dues_marked_by` already records WHICH admin; this records
+-- whether it was them at the keyboard or an agent acting on their token, so a
+-- disputed mark can be traced. NULL for unpaid rows and for marks made before
+-- this column existed. Self-healed in prod by Group.ensureDuesMarkedViaColumn().
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'group_memberships' AND column_name = 'dues_marked_via'
+  ) THEN
+    ALTER TABLE group_memberships ADD COLUMN dues_marked_via VARCHAR(8) NULL
+      CHECK (dues_marked_via IS NULL OR dues_marked_via IN ('web', 'mcp'));
+  END IF;
+END $$;
+
 -- MCP personal access tokens.
 --
 -- Opaque bearer credentials (`cp_live_...`) that let a user connect Claude Code

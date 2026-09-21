@@ -50,4 +50,5 @@ export class ConfidencePicksClient {
 
   get(path) { return this.request('GET', path); }
   post(path, body, extraHeaders) { return this.request('POST', path, body, extraHeaders); }
+  put(path, body, extraHeaders) { return this.request('PUT', path, body, extraHeaders); }
 }

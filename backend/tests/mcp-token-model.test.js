@@ -47,6 +47,13 @@ describe('McpToken', () => {
       assert.deepStrictEqual(McpToken.validateScopes(MCP_SCOPES), MCP_SCOPES);
     });
 
+    test('dues:write is a real scope, and the only dues scope', () => {
+      assert.ok(MCP_SCOPES.includes('dues:write'));
+      assert.deepStrictEqual(McpToken.validateScopes(['groups:read', 'dues:write']), ['groups:read', 'dues:write']);
+      assert.strictEqual(McpToken.validateScopes(['dues:read']), null);
+      assert.strictEqual(McpToken.validateScopes(['dues:admin']), null);
+    });
+
     test('rejects unknown, empty, and non-array scopes', () => {
       // The destructive scopes deliberately do not exist -- asking for one is an error.
       assert.strictEqual(McpToken.validateScopes(['groups:admin']), null);
