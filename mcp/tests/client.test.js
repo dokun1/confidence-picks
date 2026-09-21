@@ -52,6 +52,17 @@ describe('ConfidencePicksClient', () => {
     await assert.rejects(() => c.get('/x'), /502/);
   });
 
+  test('put sends a JSON body with the PUT method', async () => {
+    let seen;
+    const c = new ConfidencePicksClient({ token: 't', fetchImpl: async (u, o) => { seen = { u, ...o }; return { ok: true, status: 200, json: async () => ({ done: true }) }; } });
+    const out = await c.put('/api/groups/g/dues', { duesEnabled: true });
+    assert.strictEqual(seen.method, 'PUT');
+    assert.strictEqual(seen.u, 'https://api.confidence-picks.com/api/groups/g/dues');
+    assert.strictEqual(seen.body, '{"duesEnabled":true}');
+    assert.strictEqual(seen.headers['Content-Type'], 'application/json');
+    assert.deepStrictEqual(out, { done: true });
+  });
+
   test('handles a 204 with no body', async () => {
     const c = new ConfidencePicksClient({ token: 't', fetchImpl: async () => ({ ok: true, status: 204 }) });
     assert.strictEqual(await c.get('/x'), null);
@@ -59,8 +70,11 @@ describe('ConfidencePicksClient', () => {
 });
 
 describe('tool surface', () => {
-  test('exposes exactly the five phase-1 tools', () => {
-    assert.deepStrictEqual(TOOLS.map((t) => t.name).sort(), ['get_my_picks', 'get_slate', 'get_standings', 'list_groups', 'submit_week']);
+  test('exposes exactly the five phase-1 tools plus the three dues tools', () => {
+    assert.deepStrictEqual(TOOLS.map((t) => t.name).sort(), [
+      'get_dues', 'get_my_picks', 'get_slate', 'get_standings', 'list_groups',
+      'set_dues_paid', 'submit_week', 'update_dues_settings'
+    ]);
   });
 
   test('every tool declares a description and an object schema', () => {
@@ -72,10 +86,41 @@ describe('tool surface', () => {
 
   test('no tool offers a destructive capability', () => {
     // The scope model withholds these; the tool surface must not advertise them.
+    // Dues used to be on this list. They were opened deliberately (scope
+    // dues:write, admin-only); everything else here is still withheld.
     const blob = JSON.stringify(TOOLS).toLowerCase();
-    for (const word of ['delete', 'leave_group', 'remove_member', 'dues']) {
+    for (const word of ['delete', 'leave_group', 'remove_member', 'rename', 'is_public', 'ispublic']) {
       assert.ok(!blob.includes(word), `tool surface must not mention ${word}`);
     }
+  });
+
+  // The write tools change where members send money. The description is the only
+  // place an agent learns that, so it has to say so.
+  test('the dues write tools say they are admin-only and need the dues scope', () => {
+    for (const name of ['update_dues_settings', 'set_dues_paid']) {
+      const t = TOOLS.find((x) => x.name === name);
+      assert.match(t.description, /admin/i, name);
+      assert.match(t.description, /dues:write|Manage dues/, name);
+    }
+    assert.deepStrictEqual(TOOLS.find((x) => x.name === 'set_dues_paid').inputSchema.required, ['group', 'members', 'paid']);
+    assert.deepStrictEqual(TOOLS.find((x) => x.name === 'update_dues_settings').inputSchema.required, ['group']);
+  });
+
+  test('routes the dues tools to the dues endpoints, and never to the general settings route', async () => {
+    const calls = [];
+    const group = { userRole: 'admin', duesEnabled: true, duesAmountCents: 2000 };
+    const members = [{ id: 3, name: 'Ari', role: 'member', dues_paid_at: null }];
+    const c = {
+      get: async (p) => { calls.push(['GET', p]); return p.endsWith('/members') ? members : group; },
+      put: async (p) => { calls.push(['PUT', p]); return group; },
+      post: async (p) => { calls.push(['POST', p]); return { userId: 3, duesPaidAt: 'x' }; }
+    };
+    await dispatch('get_dues', { group: 'g' }, c);
+    await dispatch('update_dues_settings', { group: 'g', enabled: false }, c);
+    await dispatch('set_dues_paid', { group: 'g', members: [3], paid: true }, c);
+    const written = calls.filter(([m]) => m !== 'GET');
+    assert.deepStrictEqual(written, [['PUT', '/api/groups/g/dues'], ['POST', '/api/groups/g/members/3/dues']]);
+    assert.ok(!calls.some(([m, p]) => m === 'PUT' && p === '/api/groups/g'));
   });
 
   test('rejects an unknown tool name', async () => {

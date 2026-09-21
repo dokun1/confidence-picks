@@ -31,13 +31,31 @@ codex mcp add confidence-picks \
 | `get_my_picks` | Your existing picks for a group and week |
 | `get_standings` | Season scoreboard for a group |
 | `submit_week` | Submit picks to one or more groups at once |
+| `get_dues` | A group's dues settings; for admins, also who has paid and totals collected / outstanding |
+| `update_dues_settings` | **Admins, needs Manage dues.** Turn dues on/off, set the amount, payment method, handle or instructions, payout notes, collector — any one field or several |
+| `set_dues_paid` | **Admins, needs Manage dues.** Mark one or more members paid or unpaid |
 
 ## What a token can and cannot do
 
-Scopes are `groups:read`, `picks:read`, `picks:write`. A token **cannot** delete
-a group, leave a group, join a group, mark dues, post chat, or change another
-member's picks — the server rejects those endpoints for MCP credentials
-regardless of what the client asks for.
+Default scopes are `groups:read`, `picks:read`, `picks:write`. A token **cannot**
+delete a group, leave a group, join a group, rename a group or change its
+visibility, post chat, or change another member's picks — the server rejects
+those endpoints for MCP credentials regardless of what the client asks for.
+
+### Managing dues
+
+Dues are off limits unless you tick **Manage dues** (`dues:write`) when creating
+the token. It is unchecked by default, and tokens created before it existed do
+not have it — create a new one.
+
+Even with it, the two dues write tools only work in groups where **you are an
+admin**; a member's token is refused by the server. The permission covers where
+members send money (the Venmo / Cash App handle and the collector) as well as who
+is marked paid, so grant it only to a client you would trust with both. Every
+write returns the state before and after, and marks made through a token are
+recorded as such (`markedVia: "mcp"` in `get_dues`).
+
+Amounts are in dollars at the tool (`amount: 20`), not cents.
 
 Tokens expire after 90 days and can be revoked at any time from your profile.
 

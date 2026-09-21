@@ -98,7 +98,8 @@ ordering is unaffected. `PUT /groups/:identifier` stays unlisted.
 - Admin-only via `Group.update`; errors map as the general route does
   (403 not admin, 404 no group, 400 validation).
 - Responds with the group's dues fields (same camelCase names), including
-  `duesCollectorName`.
+  `duesCollectorName`. `Group.update` returns the raw snake_case row, so the
+  route re-reads through `findByIdentifier` for this.
 
 Registered before `PUT /:identifier` is irrelevant (distinct path depth), but it
 sits next to the member-dues route for readability.
@@ -169,9 +170,12 @@ Reads `GET /groups/:id` and `GET /groups/:id/members`. No new scope.
 }
 ```
 
-- **Admins** get the full ledger. **Non-admins** get `settings` plus a `members`
-  array containing only themselves, and no `totals` — mirroring the page, where
-  "Who has paid" is admin-only.
+- **Admins** get the full ledger. **Non-admins** get `settings` only:
+  `members: null`, `totals: null` and a `note` — mirroring the page, where "Who
+  has paid" is admin-only. (An earlier draft showed a non-admin their own row.
+  The API gives the tool no way to know which member the token's owner is —
+  neither response identifies the caller and `/auth/me` is not allowlisted — so
+  that was dropped rather than widening the allowlist for it.)
 - Never returns email addresses.
 - `totals.collected` / `outstanding` are `null` when no amount is set.
 
@@ -192,6 +196,9 @@ All optional: `enabled`, `amount` (dollars; at most 2 decimals; `null` clears),
 - `members`: non-empty array of user ids from `get_dues`. `paid`: boolean.
 - Reads the ledger first; rejects ids that are not members before writing
   anything.
+- A member already in the requested state is skipped and reported
+  `unchanged: true`. Re-marking would overwrite the original paid date and who
+  recorded it.
 - One `POST` per member, sequentially. Returns a per-member result —
   `{ userId, name, before, after }` or `{ userId, error }` — so a partial failure
   is a reported outcome, as in `submitWeek`.

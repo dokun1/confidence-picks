@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { ConfidencePicksClient } from './client.js';
 import * as core from './core.js';
+import * as dues from './dues.js';
 
 // stdio transport: the server runs on the user's own machine and reads its
 // credential from the environment. This sidesteps claude-code#50464 (configured
@@ -24,6 +25,7 @@ function defaultClient() {
 }
 
 const week = { type: 'number', description: 'NFL week number, 1-18' };
+const groupArg = { type: 'string', description: 'Group identifier, e.g. okun-family-picks' };
 const season = { type: 'number', description: 'Season year, e.g. 2026' };
 const seasonType = { type: 'number', description: '1 = preseason, 2 = regular season. Defaults to 2.' };
 
@@ -80,6 +82,43 @@ export const TOOLS = [
       },
       required: ['groups', 'season', 'week', 'picks']
     }
+  },
+  {
+    name: 'get_dues',
+    description: 'Get a group\'s dues: whether dues are on, the amount, how members pay, payout notes and the collector. If you are an admin of the group it also lists every member with whether they have paid (and who marked them, via the web app or an AI client) plus totals collected and outstanding. Non-admins get the settings only.',
+    inputSchema: { type: 'object', properties: { group: groupArg }, required: ['group'] }
+  },
+  {
+    name: 'update_dues_settings',
+    description: 'Change a group\'s dues settings. Group admins only, and the token needs the opt-in "Manage dues" (dues:write) permission. Every field is optional: pass only what should change and everything else is left alone. CAUTION: venmoHandle, cashappHandle, instructions and collectorUserId control where members send real money -- change them only when the user asked for exactly that. Choosing a paymentMethod clears the other methods\' fields. Returns the settings before and after, and the list of fields that changed; show the user what changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        group: groupArg,
+        enabled: { type: 'boolean', description: 'Whether dues are required for this group.' },
+        amount: { type: ['number', 'null'], description: 'Dues per member in DOLLARS, e.g. 20 or 25.50 (not cents). null clears it.' },
+        paymentMethod: { type: 'string', enum: ['venmo', 'cashapp', 'other'], description: 'How members pay. Exactly one per group.' },
+        venmoHandle: { type: ['string', 'null'], description: 'Venmo username, used when paymentMethod is venmo. A leading @ is fine.' },
+        cashappHandle: { type: ['string', 'null'], description: 'Cash App cashtag, used when paymentMethod is cashapp. A leading $ is fine.' },
+        instructions: { type: ['string', 'null'], description: 'Free-text payment instructions (Zelle, cash, check), used when paymentMethod is other. Max 1000 characters.' },
+        payoutNotes: { type: ['string', 'null'], description: 'How the pot is paid out, shown to members and invitees. Max 1000 characters.' },
+        collectorUserId: { type: ['number', 'null'], description: 'userId (from get_dues) of the member who collects the money. Must be a member of the group. null clears it.' }
+      },
+      required: ['group']
+    }
+  },
+  {
+    name: 'set_dues_paid',
+    description: 'Mark one or more members of a group as having paid their dues, or as unpaid. Group admins only, and the token needs the opt-in "Manage dues" (dues:write) permission. This is a manual ledger -- nothing verifies the payment -- so only mark someone paid when the user says the money arrived. Members already in the requested state are left untouched. Returns each member\'s status before and after; a failure for one member does not stop the others.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        group: groupArg,
+        members: { type: 'array', minItems: 1, items: { type: 'number' }, description: 'userId values from get_dues.' },
+        paid: { type: 'boolean', description: 'true = paid, false = unpaid.' }
+      },
+      required: ['group', 'members', 'paid']
+    }
   }
 ];
 
@@ -91,6 +130,9 @@ export async function dispatch(name, args, c) {
     case 'get_my_picks': return core.getMyPicks(c, args);
     case 'get_standings': return core.getStandings(c, args);
     case 'submit_week': return core.submitWeek(c, args);
+    case 'get_dues': return dues.getDues(c, args);
+    case 'update_dues_settings': return dues.updateDuesSettings(c, args);
+    case 'set_dues_paid': return dues.setDuesPaid(c, args);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
