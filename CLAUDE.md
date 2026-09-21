@@ -451,6 +451,56 @@ also caught the `chk_pick_consistency` violation in the first draft of the fix.
 Route fixtures must keep confidences ≤ the mocked slate size (`max` is the slate
 length, so a 2-game slate rejects confidence 3).
 
+## Feature: MCP dues tools for group admins (2026-09)
+
+Phase 1 kept the dues ledger off limits to MCP tokens. It is now reachable,
+narrowly. Spec: `docs/superpowers/specs/2026-09-21-mcp-dues-tools-design.md`.
+
+- **Scope:** `dues:write`, opt-in. `McpTokensCard` marks it `optIn`, so it is
+  **unchecked by default** and resets to unchecked after each mint —
+  `DEFAULT_SCOPES` used to be *every* scope, so a plain addition would have handed
+  it to every new token. Reads (`get_dues`) need only `groups:read`.
+- **Admin-only needs no new mechanism.** `mcpAuth` exchanges a token for a JWT of
+  the user who minted it, so `Group.setDuesPaid` / `Group.update`'s existing role
+  checks run against that person's real role. Scope = "may this token touch dues
+  at all"; role = "in this group". A member holding `dues:write` gets 403.
+- **Dedicated route:** `PUT /groups/:identifier/dues` picks only the eight dues
+  keys. It exists so the general `PUT /groups/:identifier` (name, `is_public`,
+  `max_members`) never has to be allowlisted. `resolveDuesCollector` in
+  `routes/groups.js` is shared by both routes. An empty dues body is 400.
+- **`dues_marked_via`** (`'web'` | `'mcp'`) beside `dues_marked_by`; the route
+  passes `req.mcpToken ? 'mcp' : 'web'`. It has **its own** self-heal,
+  `Group.ensureDuesMarkedViaColumn()` — `ensureDuesSchema` short-circuits on
+  `dues_enabled`, which prod already has, so it can never add a later column.
+  Any future dues column needs the same treatment.
+- `GET /groups/:id/members` omits `email` for token requests.
+- **MCP 0.3.0** (`mcp/src/dues.js`): `get_dues`, `update_dues_settings` (every
+  field optional; amount in **dollars**, converted to cents), `set_dues_paid`
+  (batch; unknown ids abort before any write; a member already in the requested
+  state is skipped so the original paid date survives). Writes return
+  before/after. Non-admins get settings only — nothing in the API tells the tool
+  which member the token's owner is, so "show me my own row" is not possible
+  without widening the allowlist.
+
+**Wire-shape traps (both bit during this work):**
+- `Group.update` returns the **raw snake_case row** (`RETURNING *`), not a
+  camelCase `Group`. The new route re-reads via `findByIdentifier`. The first
+  draft's test mocked `update()` as camelCase and passed against a route that
+  would have answered all-nulls in production.
+- `GET /groups/:id` is camelCase; `GET /groups/:id/members` is raw snake_case
+  (`dues_paid_at`, `picture_url`). `mcp/src/dues.js` absorbs the difference.
+
+**Test seams:** `tests/dues-marked-via-db.test.js` runs the real SQL (ALTER,
+3-column UPDATE, LEFT JOIN) and skips with no database. `mcp/tests/client.test.js`
+pins the tool list (8) and forbids rename/visibility words on the tool surface;
+`mcp/tests/bin.test.js` pins the count too.
+
+**`npm test` in `backend/` hits the DEV Neon database** unless `NODE_ENV=test` is
+set (`config/database.js` reads `.env`, not `.env.test`). Only `test:full` sets it.
+DB-backed tests (`picks-confidence-swap-db`, `dues-marked-via-db`) write and clean
+up real rows there. Prefer `NODE_ENV=test TZ=UTC npm test` with the docker
+Postgres on :5433 (`npm run test:setup`).
+
 ## Commands
 
 ```bash
