@@ -12,13 +12,23 @@ import {
 
 // Scopes a token may hold. Mirrors MCP_SCOPES on the server; the server
 // re-validates, so this list is a convenience rather than the enforcement point.
-const SCOPES: { id: string; label: string; hint: string }[] = [
+//
+// `optIn` scopes start unchecked. dues:write reaches money-handling settings --
+// the payment handle, the collector, who is marked paid -- so holding it has to
+// be a deliberate choice, never what you get for clicking "Create token".
+const SCOPES: { id: string; label: string; hint: string; optIn?: boolean }[] = [
   { id: 'groups:read', label: 'Read groups', hint: 'See your pools, members and standings' },
   { id: 'picks:read', label: 'Read picks', hint: 'See picks you have already made' },
   { id: 'picks:write', label: 'Make picks', hint: 'Submit and change your picks' },
+  {
+    id: 'dues:write',
+    label: 'Manage dues',
+    hint: 'Change dues settings and mark members paid, in groups you admin',
+    optIn: true,
+  },
 ];
 
-const DEFAULT_SCOPES = SCOPES.map((s) => s.id);
+const DEFAULT_SCOPES = SCOPES.filter((s) => !s.optIn).map((s) => s.id);
 
 function formatDate(value: string | null): string {
   if (!value) return 'Never';
@@ -112,9 +122,9 @@ export default function McpTokensCard() {
           <h2 className="text-lg font-semibold text-content">AI client access</h2>
           <p className="text-sm text-content-muted">
             Connect Claude Code or Codex to your account so you can check standings and make
-            picks without opening the site. Tokens can only read your pools and manage your
-            own picks &mdash; they can never delete a group, leave one, or change anyone
-            else&rsquo;s picks.
+            picks without opening the site. Unless you grant Manage dues, tokens can only
+            read your pools and manage your own picks. They can never delete a group, leave
+            one, or change anyone else&rsquo;s picks.
           </p>
         </div>
 
