@@ -6,6 +6,33 @@ import { validateDuesUpdates } from '../utils/duesValidation.js';
 
 const router = express.Router();
 
+// The dues keys a settings write may carry. PUT /:identifier/dues accepts ONLY
+// these, which is what lets it be reachable by MCP tokens while the general
+// settings route -- name, is_public, max_members -- stays off limits to them.
+const DUES_SETTINGS_KEYS = [
+  'duesEnabled', 'duesPaymentMethod', 'duesAmountCents', 'duesVenmoHandle',
+  'duesCashappHandle', 'duesInstructions', 'duesPayoutNotes', 'duesCollectorUserId',
+];
+
+// Check a requested collector against the group's members and normalise the id
+// (mutating `updates`). Needs the member list, so it cannot live in
+// validateDuesUpdates. Shared by both settings routes so their rules cannot
+// drift. Returns an error string, or null when acceptable.
+async function resolveDuesCollector(updates, groupId) {
+  if (!Object.prototype.hasOwnProperty.call(updates, 'duesCollectorUserId')) return null;
+  const collectorId = updates.duesCollectorUserId;
+  if (collectorId === null || collectorId === '') {
+    updates.duesCollectorUserId = null;
+    return null;
+  }
+  const members = await Group.getMembers(groupId);
+  if (!members.some((m) => String(m.id) === String(collectorId))) {
+    return 'The dues collector must be a member of this group';
+  }
+  updates.duesCollectorUserId = Number(collectorId);
+  return null;
+}
+
 // Create a new group
 router.post('/', authenticateToken, async (req, res) => {
   try {
@@ -253,8 +280,64 @@ router.get('/:identifier/members', authenticateToken, async (req, res) => {
     }
     
     const members = await Group.getMembers(group.id);
+    // MCP tokens reach this route under groups:read, and no MCP tool needs an
+    // address. Withheld for token requests only; browser sessions are unchanged.
+    if (req.mcpToken) {
+      return res.json(members.map(({ email, ...rest }) => rest));
+    }
     res.json(members);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update dues settings only (admin only).
+//
+// The same fields, validation and admin check as PUT /:identifier, minus
+// everything that is not dues. It exists for MCP tokens: allowlisting the general
+// route would let a token rename a group or make it public, so dues got a route
+// whose body cannot express that. Partial by construction -- only the keys
+// present are written.
+router.put('/:identifier/dues', authenticateToken, async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const body = req.body || {};
+    const updates = {};
+    for (const key of DUES_SETTINGS_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) updates[key] = body[key];
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No dues fields to update' });
+    }
+
+    const duesError = validateDuesUpdates(updates);
+    if (duesError) {
+      return res.status(400).json({ error: duesError });
+    }
+
+    const group = await Group.findByIdentifier(identifier, req.user.id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    const collectorError = await resolveDuesCollector(updates, group.id);
+    if (collectorError) {
+      return res.status(400).json({ error: collectorError });
+    }
+
+    await Group.update(group.id, updates, req.user.id);
+    // Group.update returns the raw snake_case row (RETURNING *) with no collector
+    // name. Re-read through findByIdentifier for the camelCase shape clients use.
+    const fresh = await Group.findByIdentifier(identifier, req.user.id);
+    const response = {};
+    for (const key of [...DUES_SETTINGS_KEYS, 'duesCollectorName']) {
+      response[key] = fresh?.[key] ?? null;
+    }
+    res.json(response);
+  } catch (error) {
+    if (error.message.includes('Only group admins')) {
+      return res.status(403).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -277,7 +360,10 @@ router.post('/:identifier/members/:userId/dues', authenticateToken, async (req, 
       return res.status(404).json({ error: 'Group not found' });
     }
 
-    const membership = await Group.setDuesPaid(group.id, userId, paid, req.user.id);
+    // req.mcpToken is set by mcpTokenExchange for requests that arrived on a
+    // cp_live_ token, so an agent's mark is distinguishable from the admin's own.
+    const via = req.mcpToken ? 'mcp' : 'web';
+    const membership = await Group.setDuesPaid(group.id, userId, paid, req.user.id, via);
     res.json({
       userId: membership.user_id,
       duesPaidAt: membership.dues_paid_at,
@@ -459,17 +545,9 @@ router.put('/:identifier', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Group not found' });
     }
     
-    if (Object.prototype.hasOwnProperty.call(updates, 'duesCollectorUserId')) {
-      const collectorId = updates.duesCollectorUserId;
-      if (collectorId === null || collectorId === '') {
-        updates.duesCollectorUserId = null;
-      } else {
-        const members = await Group.getMembers(group.id);
-        if (!members.some((m) => String(m.id) === String(collectorId))) {
-          return res.status(400).json({ error: 'The dues collector must be a member of this group' });
-        }
-        updates.duesCollectorUserId = Number(collectorId);
-      }
+    const collectorError = await resolveDuesCollector(updates, group.id);
+    if (collectorError) {
+      return res.status(400).json({ error: collectorError });
     }
 
   const updatedGroup = await Group.update(group.id, updates, req.user.id);

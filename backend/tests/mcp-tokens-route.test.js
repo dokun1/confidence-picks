@@ -32,7 +32,7 @@ describe('mcp token routes', () => {
   test('advertises the available scopes without requiring auth', async () => {
     const res = await fetch(`${baseURL}/api/mcp/scopes`);
     const body = await res.json();
-    assert.deepStrictEqual(body.scopes, ['groups:read', 'picks:read', 'picks:write']);
+    assert.deepStrictEqual(body.scopes, ['groups:read', 'picks:read', 'picks:write', 'dues:write']);
   });
 
   test('requires a session to list tokens', async () => {

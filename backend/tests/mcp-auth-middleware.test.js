@@ -32,7 +32,6 @@ describe('MCP route policy', () => {
       ['POST', '/groups/okun-family-picks/leave'],
       ['POST', '/groups/okun-family-picks/join'],
       ['POST', '/groups'],
-      ['POST', '/groups/okun-family-picks/members/3/dues'],
       ['GET', '/groups/okun-family-picks/messages'],
       ['POST', '/groups/okun-family-picks/messages'],
       ['POST', '/groups/okun-family-picks/invites'],
@@ -47,6 +46,31 @@ describe('MCP route policy', () => {
     }
   });
 
+  // Dues were withheld entirely in phase 1. They are now reachable, but only
+  // through these two routes and only with the opt-in dues:write scope. Whether
+  // the caller is an ADMIN of the group is not this layer's question -- the
+  // routes enforce that against the token owner's real role.
+  test('permits the dues write surface, and only under dues:write', () => {
+    const mark = matchPolicy('POST', '/groups/okun-family-picks/members/3/dues');
+    const settings = matchPolicy('PUT', '/groups/okun-family-picks/dues');
+    assert.strictEqual(mark?.scope, 'dues:write');
+    assert.strictEqual(settings?.scope, 'dues:write');
+  });
+
+  test('the general settings route stays denied now that dues has its own', () => {
+    // PUT /groups/:id also renames the group, flips is_public and changes the
+    // member limit. Dues settings moved to PUT /groups/:id/dues precisely so
+    // this never has to be allowlisted.
+    assert.strictEqual(matchPolicy('PUT', '/groups/okun-family-picks'), null);
+    assert.strictEqual(matchPolicy('PUT', '/groups/okun-family-picks/'), null);
+    // Neighbouring shapes must not ride in on the dues patterns.
+    assert.strictEqual(matchPolicy('DELETE', '/groups/g/dues'), null);
+    assert.strictEqual(matchPolicy('POST', '/groups/g/dues'), null);
+    assert.strictEqual(matchPolicy('PUT', '/groups/g/members/3/dues'), null);
+    assert.strictEqual(matchPolicy('POST', '/groups/g/members/3/dues/extra'), null);
+    assert.strictEqual(matchPolicy('POST', '/groups/g/members/3'), null);
+  });
+
   test('admin pick-override is not reachable through the broader picks pattern', () => {
     // /groups/:id/picks is allowed; /groups/:id/picks/user/:userId must not be
     // swallowed by it, because that route edits another member's picks.
@@ -55,7 +79,7 @@ describe('MCP route policy', () => {
 
   test('every policy entry names a real scope or is explicitly public', () => {
     for (const r of MCP_ROUTE_POLICY) {
-      assert.ok(r.scope === null || ['groups:read', 'picks:read', 'picks:write'].includes(r.scope));
+      assert.ok(r.scope === null || ['groups:read', 'picks:read', 'picks:write', 'dues:write'].includes(r.scope));
     }
   });
 });
@@ -135,6 +159,30 @@ describe('mcpTokenExchange middleware', () => {
     const res = await fetch(`${baseURL}/api/groups/okun-family-picks`, { method: 'DELETE', headers: { Authorization: `Bearer ${TOKEN}` } });
     assert.strictEqual(res.status, 403);
     assert.strictEqual(seenAuthHeader, undefined, 'the request must never reach the router');
+  });
+
+  // A phase-1 token holds every phase-1 scope and must still be unable to touch
+  // dues: the scope is opt-in, never implied.
+  test('403s a dues write from a token without dues:write', async () => {
+    live(['groups:read', 'picks:read', 'picks:write']);
+    for (const [method, path] of [['POST', '/api/groups/g/members/3/dues'], ['PUT', '/api/groups/g/dues']]) {
+      seenAuthHeader = undefined;
+      const res = await fetch(`${baseURL}${path}`, { method, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{}' });
+      assert.strictEqual(res.status, 403, `${method} ${path}`);
+      assert.strictEqual((await res.json()).required, 'dues:write');
+      assert.strictEqual(seenAuthHeader, undefined, 'the request must never reach the router');
+    }
+  });
+
+  test('lets a dues write through with dues:write, tagged as an MCP request', async () => {
+    live(['groups:read', 'dues:write']);
+    mock.method(User, 'findById', async () => ({ id: 7, email: 'u@x.io', name: 'U' }));
+    mock.method(AuthService, 'generateAccessToken', () => 'minted.jwt');
+    const res = await fetch(`${baseURL}/api/groups/g/members/3/dues`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{"paid":true}' });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    // req.mcpToken is what the dues route keys `via: 'mcp'` off.
+    assert.ok(body.mcp, 'downstream must be able to tell this came through a token');
   });
 
   test('403s when the route needs a scope the token lacks', async () => {

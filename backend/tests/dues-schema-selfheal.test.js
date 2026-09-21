@@ -107,3 +107,73 @@ describe('ensureDuesSchema latching', () => {
     assert.strictEqual(Group._duesSchemaEnsured, false, 'must stay unlatched to retry');
   });
 });
+
+// dues_marked_via arrived AFTER the dues columns shipped. ensureDuesSchema
+// short-circuits on the presence of dues_enabled, which production already has,
+// so it can never add this column -- hence a guard and latch of its own.
+describe('dues_marked_via self-heal', () => {
+  afterEach(() => {
+    mock.restoreAll();
+    Group._duesSchemaEnsured = false;
+    Group._duesMarkedViaEnsured = false;
+  });
+
+  test('adds the column idempotently, then short-circuits', async () => {
+    Group._duesMarkedViaEnsured = false;
+    const query = mock.method(pool, 'query', async () => ({ rows: [] }));
+
+    await Group.ensureDuesMarkedViaColumn();
+    await Group.ensureDuesMarkedViaColumn();
+
+    assert.strictEqual(query.mock.calls.length, 1, 'one ALTER, then the latch');
+    const sql = query.mock.calls[0].arguments[0];
+    assert.match(sql, /ALTER TABLE group_memberships/);
+    assert.match(sql, /ADD COLUMN IF NOT EXISTS dues_marked_via/);
+  });
+
+  test('does not latch when the ALTER fails', async () => {
+    Group._duesMarkedViaEnsured = false;
+    mock.method(pool, 'query', async () => { throw new Error('connection terminated'); });
+    await Group.ensureDuesMarkedViaColumn();
+    assert.strictEqual(Group._duesMarkedViaEnsured, false);
+  });
+
+  test('setDuesPaid and getMembers both ensure it before querying', async () => {
+    mock.method(Group, 'ensureDuesSchema', async () => {});
+    const ensured = mock.method(Group, 'ensureDuesMarkedViaColumn', async () => {});
+    mock.method(pool, 'query', async () => ({ rows: [] }));
+    await Group.getMembers(9);
+    await Group.setDuesPaid(9, 2, true, 1, 'mcp').catch(() => {});
+    assert.strictEqual(ensured.mock.calls.length, 2);
+  });
+
+  test('setDuesPaid stores via when marking paid and clears it when un-marking', async () => {
+    mock.method(Group, 'ensureDuesSchema', async () => {});
+    mock.method(Group, 'ensureDuesMarkedViaColumn', async () => {});
+    const query = mock.method(pool, 'query', async (sql) => (
+      /SELECT role/.test(sql) ? { rows: [{ role: 'admin' }] } : { rows: [{ user_id: 2, dues_paid_at: null }] }
+    ));
+
+    await Group.setDuesPaid(9, 2, true, 1, 'mcp');
+    const paidCall = query.mock.calls.find((c) => /UPDATE group_memberships/.test(c.arguments[0]));
+    assert.match(paidCall.arguments[0], /dues_marked_via/);
+    assert.ok(paidCall.arguments[1].includes('mcp'));
+
+    query.mock.resetCalls();
+    await Group.setDuesPaid(9, 2, false, 1, 'mcp');
+    const unpaidCall = query.mock.calls.find((c) => /UPDATE group_memberships/.test(c.arguments[0]));
+    assert.ok(!unpaidCall.arguments[1].includes('mcp'), 'un-marking clears via, like dues_marked_by');
+  });
+
+  test('setDuesPaid defaults via to web and rejects anything else', async () => {
+    mock.method(Group, 'ensureDuesSchema', async () => {});
+    mock.method(Group, 'ensureDuesMarkedViaColumn', async () => {});
+    const query = mock.method(pool, 'query', async (sql) => (
+      /SELECT role/.test(sql) ? { rows: [{ role: 'admin' }] } : { rows: [{ user_id: 2 }] }
+    ));
+    await Group.setDuesPaid(9, 2, true, 1);
+    const call = query.mock.calls.find((c) => /UPDATE group_memberships/.test(c.arguments[0]));
+    assert.ok(call.arguments[1].includes('web'));
+    await assert.rejects(() => Group.setDuesPaid(9, 2, true, 1, 'carrier-pigeon'), /via/);
+  });
+});
