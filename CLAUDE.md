@@ -501,6 +501,45 @@ DB-backed tests (`picks-confidence-swap-db`, `dues-marked-via-db`) write and cle
 up real rows there. Prefer `NODE_ENV=test TZ=UTC npm test` with the docker
 Postgres on :5433 (`npm run test:setup`).
 
+## Feature: admin.confidence-picks.com + the MCP inspector (2026-09)
+
+A separate Next.js app in `admin/`, its own Vercel project (`confidence-picks-admin`,
+Root Directory `admin`, Git-integration deploys — **no GitHub Actions**). Spec:
+`docs/superpowers/specs/2026-09-22-admin-portal-mcp-inspector-design.md`.
+Mirrors `findplayplace/admin`: Auth.js v5, Google only, JWT cookie, no DB.
+
+- **Who gets in:** the backend's `ADMIN_EMAILS`, asked at sign-in via
+  `GET /api/admin-portal/allowlist/check` (`routes/adminPortal.js`) with the shared
+  `ADMIN_API_SECRET` (constant-time compare; unset → 401 for everything). Fails
+  closed on every axis. Not in `MCP_ROUTE_POLICY`.
+- **The inspector (`/`):** runs the *published* `confidence-picks-mcp` server
+  in-process (`createServer(client)` from `./server`) and drives it with the SDK's
+  own `Client` over `InMemoryTransport` — real `tools/list` + `tools/call`, not a
+  re-implementation. Token is pasted per session, React state only. Tool list
+  comes from the package's `TOOLS` export at render, so forms can't drift.
+- **`lib/argsFromForm.ts`** is the form→args contract: blank = NOT SENT
+  (`update_dues_settings` depends on it), `__null__` = null where the schema
+  allows, booleans tri-state, arrays/objects as JSON. Unit-tested.
+- **Deps must be the registry package, not `file:../mcp`:** Vercel's build context
+  is `admin/` only. `types/confidence-picks-mcp.d.ts` declares the JS package's
+  three subpaths.
+
+**Trap that shipped a 500 (0.4.0 → 0.4.1):** Next inlines the package into its
+server bundle and rewrites `new URL('../package.json', import.meta.url)` into a
+build-output asset path the function never ships, so a runtime `readFileSync`
+threw on the first `createServer()`. Worked locally because `next start` has the
+whole tree. **Anything in `mcp/src` a bundler may inline must not touch the
+filesystem at runtime** — import JSON through the module graph
+(`import pkg from '../package.json' with { type: 'json' }`); a test in
+`server-factory.test.js` pins that `server.js` has no `node:` imports. To check a
+build: `grep -c readFileSync admin/.next/server/app/page.js` should be 0.
+
+**Other seams:** `eslint-config-next@15` is a legacy `{ extends }` config →
+`FlatCompat` in `admin/eslint.config.mjs` (Next 16 exports a flat array; drop the
+shim on upgrade). Node 20 here vs Vercel's 24: `admin`'s test script uses `tsx`
+and an explicit file list. Vercel's "skip when root dir unchanged" is on, so
+backend/frontend-only pushes don't rebuild the admin site.
+
 ## Commands
 
 ```bash
