@@ -35,6 +35,35 @@ export function createEmailService({ fetchImpl = fetch, env = process.env, logge
       return sent;
     },
 
+    /**
+     * Confirm the API key is accepted, without sending anything.
+     *
+     * Resend evaluates auth before body validation, so an intentionally empty
+     * payload returns 401 for a bad key and 422 for a good one. No email, no
+     * quota. There is no cheaper check: a sending-scoped key 401s on the read
+     * endpoints too, so those cannot distinguish "restricted" from "invalid".
+     *
+     * Exists because an invalid key sat in the repository secret for a day and
+     * only surfaced when the weekly summary silently failed for every
+     * recipient. A run with a bad key should die immediately and loudly.
+     */
+    async verifyCredentials() {
+      if (dryRun) return { ok: true, skipped: 'dry-run' };
+      const res = await fetchImpl(RESEND_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      if (res.status === 401) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`RESEND_API_KEY is not valid: ${body}`);
+      }
+      return { ok: true, status: res.status };
+    },
+
     async send({ to, subject, html, text, unsubscribeUrl, idempotencyKey }) {
       if (!isSendableAddress(to)) {
         logger.warn(`[email] skipping unsendable address: ${to}`);

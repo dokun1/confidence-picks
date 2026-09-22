@@ -80,6 +80,10 @@ async function main() {
   // 'column does not exist' on the first game day. Both calls latch, so every
   // later run is a zero-query no-op.
   await Group.ensureEmailPrefsSchema();
+  // Fail before doing any work if the provider will reject us anyway. Costs no
+  // email and no quota; catches a bad key at 03:00 rather than on game day.
+  await emailService.verifyCredentials();
+
   if (!emailService.dryRun) await EmailSend.ensureSchema();
 
   const deps = {

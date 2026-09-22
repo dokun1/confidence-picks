@@ -136,3 +136,56 @@ describe('createEmailService', () => {
     await assert.rejects(() => svc.send(MSG), /422[\s\S]*domain not verified/);
   });
 });
+
+describe('verifyCredentials', () => {
+  const noopLog = { log: () => {}, warn: () => {} };
+
+  test('throws on 401 so a bad key fails the run immediately', async () => {
+    const svc = createEmailService({
+      env: BASE_ENV,
+      fetchImpl: async () => ({
+        status: 401,
+        text: async () => '{"message":"API key is invalid"}',
+      }),
+      logger: noopLog,
+    });
+    await assert.rejects(() => svc.verifyCredentials(), /RESEND_API_KEY is not valid/);
+  });
+
+  test('accepts 422 — auth passed, only the empty body was rejected', async () => {
+    const svc = createEmailService({
+      env: BASE_ENV,
+      fetchImpl: async () => ({ status: 422, text: async () => '{}' }),
+      logger: noopLog,
+    });
+    assert.deepStrictEqual(await svc.verifyCredentials(), { ok: true, status: 422 });
+  });
+
+  test('sends nothing and consumes no quota', async () => {
+    let body = null;
+    const svc = createEmailService({
+      env: BASE_ENV,
+      fetchImpl: async (url, opts) => {
+        body = JSON.parse(opts.body);
+        return { status: 422, text: async () => '{}' };
+      },
+      logger: noopLog,
+    });
+    await svc.verifyCredentials();
+    assert.deepStrictEqual(body, {}, 'must not carry a real recipient');
+    assert.strictEqual(svc.sentCount, 0);
+  });
+
+  test('is skipped in dry run', async () => {
+    let called = false;
+    const svc = createEmailService({
+      env: { ...BASE_ENV, EMAIL_DRY_RUN: 'true' },
+      fetchImpl: async () => {
+        called = true;
+      },
+      logger: noopLog,
+    });
+    assert.deepStrictEqual(await svc.verifyCredentials(), { ok: true, skipped: 'dry-run' });
+    assert.strictEqual(called, false);
+  });
+});
