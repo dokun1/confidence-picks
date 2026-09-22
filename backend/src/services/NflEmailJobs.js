@@ -61,11 +61,11 @@ export async function runPickReminders({ now = new Date(), deps }) {
   const todays = games.filter(
     (g) => etDateKey(new Date(g.gameDate)) === todayKey && !isPickLocked(g, now.getTime())
   );
-  if (todays.length === 0) return { sent: 0, reason: 'no-open-games-today' };
+  if (todays.length === 0) return { sent: 0, failed: 0, reason: 'no-open-games-today' };
 
   const firstKickoff = Math.min(...todays.map((g) => new Date(g.gameDate).getTime()));
   const msOut = firstKickoff - now.getTime();
-  if (msOut <= 0 || msOut > REMINDER_WINDOW_MS) return { sent: 0, reason: 'outside-window' };
+  if (msOut <= 0 || msOut > REMINDER_WINDOW_MS) return { sent: 0, failed: 0, reason: 'outside-window' };
 
   // Opted-in members of NFL groups who are not globally paused.
   const { rows: candidates } = await pool.query(
@@ -78,7 +78,7 @@ export async function runPickReminders({ now = new Date(), deps }) {
        AND u.email_paused_at IS NULL
        AND g.pool_type = 'nfl_weekly'`
   );
-  if (candidates.length === 0) return { sent: 0, reason: 'no-subscribers' };
+  if (candidates.length === 0) return { sent: 0, failed: 0, reason: 'no-subscribers' };
 
   const gameIds = todays.map((g) => g.id);
   const groupIds = [...new Set(candidates.map((c) => c.group_id))];
@@ -113,6 +113,7 @@ export async function runPickReminders({ now = new Date(), deps }) {
   const label = kickoffLabel(new Date(firstKickoff));
   const dedupeKey = `reminder:${todayKey}`;
   let sent = 0;
+  let failed = 0;
 
   for (const user of byUser.values()) {
     // Claim BEFORE sending. At-most-once by construction.
@@ -149,11 +150,15 @@ export async function runPickReminders({ now = new Date(), deps }) {
       await emailSend.markSent(claimId, res.id);
       if (!res.skipped) sent += 1;
     } catch (err) {
+      // Recorded, not rethrown: one bad address must not abort the rest of the
+      // run. The count is returned so the caller can fail the JOB — a run where
+      // every send failed previously exited 0 and showed a green check.
+      failed += 1;
       await emailSend.markFailed(claimId, err.message);
     }
   }
 
-  return { sent };
+  return { sent, failed };
 }
 
 /**
@@ -178,7 +183,7 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
     apiUrl = appUrl,
   } = deps;
 
-  if (etHour(now) !== SUMMARY_SEND_HOUR_ET) return { sent: 0, reason: 'not-send-hour' };
+  if (etHour(now) !== SUMMARY_SEND_HOUR_ET) return { sent: 0, failed: 0, reason: 'not-send-hour' };
 
   const { rows: weekRows } = await pool.query(
     `SELECT week, COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'FINAL') AS final_count,
@@ -191,7 +196,7 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
   const complete = weekRows.find(
     (r) => Number(r.total) > 0 && Number(r.total) === Number(r.final_count)
   );
-  if (!complete) return { sent: 0, reason: 'no-completed-week' };
+  if (!complete) return { sent: 0, failed: 0, reason: 'no-completed-week' };
   const week = Number(complete.week);
 
   // Don't summarise a week that finished long ago. The epoch is computed in SQL
@@ -202,9 +207,9 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
   // but for a reason that would send you hunting the wrong bug.
   const epochRaw = complete.last_kickoff_epoch;
   const lastKickoffMs = epochRaw == null ? NaN : Number(epochRaw) * 1000;
-  if (!Number.isFinite(lastKickoffMs)) return { sent: 0, reason: 'unknown-week-age' };
+  if (!Number.isFinite(lastKickoffMs)) return { sent: 0, failed: 0, reason: 'unknown-week-age' };
   if (now.getTime() - lastKickoffMs > SUMMARY_MAX_AGE_MS) {
-    return { sent: 0, reason: 'week-too-old' };
+    return { sent: 0, failed: 0, reason: 'week-too-old' };
   }
 
   const { rows: subscribers } = await pool.query(
@@ -217,7 +222,7 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
        AND u.email_paused_at IS NULL
        AND g.pool_type = 'nfl_weekly'`
   );
-  if (subscribers.length === 0) return { sent: 0, reason: 'no-subscribers' };
+  if (subscribers.length === 0) return { sent: 0, failed: 0, reason: 'no-subscribers' };
 
   // Group members together so the scoreboard is computed once per group rather
   // than once per recipient.
@@ -235,6 +240,7 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
   }
 
   let sent = 0;
+  let failed = 0;
   for (const group of byGroup.values()) {
     const [scoreboard, grid] = await Promise.all([
       buildScoreboard(group.groupId, season, seasonType),
@@ -278,10 +284,12 @@ export async function runWeeklySummaries({ now = new Date(), deps }) {
         await emailSend.markSent(claimId, res.id);
         if (!res.skipped) sent += 1;
       } catch (err) {
+        // See the note in runPickReminders: recorded, counted, not rethrown.
+        failed += 1;
         await emailSend.markFailed(claimId, err.message);
       }
     }
   }
 
-  return { sent };
+  return { sent, failed };
 }

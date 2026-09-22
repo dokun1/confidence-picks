@@ -48,15 +48,32 @@ export class EmailSend {
   }
 
   /**
-   * Stake a claim on one send. Returns the new row id, or null when this key
-   * was already claimed — in which case the caller MUST NOT send.
+   * Stake a claim on one send. Returns a row id to send against, or null when
+   * this key is already spoken for — in which case the caller MUST NOT send.
+   *
+   * A row in 'failed' state is reclaimed rather than treated as spoken for. The
+   * original version used ON CONFLICT DO NOTHING, which conflated "already
+   * attempted" with "already delivered": a provider outage (or, in the case
+   * that found this, an invalid API key) permanently burned the dedupe key, and
+   * the email could never be retried without deleting rows by hand.
+   *
+   * At-most-once is still the guarantee. 'claimed' and 'sent' both stay locked;
+   * only a recorded failure — which by definition did not reach anyone — opens
+   * the key again. The DO UPDATE ... WHERE is atomic: when the predicate is
+   * false no row is touched and RETURNING yields nothing, so two concurrent
+   * runners cannot both win the same claim.
    */
   static async claim({ userId, groupId, emailType, dedupeKey }) {
     await EmailSend.ensureSchema();
     const { rows } = await pool.query(
       `INSERT INTO email_sends (user_id, group_id, email_type, dedupe_key, status)
        VALUES ($1, $2, $3, $4, 'claimed')
-       ON CONFLICT (user_id, email_type, dedupe_key) DO NOTHING
+       ON CONFLICT (user_id, email_type, dedupe_key) DO UPDATE
+         SET status = 'claimed',
+             error = NULL,
+             provider_message_id = NULL,
+             created_at = CURRENT_TIMESTAMP
+         WHERE email_sends.status = 'failed'
        RETURNING id`,
       [userId, groupId, emailType, dedupeKey]
     );
