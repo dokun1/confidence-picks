@@ -59,6 +59,23 @@ Amounts are in dollars at the tool (`amount: 20`), not cents.
 
 Tokens expire after 90 days and can be revoked at any time from your profile.
 
+## Embedding the server
+
+The package also exports the server as a library, for hosts that are not the
+stdio binary (the admin portal's inspector page runs it in-process):
+
+```js
+import { ConfidencePicksClient } from 'confidence-picks-mcp/client';
+import { createServer } from 'confidence-picks-mcp/server';
+import { TOOLS } from 'confidence-picks-mcp/tools'; // definitions + annotations, no Node imports
+
+const server = createServer(new ConfidencePicksClient({ token }));
+// connect it to any transport, e.g. InMemoryTransport.createLinkedPair()
+```
+
+Every tool carries MCP annotations (`readOnlyHint` on the five reads,
+`destructiveHint` on `submit_week` and `update_dues_settings`).
+
 ## Environment
 
 | Variable | Required | Default |
