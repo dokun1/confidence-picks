@@ -269,4 +269,37 @@ describe('runWeeklySummaries', () => {
     assert.strictEqual(res.sent, 0);
     assert.match(failed, /rate limited/);
   });
+
+  test('counts failures so the caller can fail the job', async () => {
+    // A run where every send failed used to return { sent: 0 } and exit 0,
+    // which showed a green check in Actions and hid a broken API key for a day.
+    const deps = makeDeps({
+      weekRows: COMPLETE_WEEK,
+      subscribers: [
+        SUBSCRIBER,
+        { ...SUBSCRIBER, user_id: 2, name: 'Bo', email: 'bo@example.com' },
+      ],
+    });
+    deps.emailService.send = async () => {
+      throw new Error('API key is invalid');
+    };
+
+    const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
+
+    assert.strictEqual(res.sent, 0);
+    assert.strictEqual(res.failed, 2);
+  });
+
+  test('a clean run reports zero failures', async () => {
+    const deps = makeDeps({ weekRows: COMPLETE_WEEK, subscribers: [SUBSCRIBER] });
+    const res = await runWeeklySummaries({ now: TUES_8AM_ET, deps });
+    assert.strictEqual(res.sent, 1);
+    assert.strictEqual(res.failed, 0);
+  });
+
+  test('early returns still carry a failed count', async () => {
+    const deps = makeDeps({ weekRows: COMPLETE_WEEK, subscribers: [SUBSCRIBER] });
+    const res = await runWeeklySummaries({ now: TUES_2PM_ET, deps });
+    assert.strictEqual(res.failed, 0, 'callers must never see undefined');
+  });
 });

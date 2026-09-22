@@ -206,5 +206,18 @@ describe('runPickReminders', () => {
     const deps = makeDeps({ candidates: [] });
     const res = await runPickReminders({ now: new Date(KICKOFF.getTime() - 3600_000), deps });
     assert.strictEqual(res.reason, 'no-subscribers');
+    assert.strictEqual(res.failed, 0);
+  });
+
+  test('counts failures so the caller can fail the job', async () => {
+    const deps = makeDeps({ candidates: [CANDIDATE] });
+    deps.emailService.send = async () => {
+      throw new Error('API key is invalid');
+    };
+
+    const res = await runPickReminders({ now: new Date(KICKOFF.getTime() - 3600_000), deps });
+
+    assert.strictEqual(res.sent, 0);
+    assert.strictEqual(res.failed, 1);
   });
 });

@@ -99,17 +99,31 @@ async function main() {
   const now = new Date();
   console.log(`[email] run at ${now.toISOString()} season=${deps.season}`);
 
+  const line = (label, r) =>
+    `[email] ${label}: sent=${r.sent} failed=${r.failed ?? 0}` +
+    (r.reason ? ` reason=${r.reason}` : '');
+
   const reminders = await runPickReminders({ now, deps });
-  console.log(
-    `[email] reminders: sent=${reminders.sent}${reminders.reason ? ` reason=${reminders.reason}` : ''}`
-  );
+  console.log(line('reminders', reminders));
 
   const summaries = await runWeeklySummaries({ now, deps });
-  console.log(
-    `[email] summaries: sent=${summaries.sent}${summaries.reason ? ` reason=${summaries.reason}` : ''}`
-  );
+  console.log(line('summaries', summaries));
 
-  console.log(`[email] total sent this run: ${emailService.sentCount}`);
+  const sent = reminders.sent + summaries.sent;
+  const failed = (reminders.failed ?? 0) + (summaries.failed ?? 0);
+
+  // `sentCount` counts ATTEMPTS against the per-run cap, not deliveries. It was
+  // previously logged as "total sent", which made a run where every send failed
+  // read like a success at a glance -- the reason a broken API key went
+  // unnoticed for a day.
+  console.log(`[email] delivered=${sent} failed=${failed} attempted=${emailService.sentCount}`);
+
+  // Fail the job so GitHub shows a red X. Failures are recorded per-row in
+  // email_sends, but a green check on a run that delivered nothing is worse
+  // than useless -- it actively hides the outage.
+  if (failed > 0) {
+    throw new Error(`${failed} email(s) failed to send — see email_sends.error for details`);
+  }
 }
 
 main()

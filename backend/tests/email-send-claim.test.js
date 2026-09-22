@@ -40,6 +40,59 @@ describe('EmailSend.claim', () => {
     assert.strictEqual(id, null, 'a taken claim must not look like a fresh one');
   });
 
+  test('reclaims a row left in failed state, so a send can be retried', async () => {
+    // A provider outage or a bad API key records 'failed'. That email reached
+    // nobody, so the dedupe key must open again — otherwise the only recovery
+    // is deleting rows by hand.
+    let captured = null;
+    mock.method(pool, 'query', async (sql, params) => {
+      captured = { sql, params };
+      return { rows: [{ id: 42 }] };
+    });
+
+    const id = await EmailSend.claim({
+      userId: 1,
+      groupId: 9,
+      emailType: EMAIL_TYPES.SUMMARY,
+      dedupeKey: 'summary:9:2026:2:2',
+    });
+
+    assert.strictEqual(id, 42);
+    assert.ok(captured.sql.includes('DO UPDATE'), 'must not be DO NOTHING');
+    assert.ok(
+      /WHERE\s+email_sends\.status\s*=\s*'failed'/.test(captured.sql),
+      'only a failed row may be reclaimed',
+    );
+  });
+
+  test("does not reclaim a row that is 'claimed' or 'sent'", async () => {
+    // The guarded UPDATE matches nothing, so RETURNING is empty — at-most-once
+    // still holds for anything that was actually handed to the provider.
+    mock.method(pool, 'query', async () => ({ rows: [] }));
+    const id = await EmailSend.claim({
+      userId: 1,
+      groupId: 9,
+      emailType: EMAIL_TYPES.SUMMARY,
+      dedupeKey: 'summary:9:2026:2:2',
+    });
+    assert.strictEqual(id, null);
+  });
+
+  test('clears the previous error when reclaiming', async () => {
+    let captured = null;
+    mock.method(pool, 'query', async (sql) => {
+      captured = sql;
+      return { rows: [{ id: 42 }] };
+    });
+    await EmailSend.claim({
+      userId: 1,
+      groupId: 9,
+      emailType: EMAIL_TYPES.SUMMARY,
+      dedupeKey: 'k',
+    });
+    assert.ok(/error\s*=\s*NULL/.test(captured), 'a stale error would misreport the retry');
+  });
+
   test('claims before sending: the row starts as "claimed", not "sent"', async () => {
     let captured = null;
     mock.method(pool, 'query', async (sql, params) => {
