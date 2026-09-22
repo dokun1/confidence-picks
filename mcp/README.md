@@ -22,13 +22,30 @@ codex mcp add confidence-picks \
   -- npx -y confidence-picks-mcp
 ```
 
+## What the server publishes
+
+Beyond the tools, the server uses every MCP documentation surface:
+
+- **Instructions** — sent at connect; the rules a model needs before its first call
+  (how to find editability, dollars not cents, what writes require).
+- **Tool titles, annotations and output schemas** — every tool declares
+  `readOnlyHint`/`destructiveHint`, a human title, and an `outputSchema`; results
+  carry `structuredContent` that validates against it, plus the same JSON as text.
+- **Resources** — `confidence-picks://docs/tools` (generated from the tool
+  definitions), `…/pick-locking`, `…/scoring`, `…/dues`. Markdown.
+- **Prompts** — `make-picks` (week, group?) walks a week from slate to submission
+  with a confirmation step; `dues-status` (group) summarises a ledger.
+
+Explore all of it at admin.confidence-picks.com (admins only), which runs this
+exact package in-process and drives it with a real MCP client.
+
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `list_groups` | Your NFL pools (World Cup pools excluded) |
-| `get_slate` | Games for a week, with kickoff, `locksAt`, `editable`, status, live `score` and `statusDetail` (game clock), team ids and odds |
-| `get_my_picks` | Your existing picks for a group and week |
+| `list_groups` | Your NFL pools (World Cup pools excluded). Returns `{ groups }` |
+| `get_slate` | Games for a week, with kickoff, `locksAt`, `editable`, status, live `score` and `statusDetail` (game clock), team ids and odds. Returns `{ games }` |
+| `get_my_picks` | Your existing picks for a group and week. Returns `{ picks }` |
 | `get_standings` | Season scoreboard for a group |
 | `submit_week` | Submit picks to one or more groups at once |
 | `get_dues` | A group's dues settings; for admins, also who has paid and totals collected / outstanding |

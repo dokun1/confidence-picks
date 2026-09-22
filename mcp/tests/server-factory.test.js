@@ -57,7 +57,7 @@ describe('createServer', () => {
     try {
       const res = await c.callTool({ name: 'list_groups', arguments: {} });
       assert.strictEqual(res.isError, undefined);
-      assert.deepStrictEqual(JSON.parse(res.content[0].text), [{ identifier: 'g', name: 'G', memberCount: 2, role: 'admin' }]);
+      assert.deepStrictEqual(JSON.parse(res.content[0].text), { groups: [{ identifier: 'g', name: 'G', memberCount: 2, role: 'admin' }] });
     } finally { await close(); }
   });
 
@@ -75,8 +75,8 @@ describe('createServer', () => {
     const a = await connected(fakeClient({ get: async () => [{ identifier: 'a' }] }));
     const b = await connected(fakeClient({ get: async () => [{ identifier: 'b' }] }));
     try {
-      assert.strictEqual(JSON.parse((await a.c.callTool({ name: 'list_groups', arguments: {} })).content[0].text)[0].identifier, 'a');
-      assert.strictEqual(JSON.parse((await b.c.callTool({ name: 'list_groups', arguments: {} })).content[0].text)[0].identifier, 'b');
+      assert.strictEqual(JSON.parse((await a.c.callTool({ name: 'list_groups', arguments: {} })).content[0].text).groups[0].identifier, 'a');
+      assert.strictEqual(JSON.parse((await b.c.callTool({ name: 'list_groups', arguments: {} })).content[0].text).groups[0].identifier, 'b');
     } finally { await a.close(); await b.close(); }
   });
 });
@@ -111,6 +111,7 @@ describe('tools.js is host-agnostic', () => {
       }
     };
     walk(new URL('../src/tools.js', import.meta.url));
+    walk(new URL('../src/docs.js', import.meta.url));
   });
 
   test('dispatch requires an explicit client', async () => {

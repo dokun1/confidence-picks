@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.json",
+  "name": "io.github.dokun1/confidence-picks",
+  "description": "NFL confidence-pool picks, standings and dues for confidence-picks.com. Read your pools and the week's slate, submit a confidence ladder, and (as a group admin) manage dues.",
+  "repository": { "url": "https://github.com/dokun1/confidence-picks", "source": "github" },
+  "version_detail": { "version": "0.5.0" },
+  "packages": [
+    {
+      "registry_name": "npm",
+      "name": "confidence-picks-mcp",
+      "version": "0.5.0",
+      "runtime_hint": "npx",
+      "environment_variables": [
+        { "name": "CONFIDENCE_PICKS_TOKEN", "description": "Personal access token minted at confidence-picks.com under Profile → AI client access (cp_live_…).", "is_required": true, "is_secret": true },
+        { "name": "CONFIDENCE_PICKS_API", "description": "API base URL. Defaults to https://api.confidence-picks.com.", "is_required": false }
+      ]
+    }
+  ]
+}
