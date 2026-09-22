@@ -12,8 +12,8 @@ importers:
         specifier: ^1.30.0
         version: 1.30.0(zod@4.6.5)
       confidence-picks-mcp:
-        specifier: file:../mcp
-        version: file:../mcp(zod@4.6.5)
+        specifier: ^0.4.0
+        version: 0.4.0(zod@4.6.5)
       next:
         specifier: ^15.5.0
         version: 15.5.25(@types/node@20.19.43)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -961,8 +961,8 @@ packages:
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
 
-  confidence-picks-mcp@file:../mcp:
-    resolution: {directory: ../mcp, type: directory}
+  confidence-picks-mcp@0.4.0:
+    resolution: {integrity: sha512-tEOmnqTL2Uw2ngfGntNwfj99efVhxbfudYEybNmPtWPuNTu9NvfqB1ygoFcZNGUgpCM8ZIMTM5vafeNuzfodiQ==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -3124,7 +3124,7 @@ snapshots:
 
   concat-map@0.0.1: {}
 
-  confidence-picks-mcp@file:../mcp(zod@4.6.5):
+  confidence-picks-mcp@0.4.0(zod@4.6.5):
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
     transitivePeerDependencies:
