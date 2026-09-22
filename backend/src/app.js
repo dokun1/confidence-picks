@@ -11,6 +11,7 @@ import picksRoutes from './routes/picks.js';
 import worldCupPicksRoutes from './routes/worldCupPicks.js';
 import invitesRoutes from './routes/invites.js';
 import adminRoutes from './routes/admin.js';
+import adminPortalRoutes from './routes/adminPortal.js';
 import mcpTokensRoutes from './routes/mcpTokens.js';
 import emailRoutes from './routes/email.js';
 import { mcpTokenExchange } from './middleware/mcpAuth.js';
@@ -68,6 +69,7 @@ app.use('/api/invites', invitesRoutes);
 // clicking unsubscribe from their mail client is not signed in.
 app.use('/api/email', emailRoutes);
 app.use('/api', adminRoutes);
+app.use('/api', adminPortalRoutes);
 
 // Health check
 app.get('/', (req, res) => {
