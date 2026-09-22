@@ -1,10 +1,14 @@
-import { readFileSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import pkg from '../package.json' with { type: 'json' };
 import { TOOLS, dispatch } from './tools.js';
 
 // Announce the version that was actually published, not a literal that drifts.
-const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+// Imported through the module graph, NOT read from disk at runtime: when a host
+// bundles this package (the admin portal's Next.js server bundle), a runtime
+// readFileSync(new URL('../package.json', import.meta.url)) points at a file
+// that was never shipped, and createServer() throws on first use.
+const { version } = pkg;
 
 // Build an MCP server bound to one API client. The stdio binary calls this with
 // a client built from the environment; the admin portal's inspector calls it

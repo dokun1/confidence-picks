@@ -81,6 +81,20 @@ describe('createServer', () => {
   });
 });
 
+describe('server.js survives bundling', () => {
+  // Next.js/webpack inlines this package into the admin portal's server bundle.
+  // A runtime readFileSync(new URL('../package.json', import.meta.url)) then
+  // points at a file that is not shipped, and the first createServer() throws
+  // inside Vercel's function -- which is how the inspector's first click 500'd.
+  // The version has to come in through the module graph, not the filesystem.
+  test('does not read the filesystem at runtime', () => {
+    const src = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+    const imports = [...src.matchAll(/^\s*import\s[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+    assert.ok(!imports.some((i) => i.startsWith('node:')), `server.js imports ${imports.join(', ')}`);
+    assert.match(src, /import .* from ['"]\.\.\/package\.json['"] with \{ type: ['"]json['"] \}/);
+  });
+});
+
 describe('tools.js is host-agnostic', () => {
   // The inspector page imports TOOLS to build its forms. That import must not
   // drag in the stdio transport, node:fs, or anything else a non-Node host lacks.
