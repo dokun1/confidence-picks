@@ -9,8 +9,10 @@ declare module "confidence-picks-mcp/tools" {
   }
   export interface ToolDefinition {
     name: string;
+    title?: string;
     description: string;
     inputSchema: Record<string, unknown>;
+    outputSchema?: Record<string, unknown>;
     annotations?: ToolAnnotations;
   }
   export const TOOLS: ToolDefinition[];
@@ -30,4 +32,10 @@ declare module "confidence-picks-mcp/client" {
     post(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<unknown>;
     put(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<unknown>;
   }
+}
+
+declare module "confidence-picks-mcp/docs" {
+  export const INSTRUCTIONS: string;
+  export const RESOURCES: Array<{ uri: string; name: string; title?: string; description?: string; mimeType: string }>;
+  export const PROMPTS: Array<{ name: string; title?: string; description?: string; arguments: Array<{ name: string; description?: string; required?: boolean }> }>;
 }
