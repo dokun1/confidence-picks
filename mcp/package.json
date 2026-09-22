@@ -1,6 +1,6 @@
 {
   "name": "confidence-picks-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server for confidence-picks: read groups and standings, make and modify NFL confidence picks.",
   "repository": {
     "type": "git",
@@ -16,6 +16,12 @@
     "confidence-picks-mcp": "bin/cli.js"
   },
   "main": "src/stdio.js",
+  "exports": {
+    ".": "./src/stdio.js",
+    "./server": "./src/server.js",
+    "./tools": "./src/tools.js",
+    "./client": "./src/client.js"
+  },
   "scripts": {
     "test": "node --test tests/*.test.js",
     "start": "node src/stdio.js"
